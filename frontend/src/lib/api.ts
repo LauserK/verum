@@ -73,6 +73,7 @@ export interface SubmissionQuestion {
     config: Record<string, any> | null
     sort_order: number
     answer: string | null
+    answered_at?: string | null
 }
 
 export interface SubmissionDetail {

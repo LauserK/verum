@@ -19,7 +19,7 @@ const STRATEGY: Record<string, number> = {
 
 export function useAutoSave(submissionId: string | null) {
     const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
-    const pendingRef = useRef<Map<string, string>>(new Map())
+    const pendingRef = useRef<Map<string, { value: string; answered_at: string }>>(new Map())
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -28,7 +28,7 @@ export function useAutoSave(submissionId: string | null) {
         if (!submissionId || pendingRef.current.size === 0) return
 
         const answers = Array.from(pendingRef.current.entries()).map(
-            ([question_id, value]) => ({ question_id, value })
+            ([question_id, data]) => ({ question_id, value: data.value, answered_at: data.answered_at })
         )
         pendingRef.current.clear()
 
@@ -49,7 +49,7 @@ export function useAutoSave(submissionId: string | null) {
 
             // Re-add failed answers to pending for retry
             for (const ans of answers) {
-                pendingRef.current.set(ans.question_id, ans.value)
+                pendingRef.current.set(ans.question_id, { value: ans.value, answered_at: ans.answered_at })
             }
 
             // Auto-retry after 3 seconds
@@ -60,7 +60,8 @@ export function useAutoSave(submissionId: string | null) {
     // Save a single answer with type-based debounce
     const saveAnswer = useCallback(
         (questionId: string, value: string, type: string) => {
-            pendingRef.current.set(questionId, value)
+            const answered_at = new Date().toISOString()
+            pendingRef.current.set(questionId, { value, answered_at })
 
             const delay = STRATEGY[type] ?? 0
 

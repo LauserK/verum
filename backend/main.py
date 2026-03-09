@@ -95,6 +95,7 @@ class SubmissionQuestion(BaseModel):
     config: Optional[dict] = None
     sort_order: int
     answer: Optional[str] = None
+    answered_at: Optional[str] = None
 
 
 class SubmissionDetail(BaseModel):
@@ -375,15 +376,16 @@ async def get_submission(submission_id: str, user=Depends(get_current_user)):
         # Get existing answers
         answers_res = (
             supabase.table("answers")
-            .select("question_id, value")
+            .select("question_id, value, answered_at")
             .eq("submission_id", submission_id)
             .execute()
         )
-        answers_map = {a["question_id"]: a["value"] for a in (answers_res.data or [])}
+        answers_map = {a["question_id"]: {"value": a["value"], "answered_at": a["answered_at"]} for a in (answers_res.data or [])}
 
         # Merge questions with answers
         merged = []
         for q in questions:
+            ans_data = answers_map.get(q["id"], {})
             merged.append({
                 "id": q["id"],
                 "label": q["label"],
@@ -391,7 +393,8 @@ async def get_submission(submission_id: str, user=Depends(get_current_user)):
                 "is_required": q.get("is_required", True),
                 "config": q.get("config"),
                 "sort_order": q.get("sort_order", 0),
-                "answer": answers_map.get(q["id"]),
+                "answer": ans_data.get("value"),
+                "answered_at": ans_data.get("answered_at"),
             })
 
         return {
@@ -455,7 +458,7 @@ async def patch_submission(
 
 
 class BulkAnswersRequest(BaseModel):
-    answers: list[dict]  # [{question_id, value}]
+    answers: list[dict]  # [{question_id, value, answered_at}]
 
 
 @app.put("/submissions/{submission_id}/answers")
@@ -470,12 +473,16 @@ async def bulk_save_answers(
     try:
         # Upsert all answers
         for ans in body.answers:
+            upsert_data = {
+                "submission_id": submission_id,
+                "question_id": ans["question_id"],
+                "value": ans.get("value", ""),
+            }
+            if "answered_at" in ans:
+                upsert_data["answered_at"] = ans["answered_at"]
+
             supabase.table("answers").upsert(
-                {
-                    "submission_id": submission_id,
-                    "question_id": ans["question_id"],
-                    "value": ans.get("value", ""),
-                },
+                upsert_data,
                 on_conflict="submission_id,question_id",
             ).execute()
 
