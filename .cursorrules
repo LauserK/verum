@@ -1,0 +1,5 @@
+- Construir en orden estricto de milestones según VERUM.md sección 7
+- Pedir confirmación al completar cada milestone antes de continuar
+- Nunca hardcodear colores de Tailwind. Usar solo tokens del sistema de diseño (bg-surface, text-text-primary, etc.)
+- Si un dato no está en VERUM.md (keys, URLs, IDs), preguntar antes de inventar
+- Commits atómicos en español: un commit por tarea completada
