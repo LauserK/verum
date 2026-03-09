@@ -10,6 +10,8 @@ import {
     type SubmissionDetail,
     type SubmissionQuestion,
 } from '@/lib/api'
+import { useAutoSave } from '@/hooks/useAutoSave'
+import SaveIndicator from '@/components/SaveIndicator'
 
 // Question components
 import CheckQuestion from '@/components/questions/CheckQuestion'
@@ -74,6 +76,9 @@ export default function ChecklistPage() {
     const [auditorConfirmed, setAuditorConfirmed] = useState(false)
     const [submitting, setSubmitting] = useState(false)
 
+    // Auto-save hook
+    const { saveAnswer, saveStatus, flush } = useAutoSave(submission?.id || null)
+
     // Load or create submission
     useEffect(() => {
         async function init() {
@@ -109,8 +114,11 @@ export default function ChecklistPage() {
         init()
     }, [templateId, venueId])
 
-    const handleAnswer = (questionId: string, value: string) => {
+    const handleAnswer = (questionId: string, value: string, type: string) => {
         setAnswers((prev) => ({ ...prev, [questionId]: value }))
+        if (!isCompleted) {
+            saveAnswer(questionId, value, type)
+        }
     }
 
     // Count answered required questions
@@ -129,13 +137,10 @@ export default function ChecklistPage() {
 
         setSubmitting(true)
         try {
-            // Build answers array
-            const answerList = Object.entries(answers)
-                .filter(([, val]) => val && val !== '')
-                .map(([qId, val]) => ({ question_id: qId, value: val }))
+            // Flush any pending auto-saves first
+            await flush()
 
             await submitAudit(submission.id, {
-                answers: answerList,
                 auditor_notes: auditorNotes,
                 auditor_confirmed: auditorConfirmed,
                 status: 'completed',
@@ -189,9 +194,10 @@ export default function ChecklistPage() {
                     >
                         <ArrowLeft className="w-5 h-5" />
                     </button>
-                    <h1 className="text-base font-bold text-text-primary truncate">
+                    <h1 className="text-base font-bold text-text-primary truncate flex-1">
                         {submission?.template_title || 'Checklist'}
                     </h1>
+                    {!isCompleted && <SaveIndicator status={saveStatus} />}
                 </div>
             </header>
 
@@ -245,7 +251,7 @@ export default function ChecklistPage() {
                             key={q.id}
                             question={q}
                             value={answers[q.id] || null}
-                            onChange={(val) => handleAnswer(q.id, val)}
+                            onChange={(val) => handleAnswer(q.id, val, q.type)}
                         />
                     ))}
                 </main>

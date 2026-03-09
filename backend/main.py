@@ -229,13 +229,28 @@ async def get_checklists(venue_id: str, user=Depends(get_current_user)):
         for s in (submissions_res.data or []):
             submissions_map[s["template_id"]] = s
 
-        # 4. Build a set of completed template IDs (for prerequisite logic)
+        # 4. Get answer counts for these submissions
+        submission_ids = [s["id"] for s in submissions_map.values()]
+        answers_counts: dict[str, int] = {}
+        
+        if submission_ids:
+            answers_res = (
+                supabase.table("answers")
+                .select("submission_id")
+                .in_("submission_id", submission_ids)
+                .execute()
+            )
+            for a in (answers_res.data or []):
+                sid = a["submission_id"]
+                answers_counts[sid] = answers_counts.get(sid, 0) + 1
+
+        # 5. Build a set of completed template IDs (for prerequisite logic)
         completed_ids = {
             tid for tid, sub in submissions_map.items()
             if sub.get("status") == "completed"
         }
 
-        # 5. Build response with status calculation
+        # 6. Build response with status calculation
         result: list[dict] = []
         for t in templates:
             tid = t["id"]
@@ -254,7 +269,7 @@ async def get_checklists(venue_id: str, user=Depends(get_current_user)):
                     answered = total_q
                 else:
                     status_val = "in_progress"
-                    answered = 0  # Will be refined in M4 with real answer counts
+                    answered = answers_counts.get(sub["id"], 0)
                 sub_id = sub["id"]
             else:
                 status_val = "pending"
@@ -434,6 +449,42 @@ async def patch_submission(
             supabase.table("submissions").update(update).eq("id", submission_id).execute()
 
         return {"ok": True}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class BulkAnswersRequest(BaseModel):
+    answers: list[dict]  # [{question_id, value}]
+
+
+@app.put("/submissions/{submission_id}/answers")
+async def bulk_save_answers(
+    submission_id: str,
+    body: BulkAnswersRequest,
+    user=Depends(get_current_user),
+):
+    """
+    Bulk upsert answers for auto-save. Updates last_saved_at.
+    """
+    try:
+        # Upsert all answers
+        for ans in body.answers:
+            supabase.table("answers").upsert(
+                {
+                    "submission_id": submission_id,
+                    "question_id": ans["question_id"],
+                    "value": ans.get("value", ""),
+                },
+                on_conflict="submission_id,question_id",
+            ).execute()
+
+        # Update last_saved_at
+        supabase.table("submissions").update(
+            {"last_saved_at": datetime.now(timezone.utc).isoformat()}
+        ).eq("id", submission_id).execute()
+
+        return {"ok": True, "saved": len(body.answers)}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
