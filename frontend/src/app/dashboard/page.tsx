@@ -6,6 +6,7 @@ import { getProfile, getChecklists, type Profile, type ChecklistItem } from '@/l
 import ChecklistCard from '@/components/ChecklistCard'
 import BottomNav from '@/components/BottomNav'
 import { LogOut, Sun, Moon, Sunrise, CloudSun, Sunset } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 
 function getShiftInfo(): { label: string; icon: typeof Sun } {
     const hour = new Date().getHours()
@@ -41,6 +42,7 @@ function ChecklistSkeleton() {
 
 // ── Main ────────────────────────────────────────────
 export default function DashboardPage() {
+    const router = useRouter()
     const [profile, setProfile] = useState<Profile | null>(null)
     const [checklists, setChecklists] = useState<ChecklistItem[]>([])
     const [loading, setLoading] = useState(true)
@@ -181,8 +183,8 @@ export default function DashboardPage() {
                                 key={checklist.id}
                                 checklist={checklist}
                                 onClick={() => {
-                                    // TODO: Navigate to checklist execution (Milestone 3)
-                                    console.log('Open checklist:', checklist.id)
+                                    const venueId = profile?.venues?.[0]?.id || ''
+                                    router.push(`/checklist/${checklist.id}?venue=${venueId}`)
                                 }}
                             />
                         ))}

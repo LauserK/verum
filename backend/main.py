@@ -82,6 +82,39 @@ class ChecklistItem(BaseModel):
     submission_id: Optional[str] = None
 
 
+class CreateSubmissionRequest(BaseModel):
+    template_id: str
+    venue_id: str
+
+
+class SubmissionQuestion(BaseModel):
+    id: str
+    label: str
+    type: str
+    is_required: bool
+    config: Optional[dict] = None
+    sort_order: int
+    answer: Optional[str] = None
+
+
+class SubmissionDetail(BaseModel):
+    id: str
+    template_id: str
+    template_title: str
+    status: str
+    shift: str
+    questions: list[SubmissionQuestion]
+    auditor_notes: Optional[str] = None
+    auditor_confirmed: bool = False
+
+
+class PatchSubmissionRequest(BaseModel):
+    status: Optional[str] = None
+    auditor_notes: Optional[str] = None
+    auditor_confirmed: Optional[bool] = None
+    answers: Optional[list[dict]] = None  # [{question_id, value}]
+
+
 # ── Routes ───────────────────────────────────────────────
 
 @app.get("/")
@@ -240,6 +273,167 @@ async def get_checklists(venue_id: str, user=Depends(get_current_user)):
             })
 
         return result
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/submissions")
+async def create_submission(body: CreateSubmissionRequest, user=Depends(get_current_user)):
+    """
+    Creates a draft submission when opening a checklist.
+    Idempotent: returns existing submission (draft or completed) if one
+    already exists for the same user/template/shift/today.
+    """
+    try:
+        shift = get_current_shift()
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+        # Check for ANY existing submission today (completed or draft)
+        existing = (
+            supabase.table("submissions")
+            .select("*")
+            .eq("template_id", body.template_id)
+            .eq("user_id", user.id)
+            .eq("shift", shift)
+            .gte("created_at", f"{today}T00:00:00Z")
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+
+        if existing.data and len(existing.data) > 0:
+            return existing.data[0]
+
+        # Create new draft only if no submission exists
+        new_sub = {
+            "template_id": body.template_id,
+            "user_id": user.id,
+            "venue_id": body.venue_id,
+            "shift": shift,
+            "status": "draft",
+        }
+        result = supabase.table("submissions").insert(new_sub).execute()
+        return result.data[0]
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/submissions/{submission_id}", response_model=SubmissionDetail)
+async def get_submission(submission_id: str, user=Depends(get_current_user)):
+    """
+    Returns a submission with its questions and any existing answers.
+    """
+    try:
+        # Get submission
+        sub_res = (
+            supabase.table("submissions")
+            .select("*")
+            .eq("id", submission_id)
+            .execute()
+        )
+        if not sub_res.data or len(sub_res.data) == 0:
+            raise HTTPException(status_code=404, detail="Submission not found")
+
+        sub = sub_res.data[0]
+
+        # Get template info
+        tmpl_res = (
+            supabase.table("checklist_templates")
+            .select("title")
+            .eq("id", sub["template_id"])
+            .execute()
+        )
+        template_title = tmpl_res.data[0]["title"] if tmpl_res.data else "Checklist"
+
+        # Get questions ordered by sort_order
+        questions_res = (
+            supabase.table("questions")
+            .select("*")
+            .eq("template_id", sub["template_id"])
+            .order("sort_order")
+            .execute()
+        )
+        questions = questions_res.data or []
+
+        # Get existing answers
+        answers_res = (
+            supabase.table("answers")
+            .select("question_id, value")
+            .eq("submission_id", submission_id)
+            .execute()
+        )
+        answers_map = {a["question_id"]: a["value"] for a in (answers_res.data or [])}
+
+        # Merge questions with answers
+        merged = []
+        for q in questions:
+            merged.append({
+                "id": q["id"],
+                "label": q["label"],
+                "type": q["type"],
+                "is_required": q.get("is_required", True),
+                "config": q.get("config"),
+                "sort_order": q.get("sort_order", 0),
+                "answer": answers_map.get(q["id"]),
+            })
+
+        return {
+            "id": sub["id"],
+            "template_id": sub["template_id"],
+            "template_title": template_title,
+            "status": sub["status"],
+            "shift": sub["shift"],
+            "questions": merged,
+            "auditor_notes": sub.get("auditor_notes"),
+            "auditor_confirmed": sub.get("auditor_confirmed", False),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.patch("/submissions/{submission_id}")
+async def patch_submission(
+    submission_id: str,
+    body: PatchSubmissionRequest,
+    user=Depends(get_current_user),
+):
+    """
+    Updates submission fields: status, auditor_notes, auditor_confirmed, answers.
+    When status='completed', sets completed_at.
+    """
+    try:
+        # Save answers if provided
+        if body.answers:
+            for ans in body.answers:
+                supabase.table("answers").upsert(
+                    {
+                        "submission_id": submission_id,
+                        "question_id": ans["question_id"],
+                        "value": ans.get("value", ""),
+                    },
+                    on_conflict="submission_id,question_id",
+                ).execute()
+
+        # Build update payload
+        update: dict = {}
+        if body.auditor_notes is not None:
+            update["auditor_notes"] = body.auditor_notes
+        if body.auditor_confirmed is not None:
+            update["auditor_confirmed"] = body.auditor_confirmed
+        if body.status is not None:
+            update["status"] = body.status
+            if body.status == "completed":
+                update["completed_at"] = datetime.now(timezone.utc).isoformat()
+
+        if update:
+            supabase.table("submissions").update(update).eq("id", submission_id).execute()
+
+        return {"ok": True}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
