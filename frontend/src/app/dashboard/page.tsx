@@ -2,16 +2,57 @@
 
 import { useEffect, useState } from 'react'
 import { logout } from '@/app/login/actions'
-import { LogOut } from 'lucide-react'
+import { getProfile, getChecklists, type Profile, type ChecklistItem } from '@/lib/api'
+import ChecklistCard from '@/components/ChecklistCard'
+import BottomNav from '@/components/BottomNav'
+import { LogOut, Sun, Moon, Sunrise, CloudSun, Sunset } from 'lucide-react'
 
-export default function DashboardClient() {
+function getShiftInfo(): { label: string; icon: typeof Sun } {
+    const hour = new Date().getHours()
+    if (hour >= 6 && hour < 14) return { label: 'Morning Shift', icon: Sunrise }
+    if (hour >= 14 && hour < 20) return { label: 'Mid Shift', icon: CloudSun }
+    return { label: 'Closing Shift', icon: Sunset }
+}
+
+function formatDate(): string {
+    return new Date().toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+    })
+}
+
+// ── Skeleton ────────────────────────────────────────
+function ChecklistSkeleton() {
+    return (
+        <div className="bg-surface border border-border rounded-2xl p-4 animate-pulse">
+            <div className="flex items-start justify-between gap-3 mb-3">
+                <div className="flex-1">
+                    <div className="h-5 bg-surface-raised rounded-lg w-3/4 mb-2" />
+                    <div className="h-3 bg-surface-raised rounded-lg w-1/2" />
+                </div>
+                <div className="h-6 bg-surface-raised rounded-full w-24" />
+            </div>
+            <div className="h-3 bg-surface-raised rounded-lg w-20 mt-2" />
+        </div>
+    )
+}
+
+// ── Main ────────────────────────────────────────────
+export default function DashboardPage() {
+    const [profile, setProfile] = useState<Profile | null>(null)
+    const [checklists, setChecklists] = useState<ChecklistItem[]>([])
+    const [loading, setLoading] = useState(true)
+    const [error, setError] = useState<string | null>(null)
     const [mounted, setMounted] = useState(false)
     const [theme, setTheme] = useState<'light' | 'dark'>('light')
 
+    const shiftInfo = getShiftInfo()
+    const ShiftIcon = shiftInfo.icon
+
     useEffect(() => {
         setMounted(true)
-
-        // Check initial theme
         const savedTheme = localStorage.getItem('verum-theme')
         if (savedTheme) {
             setTheme(savedTheme as 'light' | 'dark')
@@ -25,6 +66,32 @@ export default function DashboardClient() {
         }
     }, [])
 
+    useEffect(() => {
+        async function loadData() {
+            try {
+                setLoading(true)
+                const profileData = await getProfile()
+                setProfile(profileData)
+
+                // Fetch checklists for the user's first venue
+                if (profileData.venues && profileData.venues.length > 0) {
+                    try {
+                        const checklistData = await getChecklists(profileData.venues[0].id)
+                        setChecklists(checklistData)
+                    } catch {
+                        // Venue might not have checklists yet
+                        setChecklists([])
+                    }
+                }
+            } catch (err: any) {
+                setError(err.message || 'Failed to load data')
+            } finally {
+                setLoading(false)
+            }
+        }
+        loadData()
+    }, [])
+
     const toggleTheme = () => {
         const newTheme = theme === 'light' ? 'dark' : 'light'
         setTheme(newTheme)
@@ -33,39 +100,111 @@ export default function DashboardClient() {
     }
 
     return (
-        <div className="min-h-screen bg-bg p-4 flex flex-col pt-12">
-            <div className="flex justify-between items-center mb-8 absolute top-0 left-0 right-0 p-4 border-b border-border bg-surface h-16">
-                <h1 className="text-xl font-bold text-text-primary">Dashboard</h1>
+        <div className="min-h-screen bg-bg pb-24">
+            {/* ── Header ─────────────────────────────────── */}
+            <header className="sticky top-0 z-40 bg-surface border-b border-border">
+                <div className="max-w-lg mx-auto flex justify-between items-center px-4 h-14">
+                    <div>
+                        <h1 className="text-base font-bold text-text-primary leading-tight">
+                            {loading ? (
+                                <span className="inline-block h-5 w-32 bg-surface-raised rounded animate-pulse" />
+                            ) : (
+                                `Hello, ${profile?.full_name?.split(' ')[0] || 'Staff'}`
+                            )}
+                        </h1>
+                    </div>
 
-                <div className="flex gap-4 items-center">
-                    {mounted && (
+                    <div className="flex gap-1 items-center">
+                        {mounted && (
+                            <button
+                                onClick={toggleTheme}
+                                className="p-2 rounded-full hover:bg-surface-raised text-text-secondary transition-colors"
+                                aria-label="Toggle Theme"
+                            >
+                                {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
+                            </button>
+                        )}
+
                         <button
-                            onClick={toggleTheme}
-                            className="p-2 rounded-full hover:bg-surface-raised text-text-secondary text-sm"
-                            aria-label="Toggle Theme"
+                            onClick={() => logout()}
+                            className="p-2 rounded-full text-error hover:bg-error-light transition-colors"
+                            aria-label="Logout"
                         >
-                            {theme === 'light' ? '🌙' : '☀️'}
+                            <LogOut className="w-5 h-5" />
                         </button>
+                    </div>
+                </div>
+            </header>
+
+            {/* ── Content ────────────────────────────────── */}
+            <main className="max-w-lg mx-auto px-4 pt-5">
+                {/* Shift & Date */}
+                <div className="mb-6">
+                    <div className="flex items-center gap-2 mb-1">
+                        <ShiftIcon className="w-5 h-5 text-primary" />
+                        <span className="text-sm font-semibold text-primary">{shiftInfo.label}</span>
+                    </div>
+                    <p className="text-xs text-text-secondary">{formatDate()}</p>
+                </div>
+
+                {/* Section Title */}
+                <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-bold text-text-primary">Today&apos;s Audits</h2>
+                    {!loading && checklists.length > 0 && (
+                        <span className="text-xs text-text-secondary font-medium">
+                            {checklists.filter(c => c.status === 'completed').length}/{checklists.length} done
+                        </span>
                     )}
-
-                    <button
-                        onClick={() => logout()}
-                        className="p-2 px-3 text-sm font-medium text-error flex items-center gap-2 hover:bg-error-light rounded-lg transition-colors"
-                    >
-                        <LogOut className="w-4 h-4" />
-                        Salir
-                    </button>
                 </div>
-            </div>
 
-            <div className="w-full max-w-lg mx-auto mt-8 flex flex-col gap-4">
-                <div className="bg-surface border border-border p-6 rounded-2xl">
-                    <h2 className="text-lg font-semibold text-text-primary mb-2">Bienvenido a Verum!</h2>
-                    <p className="text-text-secondary text-sm">
-                        Has iniciado sesión exitosamente. La funcionalidad de checklists se implementará en el próximo hito.
-                    </p>
-                </div>
-            </div>
+                {/* Error */}
+                {error && (
+                    <div className="bg-error-light text-error text-sm p-3 rounded-lg border border-error/20 mb-4">
+                        ⚠️ {error}
+                    </div>
+                )}
+
+                {/* Loading Skeletons */}
+                {loading && (
+                    <div className="flex flex-col gap-3">
+                        <ChecklistSkeleton />
+                        <ChecklistSkeleton />
+                        <ChecklistSkeleton />
+                    </div>
+                )}
+
+                {/* Checklist Cards */}
+                {!loading && checklists.length > 0 && (
+                    <div className="flex flex-col gap-3">
+                        {checklists.map((checklist) => (
+                            <ChecklistCard
+                                key={checklist.id}
+                                checklist={checklist}
+                                onClick={() => {
+                                    // TODO: Navigate to checklist execution (Milestone 3)
+                                    console.log('Open checklist:', checklist.id)
+                                }}
+                            />
+                        ))}
+                    </div>
+                )}
+
+                {/* Empty State */}
+                {!loading && checklists.length === 0 && !error && (
+                    <div className="bg-surface border border-border rounded-2xl p-8 text-center">
+                        <div className="text-4xl mb-3">📋</div>
+                        <h3 className="text-base font-semibold text-text-primary mb-1">
+                            No audits for this shift
+                        </h3>
+                        <p className="text-sm text-text-secondary">
+                            There are no checklists assigned yet. Contact your administrator.
+                        </p>
+                    </div>
+                )}
+            </main>
+
+            {/* ── Bottom Nav ─────────────────────────────── */}
+            <BottomNav />
         </div>
     )
 }

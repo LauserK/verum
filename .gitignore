@@ -56,3 +56,4 @@ next-env.d.ts
 # Project specific
 backend/.data/
 backend/migrations/*.db
+*.pyc
