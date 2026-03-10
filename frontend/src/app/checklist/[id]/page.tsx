@@ -294,18 +294,25 @@ export default function ChecklistPage() {
                             {submission?.questions.map((q) => {
                                 const val = answers[q.id]
                                 return (
-                                    <div key={q.id} className="flex items-start justify-between gap-2 py-2 border-b border-border last:border-0">
-                                        <span className="text-sm text-text-secondary flex-1">{q.label}</span>
-                                        {q.type === 'photo' && val && val.startsWith('http') ? (
-                                            <img
-                                                src={val}
-                                                alt={q.label}
-                                                onClick={() => setLightboxUrl(val)}
-                                                className="w-16 h-16 object-cover rounded-lg cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all flex-shrink-0"
-                                            />
-                                        ) : (
-                                            <span className={`text-sm font-medium text-right shrink-0 max-w-[40%] truncate ${val ? 'text-text-primary' : 'text-text-disabled italic'}`}>
-                                                {val || 'Not answered'}
+                                    <div key={q.id} className="flex flex-col gap-1 py-3 border-b border-border last:border-0">
+                                        <div className="flex items-start justify-between gap-2">
+                                            <span className="text-sm text-text-secondary flex-1">{q.label}</span>
+                                            {q.type === 'photo' && val && val.startsWith('http') ? (
+                                                <img
+                                                    src={val}
+                                                    alt={q.label}
+                                                    onClick={() => setLightboxUrl(val)}
+                                                    className="w-16 h-16 object-cover rounded-lg cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all flex-shrink-0"
+                                                />
+                                            ) : (
+                                                <span className={`text-sm font-medium text-right shrink-0 max-w-[40%] truncate ${val ? 'text-text-primary' : 'text-text-disabled italic'}`}>
+                                                    {val || 'Not answered'}
+                                                </span>
+                                            )}
+                                        </div>
+                                        {q.answered_at && (
+                                            <span className="text-[10px] text-text-disabled text-right w-full block">
+                                                {new Date(q.answered_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                                             </span>
                                         )}
                                     </div>

@@ -41,6 +41,8 @@ export interface Profile {
     role: string
     organization_id: string | null
     venues: VenueInfo[]
+    venue_id?: string | null
+    shift_id?: string | null
 }
 
 export interface ChecklistItem {

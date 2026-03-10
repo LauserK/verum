@@ -75,10 +75,11 @@ export default function DashboardPage() {
                 const profileData = await getProfile()
                 setProfile(profileData)
 
-                // Fetch checklists for the user's first venue
-                if (profileData.venues && profileData.venues.length > 0) {
+                // Fetch checklists for the user's assigned venue, fallback to first org venue
+                const targetVenueId = profileData.venue_id || (profileData.venues && profileData.venues.length > 0 ? profileData.venues[0].id : null)
+                if (targetVenueId) {
                     try {
-                        const checklistData = await getChecklists(profileData.venues[0].id)
+                        const checklistData = await getChecklists(targetVenueId)
                         setChecklists(checklistData)
                     } catch {
                         // Venue might not have checklists yet

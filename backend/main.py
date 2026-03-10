@@ -69,6 +69,8 @@ class ProfileResponse(BaseModel):
     role: str
     organization_id: Optional[str] = None
     venues: list[VenueInfo] = []
+    venue_id: Optional[str] = None
+    shift_id: Optional[str] = None
 
 
 class ChecklistItem(BaseModel):
@@ -172,6 +174,8 @@ async def get_profile(user=Depends(get_current_user)):
             "role": profile.get("role", "staff"),
             "organization_id": org_id,
             "venues": venues,
+            "venue_id": profile.get("venue_id"),
+            "shift_id": profile.get("shift_id"),
         }
     except HTTPException:
         raise
@@ -427,12 +431,14 @@ async def patch_submission(
     try:
         # Save answers if provided
         if body.answers:
+            now_iso = datetime.now(timezone.utc).isoformat()
             for ans in body.answers:
                 supabase.table("answers").upsert(
                     {
                         "submission_id": submission_id,
                         "question_id": ans["question_id"],
                         "value": ans.get("value", ""),
+                        "answered_at": now_iso
                     },
                     on_conflict="submission_id,question_id",
                 ).execute()
@@ -996,14 +1002,54 @@ async def get_compliance_report(
             else:
                 completed_on_time += 1  # no due_time = always on time
 
-        # Count expected (simplified: 1 per template per day per shift)
-        # For a more accurate count, consider schedule and frequency
+        # Get template venues
+        venue_ids = list(set([t["venue_id"] for t in templates if t.get("venue_id")]))
+        
+        # Get shift counts per venue
+        shifts_per_venue = {}
+        if venue_ids:
+            shifts_res = supabase.table("shifts").select("venue_id").in_("venue_id", venue_ids).execute()
+            for s in (shifts_res.data or []):
+                vid = s["venue_id"]
+                shifts_per_venue[vid] = shifts_per_venue.get(vid, 0) + 1
+
+        # Accurate count based on template frequency and schedule
         from datetime import timedelta
         start_date = datetime.strptime(d_from, "%Y-%m-%d")
         end_date = datetime.strptime(d_to, "%Y-%m-%d")
         num_days = max(1, (end_date - start_date).days + 1)
-        shifts_per_day = 3  # morning, mid, closing
-        total_expected = len(templates) * num_days * shifts_per_day
+        
+        total_expected = 0
+        import calendar
+        
+        for i in range(num_days):
+            curr_date = start_date + timedelta(days=i)
+            day_of_week = curr_date.weekday() # 0 = Monday, 6 = Sunday
+            day_of_month = curr_date.day
+            
+            for t in templates:
+                freq = t.get("frequency") or "daily"
+                sched = t.get("schedule") or []
+                
+                if freq == "daily":
+                    total_expected += 1
+                elif freq == "shift":
+                    vid = t.get("venue_id")
+                    num_shifts = shifts_per_venue.get(vid, 3) # default to 3 if none defined
+                    total_expected += num_shifts
+                elif freq == "weekly" and sched:
+                    if day_of_week in sched:
+                        total_expected += 1
+                elif freq == "monthly" and sched:
+                    target_day = sched[0]
+                    _, last_day = calendar.monthrange(curr_date.year, curr_date.month)
+                    actual_target = min(target_day, last_day)
+                    if day_of_month == actual_target:
+                        total_expected += 1
+                elif freq == "custom" and sched:
+                    if day_of_week in sched:
+                        total_expected += 1
+
         missing = total_expected - len(completed)
 
         # Get issue counts from answers
