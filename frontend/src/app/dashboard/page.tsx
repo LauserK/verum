@@ -5,7 +5,7 @@ import { logout } from '@/app/login/actions'
 import { getProfile, getChecklists, type Profile, type ChecklistItem } from '@/lib/api'
 import ChecklistCard from '@/components/ChecklistCard'
 import BottomNav from '@/components/BottomNav'
-import { LogOut, Sun, Moon, Sunrise, CloudSun, Sunset } from 'lucide-react'
+import { LogOut, Sun, Moon, Sunrise, CloudSun, Sunset, Shield } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
 function getShiftInfo(): { label: string; icon: typeof Sun } {
@@ -124,6 +124,16 @@ export default function DashboardPage() {
                                 aria-label="Toggle Theme"
                             >
                                 {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
+                            </button>
+                        )}
+
+                        {profile?.role === 'admin' && (
+                            <button
+                                onClick={() => router.push('/admin/dashboard')}
+                                className="p-2 rounded-full hover:bg-surface-raised text-primary transition-colors"
+                                aria-label="Admin Panel"
+                            >
+                                <Shield className="w-5 h-5" />
                             </button>
                         )}
 

@@ -469,6 +469,7 @@ async def bulk_save_answers(
 ):
     """
     Bulk upsert answers for auto-save. Updates last_saved_at.
+    Sets started_at on first save.
     """
     try:
         # Upsert all answers
@@ -486,12 +487,557 @@ async def bulk_save_answers(
                 on_conflict="submission_id,question_id",
             ).execute()
 
-        # Update last_saved_at
-        supabase.table("submissions").update(
-            {"last_saved_at": datetime.now(timezone.utc).isoformat()}
-        ).eq("id", submission_id).execute()
+        # Update last_saved_at + set started_at if first save
+        now_iso = datetime.now(timezone.utc).isoformat()
+
+        sub_res = (
+            supabase.table("submissions")
+            .select("started_at")
+            .eq("id", submission_id)
+            .execute()
+        )
+        update_payload: dict = {"last_saved_at": now_iso}
+        if sub_res.data and sub_res.data[0].get("started_at") is None:
+            update_payload["started_at"] = now_iso
+
+        supabase.table("submissions").update(update_payload).eq("id", submission_id).execute()
 
         return {"ok": True, "saved": len(body.answers)}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Admin Helpers ────────────────────────────────────────
+
+async def require_admin(user=Depends(get_current_user)):
+    """Dependency that ensures the user has admin role."""
+    profile_res = supabase.table("profiles").select("role").eq("id", user.id).execute()
+    if not profile_res.data or profile_res.data[0].get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user
+
+
+# ── Admin Models ─────────────────────────────────────────
+
+class CreateOrgRequest(BaseModel):
+    name: str
+
+
+class CreateVenueRequest(BaseModel):
+    org_id: str
+    name: str
+    address: Optional[str] = None
+
+
+class CreateTemplateRequest(BaseModel):
+    venue_id: str
+    title: str
+    description: Optional[str] = None
+    frequency: Optional[str] = None
+    due_time: Optional[str] = None  # "HH:MM" format
+    schedule: Optional[list[int]] = None  # [0=Sun..6=Sat]
+    prerequisite_template_id: Optional[str] = None
+
+
+class CreateQuestionRequest(BaseModel):
+    template_id: str
+    label: str
+    type: str
+    is_required: bool = True
+    config: Optional[dict] = None
+    sort_order: int = 0
+
+
+class CreateUserRequest(BaseModel):
+    email: str
+    password: str
+    full_name: str
+    role: str = "staff"  # 'admin' or 'staff'
+    organization_id: str
+    venue_id: Optional[str] = None
+    shift_id: Optional[str] = None
+
+
+class UpdateUserRequest(BaseModel):
+    full_name: Optional[str] = None
+    role: Optional[str] = None
+    venue_id: Optional[str] = None
+    shift_id: Optional[str] = None
+
+
+class UpdateVenueRequest(BaseModel):
+    name: Optional[str] = None
+    address: Optional[str] = None
+
+
+class CreateShiftRequest(BaseModel):
+    venue_id: str
+    name: str
+    start_time: str  # "HH:MM"
+    end_time: str    # "HH:MM"
+    sort_order: int = 0
+
+
+class UpdateShiftRequest(BaseModel):
+    name: Optional[str] = None
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    sort_order: Optional[int] = None
+
+
+# ── Admin CRUD Routes ───────────────────────────────────
+
+@app.get("/admin/organizations")
+async def list_organizations(user=Depends(require_admin)):
+    res = supabase.table("organizations").select("*").execute()
+    return res.data or []
+
+
+@app.post("/admin/organizations")
+async def create_organization(body: CreateOrgRequest, user=Depends(require_admin)):
+    res = supabase.table("organizations").insert({"name": body.name}).execute()
+    return res.data[0]
+
+
+@app.get("/admin/organizations/{org_id}/venues")
+async def list_venues(org_id: str, user=Depends(require_admin)):
+    res = supabase.table("venues").select("*").eq("org_id", org_id).execute()
+    return res.data or []
+
+
+@app.post("/admin/venues")
+async def create_venue(body: CreateVenueRequest, user=Depends(require_admin)):
+    payload = {"org_id": body.org_id, "name": body.name}
+    if body.address:
+        payload["address"] = body.address
+    res = supabase.table("venues").insert(payload).execute()
+    return res.data[0]
+
+
+@app.put("/admin/venues/{venue_id}")
+async def update_venue(venue_id: str, body: UpdateVenueRequest, user=Depends(require_admin)):
+    payload = {}
+    if body.name is not None:
+        payload["name"] = body.name
+    if body.address is not None:
+        payload["address"] = body.address
+    if not payload:
+        raise HTTPException(400, "No fields to update")
+    res = supabase.table("venues").update(payload).eq("id", venue_id).execute()
+    return res.data[0] if res.data else {}
+
+
+@app.delete("/admin/venues/{venue_id}")
+async def delete_venue(venue_id: str, user=Depends(require_admin)):
+    supabase.table("venues").delete().eq("id", venue_id).execute()
+    return {"ok": True}
+
+
+# ── Admin Users CRUD ────────────────────────────────────
+
+@app.get("/admin/users")
+async def list_users(user=Depends(require_admin)):
+    """List all profiles in the admin's organization."""
+    admin_profile = supabase.table("profiles").select("organization_id").eq("id", user.id).single().execute()
+    org_id = admin_profile.data.get("organization_id")
+    if not org_id:
+        return []
+    res = supabase.table("profiles").select("id, full_name, role, organization_id, venue_id, shift_id").eq("organization_id", org_id).execute()
+    # Get emails from auth users
+    profiles = res.data or []
+    for p in profiles:
+        try:
+            auth_user = supabase.auth.admin.get_user_by_id(p["id"])
+            p["email"] = auth_user.user.email if auth_user.user else None
+        except Exception:
+            p["email"] = None
+    return profiles
+
+
+@app.post("/admin/users")
+async def create_user(body: CreateUserRequest, user=Depends(require_admin)):
+    """Create a new user via Supabase Auth admin API + profile."""
+    try:
+        auth_res = supabase.auth.admin.create_user({
+            "email": body.email,
+            "password": body.password,
+            "email_confirm": True,
+        })
+        new_user = auth_res.user
+        if not new_user:
+            raise HTTPException(500, "Failed to create auth user")
+
+        # Insert profile
+        profile_data = {
+            "id": new_user.id,
+            "full_name": body.full_name,
+            "role": body.role,
+            "organization_id": body.organization_id,
+        }
+        if body.venue_id:
+            profile_data["venue_id"] = body.venue_id
+        if body.shift_id:
+            profile_data["shift_id"] = body.shift_id
+        supabase.table("profiles").upsert(profile_data).execute()
+
+        return {"id": new_user.id, "email": body.email, "full_name": body.full_name, "role": body.role, "venue_id": body.venue_id, "shift_id": body.shift_id, "organization_id": body.organization_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(400, str(e))
+
+
+@app.put("/admin/users/{user_id}")
+async def update_user(user_id: str, body: UpdateUserRequest, user=Depends(require_admin)):
+    payload = {}
+    if body.full_name is not None:
+        payload["full_name"] = body.full_name
+    if body.role is not None:
+        payload["role"] = body.role
+    if body.venue_id is not None:
+        payload["venue_id"] = body.venue_id
+    if body.shift_id is not None:
+        payload["shift_id"] = body.shift_id
+    if not payload:
+        raise HTTPException(400, "No fields to update")
+    res = supabase.table("profiles").update(payload).eq("id", user_id).execute()
+    return res.data[0] if res.data else {}
+
+
+@app.delete("/admin/users/{user_id}")
+async def delete_user(user_id: str, user=Depends(require_admin)):
+    """Delete auth user (cascades to profile)."""
+    try:
+        supabase.auth.admin.delete_user(user_id)
+    except Exception as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True}
+
+
+@app.patch("/admin/users/{user_id}/password")
+async def change_user_password(user_id: str, body: dict, user=Depends(require_admin)):
+    """Change a user's password via Supabase Auth admin API."""
+    new_password = body.get("password")
+    if not new_password or len(new_password) < 6:
+        raise HTTPException(400, "Password must be at least 6 characters")
+    try:
+        supabase.auth.admin.update_user_by_id(user_id, {"password": new_password})
+    except Exception as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True}
+
+
+# ── Admin Shifts CRUD ───────────────────────────────────
+
+@app.get("/admin/venues/{venue_id}/shifts")
+async def list_shifts(venue_id: str, user=Depends(require_admin)):
+    res = supabase.table("shifts").select("*").eq("venue_id", venue_id).order("sort_order").execute()
+    return res.data or []
+
+
+@app.post("/admin/shifts")
+async def create_shift(body: CreateShiftRequest, user=Depends(require_admin)):
+    payload = {
+        "venue_id": body.venue_id,
+        "name": body.name,
+        "start_time": body.start_time,
+        "end_time": body.end_time,
+        "sort_order": body.sort_order,
+    }
+    res = supabase.table("shifts").insert(payload).execute()
+    return res.data[0]
+
+
+@app.put("/admin/shifts/{shift_id}")
+async def update_shift(shift_id: str, body: UpdateShiftRequest, user=Depends(require_admin)):
+    payload = {}
+    if body.name is not None:
+        payload["name"] = body.name
+    if body.start_time is not None:
+        payload["start_time"] = body.start_time
+    if body.end_time is not None:
+        payload["end_time"] = body.end_time
+    if body.sort_order is not None:
+        payload["sort_order"] = body.sort_order
+    if not payload:
+        raise HTTPException(400, "No fields to update")
+    res = supabase.table("shifts").update(payload).eq("id", shift_id).execute()
+    return res.data[0] if res.data else {}
+
+
+@app.delete("/admin/shifts/{shift_id}")
+async def delete_shift(shift_id: str, user=Depends(require_admin)):
+    supabase.table("shifts").delete().eq("id", shift_id).execute()
+    return {"ok": True}
+
+
+# ── Public: Shifts for a venue (staff) ──────────────────
+
+@app.get("/venues/{venue_id}/shifts")
+async def get_venue_shifts(venue_id: str, user=Depends(get_current_user)):
+    res = supabase.table("shifts").select("*").eq("venue_id", venue_id).order("sort_order").execute()
+    return res.data or []
+
+
+@app.get("/admin/venues/{venue_id}/templates")
+async def list_templates(venue_id: str, user=Depends(require_admin)):
+    res = (
+        supabase.table("checklist_templates")
+        .select("*")
+        .eq("venue_id", venue_id)
+        .execute()
+    )
+    return res.data or []
+
+
+@app.post("/admin/templates")
+async def create_template(body: CreateTemplateRequest, user=Depends(require_admin)):
+    payload = {
+        "venue_id": body.venue_id,
+        "title": body.title,
+    }
+    if body.description:
+        payload["description"] = body.description
+    if body.frequency:
+        payload["frequency"] = body.frequency
+    if body.due_time:
+        payload["due_time"] = body.due_time
+    if body.schedule:
+        payload["schedule"] = body.schedule
+    if body.prerequisite_template_id:
+        payload["prerequisite_template_id"] = body.prerequisite_template_id
+
+    res = supabase.table("checklist_templates").insert(payload).execute()
+    return res.data[0]
+
+
+@app.put("/admin/templates/{template_id}")
+async def update_template(template_id: str, body: CreateTemplateRequest, user=Depends(require_admin)):
+    payload = {
+        "venue_id": body.venue_id,
+        "title": body.title,
+    }
+    if body.description is not None:
+        payload["description"] = body.description
+    if body.frequency is not None:
+        payload["frequency"] = body.frequency
+    if body.due_time is not None:
+        payload["due_time"] = body.due_time
+    if body.schedule is not None:
+        payload["schedule"] = body.schedule
+    if body.prerequisite_template_id is not None:
+        payload["prerequisite_template_id"] = body.prerequisite_template_id
+
+    res = supabase.table("checklist_templates").update(payload).eq("id", template_id).execute()
+    return res.data[0] if res.data else {"ok": True}
+
+
+@app.delete("/admin/templates/{template_id}")
+async def delete_template(template_id: str, user=Depends(require_admin)):
+    supabase.table("checklist_templates").delete().eq("id", template_id).execute()
+    return {"ok": True}
+
+
+@app.get("/admin/templates/{template_id}/questions")
+async def list_questions(template_id: str, user=Depends(require_admin)):
+    res = (
+        supabase.table("questions")
+        .select("*")
+        .eq("template_id", template_id)
+        .order("sort_order")
+        .execute()
+    )
+    return res.data or []
+
+
+@app.post("/admin/questions")
+async def create_question(body: CreateQuestionRequest, user=Depends(require_admin)):
+    payload = {
+        "template_id": body.template_id,
+        "label": body.label,
+        "type": body.type,
+        "is_required": body.is_required,
+        "sort_order": body.sort_order,
+    }
+    if body.config:
+        payload["config"] = body.config
+    res = supabase.table("questions").insert(payload).execute()
+    return res.data[0]
+
+
+@app.put("/admin/questions/{question_id}")
+async def update_question(question_id: str, body: CreateQuestionRequest, user=Depends(require_admin)):
+    payload = {
+        "label": body.label,
+        "type": body.type,
+        "is_required": body.is_required,
+        "sort_order": body.sort_order,
+    }
+    if body.config is not None:
+        payload["config"] = body.config
+    res = supabase.table("questions").update(payload).eq("id", question_id).execute()
+    return res.data[0] if res.data else {"ok": True}
+
+
+@app.delete("/admin/questions/{question_id}")
+async def delete_question(question_id: str, user=Depends(require_admin)):
+    supabase.table("questions").delete().eq("id", question_id).execute()
+    return {"ok": True}
+
+
+# ── Admin Submissions List ──────────────────────────────
+
+@app.get("/admin/submissions")
+async def list_submissions(
+    venue_id: Optional[str] = None,
+    status: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    user=Depends(require_admin),
+):
+    """Lists submissions with optional filters."""
+    query = supabase.table("submissions").select(
+        "*, profiles(full_name), checklist_templates(title)"
+    )
+    if venue_id:
+        query = query.eq("venue_id", venue_id)
+    if status:
+        query = query.eq("status", status)
+    if date_from:
+        query = query.gte("created_at", f"{date_from}T00:00:00Z")
+    if date_to:
+        query = query.lte("created_at", f"{date_to}T23:59:59Z")
+
+    query = query.order("created_at", desc=True).limit(100)
+    res = query.execute()
+    return res.data or []
+
+
+# ── Admin Compliance Report ─────────────────────────────
+
+@app.get("/admin/reports/compliance")
+async def get_compliance_report(
+    venue_id: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    user=Depends(require_admin),
+):
+    """
+    Returns compliance metrics:
+    - total_expected: templates × days in range
+    - completed_on_time, completed_late, missing
+    - critical_issues, non_critical_issues
+    - avg_execution_minutes
+    """
+    try:
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        d_from = date_from or today
+        d_to = date_to or today
+
+        # Get templates
+        tmpl_query = supabase.table("checklist_templates").select("id, venue_id, due_time, frequency, schedule")
+        if venue_id:
+            tmpl_query = tmpl_query.eq("venue_id", venue_id)
+        templates = (tmpl_query.execute()).data or []
+
+        if not templates:
+            return {
+                "total_expected": 0, "completed_on_time": 0,
+                "completed_late": 0, "missing": 0,
+                "critical_issues": 0, "non_critical_issues": 0,
+                "avg_execution_minutes": 0,
+            }
+
+        template_ids = [t["id"] for t in templates]
+
+        # Get submissions in date range
+        sub_query = (
+            supabase.table("submissions")
+            .select("id, template_id, status, started_at, completed_at, created_at, shift")
+            .in_("template_id", template_ids)
+            .gte("created_at", f"{d_from}T00:00:00Z")
+            .lte("created_at", f"{d_to}T23:59:59Z")
+        )
+        submissions = (sub_query.execute()).data or []
+
+        # Count completed
+        completed = [s for s in submissions if s["status"] == "completed"]
+        completed_on_time = 0
+        completed_late = 0
+        total_exec_minutes = 0
+        exec_count = 0
+
+        for s in completed:
+            # Calculate execution time if started_at exists
+            if s.get("started_at") and s.get("completed_at"):
+                try:
+                    started = datetime.fromisoformat(s["started_at"].replace("Z", "+00:00"))
+                    finished = datetime.fromisoformat(s["completed_at"].replace("Z", "+00:00"))
+                    diff = (finished - started).total_seconds() / 60
+                    total_exec_minutes += diff
+                    exec_count += 1
+                except (ValueError, TypeError):
+                    pass
+
+            # Check if on time based on due_time
+            tmpl = next((t for t in templates if t["id"] == s["template_id"]), None)
+            if tmpl and tmpl.get("due_time") and s.get("completed_at"):
+                try:
+                    completed_dt = datetime.fromisoformat(s["completed_at"].replace("Z", "+00:00"))
+                    due_parts = tmpl["due_time"].split(":")
+                    due_hour, due_min = int(due_parts[0]), int(due_parts[1])
+                    if completed_dt.hour < due_hour or (completed_dt.hour == due_hour and completed_dt.minute <= due_min):
+                        completed_on_time += 1
+                    else:
+                        completed_late += 1
+                except (ValueError, IndexError):
+                    completed_on_time += 1  # default to on-time if can't parse
+            else:
+                completed_on_time += 1  # no due_time = always on time
+
+        # Count expected (simplified: 1 per template per day per shift)
+        # For a more accurate count, consider schedule and frequency
+        from datetime import timedelta
+        start_date = datetime.strptime(d_from, "%Y-%m-%d")
+        end_date = datetime.strptime(d_to, "%Y-%m-%d")
+        num_days = max(1, (end_date - start_date).days + 1)
+        shifts_per_day = 3  # morning, mid, closing
+        total_expected = len(templates) * num_days * shifts_per_day
+        missing = total_expected - len(completed)
+
+        # Get issue counts from answers
+        sub_ids = [s["id"] for s in completed]
+        critical_count = 0
+        non_critical_count = 0
+
+        if sub_ids:
+            issues_res = (
+                supabase.table("answers")
+                .select("is_critical_failure, is_non_critical_issue")
+                .in_("submission_id", sub_ids)
+                .execute()
+            )
+            for a in (issues_res.data or []):
+                if a.get("is_critical_failure"):
+                    critical_count += 1
+                if a.get("is_non_critical_issue"):
+                    non_critical_count += 1
+
+        avg_exec = round(total_exec_minutes / exec_count, 1) if exec_count > 0 else 0
+
+        return {
+            "total_expected": total_expected,
+            "completed_on_time": completed_on_time,
+            "completed_late": completed_late,
+            "completed_total": len(completed),
+            "missing": max(0, missing),
+            "compliance_pct": round(len(completed) / total_expected * 100, 1) if total_expected > 0 else 0,
+            "critical_issues": critical_count,
+            "non_critical_issues": non_critical_count,
+            "avg_execution_minutes": avg_exec,
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+

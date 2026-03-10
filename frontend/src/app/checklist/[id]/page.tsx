@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
-import { ArrowLeft, Loader2, CheckCircle2 } from 'lucide-react'
+import { ArrowLeft, Loader2, CheckCircle2, X } from 'lucide-react'
 import {
     createSubmission,
     getSubmission,
@@ -66,6 +66,8 @@ export default function ChecklistPage() {
 
     const templateId = params.id as string
     const venueId = searchParams.get('venue') || ''
+    const submissionIdParam = searchParams.get('submission_id') || ''
+    const backPath = submissionIdParam ? '/admin/submissions' : '/dashboard'
 
     const [submission, setSubmission] = useState<SubmissionDetail | null>(null)
     const [answers, setAnswers] = useState<Record<string, string>>({})
@@ -75,6 +77,7 @@ export default function ChecklistPage() {
     const [auditorNotes, setAuditorNotes] = useState('')
     const [auditorConfirmed, setAuditorConfirmed] = useState(false)
     const [submitting, setSubmitting] = useState(false)
+    const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
 
     // Auto-save hook
     const { saveAnswer, saveStatus, flush } = useAutoSave(submission?.id || null)
@@ -85,8 +88,15 @@ export default function ChecklistPage() {
             try {
                 setLoading(true)
 
-                // Create draft (idempotent — returns existing if any)
-                const sub = await createSubmission(templateId, venueId)
+                let sub: { id: string }
+
+                if (submissionIdParam) {
+                    // Direct load (admin view) — skip createSubmission
+                    sub = { id: submissionIdParam }
+                } else {
+                    // Create draft (idempotent — returns existing if any)
+                    sub = await createSubmission(templateId, venueId)
+                }
 
                 // Load full submission data with questions
                 const detail = await getSubmission(sub.id)
@@ -189,7 +199,7 @@ export default function ChecklistPage() {
             <header className="sticky top-0 z-40 bg-surface border-b border-border">
                 <div className="max-w-lg mx-auto flex items-center gap-3 px-4 h-14">
                     <button
-                        onClick={() => (step === 2 && !isCompleted) ? setStep(1) : router.push('/dashboard')}
+                        onClick={() => (step === 2 && !isCompleted) ? setStep(1) : router.push(backPath)}
                         className="p-1 -ml-1 text-text-primary hover:text-primary transition-colors"
                     >
                         <ArrowLeft className="w-5 h-5" />
@@ -284,11 +294,20 @@ export default function ChecklistPage() {
                             {submission?.questions.map((q) => {
                                 const val = answers[q.id]
                                 return (
-                                    <div key={q.id} className="flex items-start justify-between gap-2 py-1.5 border-b border-border last:border-0">
+                                    <div key={q.id} className="flex items-start justify-between gap-2 py-2 border-b border-border last:border-0">
                                         <span className="text-sm text-text-secondary flex-1">{q.label}</span>
-                                        <span className={`text-sm font-medium text-right shrink-0 max-w-[40%] truncate ${val ? 'text-text-primary' : 'text-text-disabled italic'}`}>
-                                            {val || 'Not answered'}
-                                        </span>
+                                        {q.type === 'photo' && val && val.startsWith('http') ? (
+                                            <img
+                                                src={val}
+                                                alt={q.label}
+                                                onClick={() => setLightboxUrl(val)}
+                                                className="w-16 h-16 object-cover rounded-lg cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all flex-shrink-0"
+                                            />
+                                        ) : (
+                                            <span className={`text-sm font-medium text-right shrink-0 max-w-[40%] truncate ${val ? 'text-text-primary' : 'text-text-disabled italic'}`}>
+                                                {val || 'Not answered'}
+                                            </span>
+                                        )}
                                     </div>
                                 )
                             })}
@@ -354,7 +373,7 @@ export default function ChecklistPage() {
                     {/* Completed: only show Back button */}
                     {isCompleted && (
                         <button
-                            onClick={() => router.push('/dashboard')}
+                            onClick={() => router.push(backPath)}
                             className="flex-1 h-12 bg-primary text-text-inverse rounded-xl font-semibold text-sm hover:bg-primary-hover transition-colors"
                         >
                             Back to Dashboard
@@ -365,7 +384,7 @@ export default function ChecklistPage() {
                     {!isCompleted && step === 1 && (
                         <>
                             <button
-                                onClick={() => router.push('/dashboard')}
+                                onClick={() => router.push(backPath)}
                                 className="flex-1 h-12 border border-border rounded-xl font-semibold text-sm text-text-primary hover:bg-surface-raised transition-colors"
                             >
                                 Back
@@ -408,6 +427,27 @@ export default function ChecklistPage() {
                 </div>
                 <div className="h-[env(safe-area-inset-bottom)]" />
             </div>
+
+            {/* Lightbox */}
+            {lightboxUrl && (
+                <div
+                    className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4"
+                    onClick={() => setLightboxUrl(null)}
+                >
+                    <button
+                        onClick={() => setLightboxUrl(null)}
+                        className="absolute top-4 right-4 text-white/80 hover:text-white transition-colors z-[101]"
+                    >
+                        <X className="w-8 h-8" />
+                    </button>
+                    <img
+                        src={lightboxUrl}
+                        alt="Photo"
+                        className="max-w-full max-h-[85vh] object-contain rounded-xl"
+                        onClick={(e) => e.stopPropagation()}
+                    />
+                </div>
+            )}
         </div>
     )
 }
