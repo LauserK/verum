@@ -1,9 +1,12 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
+import pytz
+from datetime import datetime, timezone
 from pydantic import BaseModel
 from typing import Optional
-from datetime import datetime, timezone
+
+CARACAS_TZ = pytz.timezone("America/Caracas")
 
 from database import supabase
 from config import settings
@@ -26,7 +29,7 @@ security = HTTPBearer()
 
 def get_current_shift() -> str:
     """Returns the current shift based on local hour."""
-    hour = datetime.now().hour
+    hour = datetime.now(CARACAS_TZ).hour
     if 6 <= hour < 14:
         return "morning"
     elif 14 <= hour < 20:
@@ -195,7 +198,7 @@ async def get_checklists(venue_id: str, user=Depends(get_current_user)):
     """
     try:
         shift = get_current_shift()
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        today = datetime.now(CARACAS_TZ).strftime("%Y-%m-%d")
 
         # 1. Get all templates for this venue
         templates_res = (
@@ -278,7 +281,7 @@ async def get_checklists(venue_id: str, user=Depends(get_current_user)):
                 # Get current time in same format (assuming local HH:MM, but typically server is UTC. 
                 # Be careful: Verum frontend/backend might expect local time or UTC. Currently dashboard uses `get_current_shift()` logic.
                 # Let's use UTC HH:MM for now as that's what we have)
-                now_str = datetime.now(timezone.utc).strftime("%H:%M:%S")
+                now_str = datetime.now(CARACAS_TZ).strftime("%H:%M:%S")
                 # Ensure tmpl_available_time is string
                 if str(now_str) < str(tmpl_available_time):
                     is_time_locked = True
@@ -336,7 +339,7 @@ async def create_submission(body: CreateSubmissionRequest, user=Depends(get_curr
     """
     try:
         shift = get_current_shift()
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        today = datetime.now(CARACAS_TZ).strftime("%Y-%m-%d")
 
         # Check for ANY existing submission today (completed or draft)
         existing = (
@@ -976,7 +979,7 @@ async def get_compliance_report(
     - avg_execution_minutes
     """
     try:
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        today = datetime.now(CARACAS_TZ).strftime("%Y-%m-%d")
         d_from = date_from or today
         d_to = date_to or today
 
