@@ -31,18 +31,25 @@ export default function AdminDashboard() {
         if (!venueId) return
         setLoading(true)
 
+        const getLocalDateString = (d: Date) => {
+            const year = d.getFullYear()
+            const month = String(d.getMonth() + 1).padStart(2, '0')
+            const day = String(d.getDate()).padStart(2, '0')
+            return `${year}-${month}-${day}`
+        }
+
         const today = new Date()
-        let dateFrom = today.toISOString().slice(0, 10)
+        let dateFrom = getLocalDateString(today)
         let dateTo = dateFrom
 
         if (dateRange === 'week') {
             const d = new Date(today)
             d.setDate(d.getDate() - 6)
-            dateFrom = d.toISOString().slice(0, 10)
+            dateFrom = getLocalDateString(d)
         } else if (dateRange === 'month') {
             const d = new Date(today)
             d.setDate(d.getDate() - 29)
-            dateFrom = d.toISOString().slice(0, 10)
+            dateFrom = getLocalDateString(d)
         }
 
         adminApi.getCompliance({ venue_id: venueId, date_from: dateFrom, date_to: dateTo })
