@@ -3,16 +3,18 @@
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { ClipboardCheck, History, BarChart3, Settings } from 'lucide-react'
-
-const tabs = [
-    { label: 'Audits', href: '/dashboard', icon: ClipboardCheck },
-    { label: 'History', href: '/history', icon: History },
-    { label: 'Reports', href: '/reports', icon: BarChart3 },
-    { label: 'Settings', href: '/settings', icon: Settings },
-]
+import { useTranslations } from '@/components/I18nProvider'
 
 export default function BottomNav() {
     const pathname = usePathname()
+    const { t } = useTranslations('nav')
+
+    const tabs = [
+        { label: t('audits'), href: '/dashboard', icon: ClipboardCheck },
+        { label: t('history'), href: '/history', icon: History },
+        { label: t('reports'), href: '/reports', icon: BarChart3 },
+        { label: t('settings'), href: '/settings', icon: Settings },
+    ]
 
     return (
         <nav className="fixed bottom-0 left-0 right-0 bg-surface border-t border-border z-50">

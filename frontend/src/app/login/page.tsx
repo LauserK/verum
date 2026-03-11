@@ -2,33 +2,49 @@
 
 import { useActionState, useState } from 'react'
 import { login } from './actions'
-import { Loader2, Utensils, IdCard, Lock, Eye, EyeOff } from 'lucide-react'
+import { Loader2, Utensils, IdCard, Lock, Eye, EyeOff, Globe } from 'lucide-react'
+import { useTranslations } from '@/components/I18nProvider'
 
 export default function LoginPage() {
+    const { t, language, setLanguage } = useTranslations('login');
     const [state, formAction, isPending] = useActionState(async (prevState: any, formData: FormData) => {
         return await login(formData)
     }, null)
 
     const [showPassword, setShowPassword] = useState(false)
 
+    const toggleLanguage = () => {
+        setLanguage(language === 'en' ? 'es' : 'en')
+    }
+
     return (
         <div className="flex justify-center items-center min-h-screen bg-slate-50 p-4 font-sans">
+            <div className="absolute top-4 right-4">
+                <button
+                    onClick={toggleLanguage}
+                    className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg shadow-sm text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-colors"
+                    title={t('switchLanguage')}
+                >
+                    <Globe className="w-4 h-4" />
+                    {language === 'en' ? 'EN' : 'ES'}
+                </button>
+            </div>
             <div className="w-full max-w-[400px] bg-white border border-gray-100 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden flex flex-col">
                 <div className="flex flex-col items-center pt-10 pb-4">
                     <div className="bg-[#3b82f6] w-[60px] h-[60px] rounded-[14px] flex items-center justify-center text-white shadow-sm mb-5">
                         <Utensils className="w-8 h-8" strokeWidth={2} />
                     </div>
-                    <h1 className="text-[22px] font-bold text-slate-900 tracking-tight leading-none mb-2">VERUM</h1>
-                    <p className="text-[14px] font-medium text-slate-500">Operational Management Portal</p>
+                    <h1 className="text-[22px] font-bold text-slate-900 tracking-tight leading-none mb-2">{t('title')}</h1>
+                    <p className="text-[14px] font-medium text-slate-500">{t('subtitle')}</p>
                 </div>
 
                 <div className="px-8 pb-8 pt-2">
-                    <h2 className="text-xl font-bold text-slate-900 mb-6 mt-1">Sign In</h2>
+                    <h2 className="text-xl font-bold text-slate-900 mb-6 mt-1">{t('signIn')}</h2>
 
                     <form action={formAction} className="flex flex-col gap-5">
                         <div className="flex flex-col gap-2">
                             <label htmlFor="email" className="text-sm font-medium text-slate-900">
-                                Employee ID
+                                {t('employeeId')}
                             </label>
                             <div className="relative">
                                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -39,7 +55,7 @@ export default function LoginPage() {
                                     name="email"
                                     type="text"
                                     required
-                                    placeholder="Enter your ID"
+                                    placeholder={t('employeeIdPlaceholder')}
                                     className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-11 pr-4 h-12 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:bg-white transition-colors"
                                     disabled={isPending}
                                 />
@@ -48,7 +64,7 @@ export default function LoginPage() {
 
                         <div className="flex flex-col gap-2">
                             <label htmlFor="password" className="text-sm font-medium text-slate-900">
-                                Password
+                                {t('password')}
                             </label>
                             <div className="relative">
                                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -59,7 +75,7 @@ export default function LoginPage() {
                                     name="password"
                                     type={showPassword ? "text" : "password"}
                                     required
-                                    placeholder="••••••••"
+                                    placeholder={t('passwordPlaceholder')}
                                     className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-11 pr-11 h-12 text-sm text-slate-900 placeholder:text-slate-400 placeholder:tracking-normal focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:bg-white transition-colors tracking-widest font-medium"
                                     disabled={isPending}
                                 />
@@ -91,11 +107,11 @@ export default function LoginPage() {
                                         <polyline points="20 6 9 17 4 12"></polyline>
                                     </svg>
                                 </div>
-                                <span className="text-[14px] font-medium text-slate-600 group-hover:text-slate-800 transition-colors">Remember me</span>
+                                <span className="text-[14px] font-medium text-slate-600 group-hover:text-slate-800 transition-colors">{t('rememberMe')}</span>
                             </label>
                             
                             <a href="#" className="text-[14px] font-medium text-blue-500 hover:text-blue-600 transition-colors">
-                                Forgot password?
+                                {t('forgotPassword')}
                             </a>
                         </div>
 
@@ -114,18 +130,18 @@ export default function LoginPage() {
                             {isPending ? (
                                 <>
                                     <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                                    Signing in...
+                                    {t('signingIn')}
                                 </>
                             ) : (
-                                'Sign In'
+                                t('signIn')
                             )}
                         </button>
                     </form>
                 </div>
                 
                 <div className="bg-slate-50/80 border-t border-slate-100 px-6 py-[18px] flex flex-col items-center justify-center text-[13px] text-slate-500 mt-auto">
-                    <p>Authorized Personnel Only.</p>
-                    <p className="mt-1">Version 2.4.0-build.82</p>
+                    <p>{t('authorizedOnly')}</p>
+                    <p className="mt-1">{t('version')}</p>
                 </div>
             </div>
         </div>

@@ -12,6 +12,7 @@ import {
 } from '@/lib/api'
 import { useAutoSave } from '@/hooks/useAutoSave'
 import SaveIndicator from '@/components/SaveIndicator'
+import { useTranslations } from '@/components/I18nProvider'
 
 // Question components
 import CheckQuestion from '@/components/questions/CheckQuestion'
@@ -60,6 +61,7 @@ function QuestionSkeleton() {
 
 // ── Main Page ───────────────────────────────────────
 export default function ChecklistPage() {
+    const { t } = useTranslations('checklist')
     const params = useParams()
     const router = useRouter()
     const searchParams = useSearchParams()
@@ -205,7 +207,7 @@ export default function ChecklistPage() {
                         <ArrowLeft className="w-5 h-5" />
                     </button>
                     <h1 className="text-base font-bold text-text-primary truncate flex-1">
-                        {submission?.template_title || 'Checklist'}
+                        {submission?.template_title || t('title')}
                     </h1>
                     {!isCompleted && <SaveIndicator status={saveStatus} />}
                 </div>
@@ -226,7 +228,7 @@ export default function ChecklistPage() {
                             {step > 1 ? <CheckCircle2 className="w-5 h-5" /> : '1'}
                         </div>
                         <span className={`text-xs font-semibold uppercase tracking-wider ${step >= 1 ? 'text-primary' : 'text-text-secondary'}`}>
-                            Check
+                            {t('stepCheck')}
                         </span>
                     </div>
 
@@ -247,7 +249,7 @@ export default function ChecklistPage() {
                             2
                         </div>
                         <span className={`text-xs font-semibold uppercase tracking-wider ${step >= 2 ? 'text-primary' : 'text-text-secondary'}`}>
-                            Review
+                            {t('stepReview')}
                         </span>
                     </div>
                 </div>
@@ -272,9 +274,9 @@ export default function ChecklistPage() {
                 <main className="max-w-lg mx-auto px-4 flex flex-col gap-4">
                     {/* Summary Card */}
                     <div className="bg-surface border border-border rounded-2xl p-4 shadow-sm dark:shadow-none">
-                        <h3 className="text-base font-semibold text-text-primary mb-3">Audit Summary</h3>
+                        <h3 className="text-base font-semibold text-text-primary mb-3">{t('summaryTitle')}</h3>
                         <div className="flex items-center justify-between text-sm mb-2">
-                            <span className="text-text-secondary">Tasks completed</span>
+                            <span className="text-text-secondary">{t('tasksCompleted')}</span>
                             <span className="font-semibold text-text-primary font-mono">
                                 {totalAnswered}/{submission?.questions.length || 0}
                             </span>
@@ -289,7 +291,7 @@ export default function ChecklistPage() {
 
                     {/* Answers Review */}
                     <div className="bg-surface border border-border rounded-2xl p-4 shadow-sm dark:shadow-none">
-                        <h3 className="text-base font-semibold text-text-primary mb-3">Responses</h3>
+                        <h3 className="text-base font-semibold text-text-primary mb-3">{t('responsesTitle')}</h3>
                         <div className="flex flex-col gap-2.5">
                             {submission?.questions.map((q) => {
                                 const val = answers[q.id]
@@ -306,7 +308,7 @@ export default function ChecklistPage() {
                                                 />
                                             ) : (
                                                 <span className={`text-sm font-medium text-right shrink-0 max-w-[40%] truncate ${val ? 'text-text-primary' : 'text-text-disabled italic'}`}>
-                                                    {val || 'Not answered'}
+                                                    {val || t('notAnswered')}
                                                 </span>
                                             )}
                                         </div>
@@ -323,16 +325,16 @@ export default function ChecklistPage() {
 
                     {/* Auditor Notes */}
                     <div className="bg-surface border border-border rounded-2xl p-4 shadow-sm dark:shadow-none">
-                        <h3 className="text-base font-semibold text-text-primary mb-3">Auditor Notes</h3>
+                        <h3 className="text-base font-semibold text-text-primary mb-3">{t('auditorNotesTitle')}</h3>
                         {isCompleted ? (
                             <p className="text-sm text-text-primary bg-surface-raised rounded-xl px-4 py-3">
-                                {auditorNotes || 'No notes added'}
+                                {auditorNotes || t('noNotes')}
                             </p>
                         ) : (
                             <textarea
                                 value={auditorNotes}
                                 onChange={(e) => setAuditorNotes(e.target.value)}
-                                placeholder="Add any observations or notes..."
+                                placeholder={t('notesPlaceholder')}
                                 rows={3}
                                 className="w-full bg-surface-raised border border-border rounded-xl px-4 py-3 text-sm text-text-primary placeholder:text-text-disabled focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-border-strong transition-all resize-none"
                             />
@@ -344,7 +346,7 @@ export default function ChecklistPage() {
                         <div className="flex items-center gap-3 bg-success/10 border border-success/20 rounded-2xl p-4">
                             <CheckCircle2 className="w-5 h-5 text-success shrink-0" />
                             <span className="text-sm text-success font-medium">
-                                This audit has been submitted and confirmed.
+                                {t('confirmedMessage')}
                             </span>
                         </div>
                     ) : (
@@ -361,7 +363,7 @@ export default function ChecklistPage() {
                                 </svg>
                             </div>
                             <span className="text-sm text-text-primary font-medium">
-                                I confirm that this audit has been completed accurately and all information is correct.
+                                {t('confirmLabel')}
                             </span>
                         </label>
                     )}
@@ -383,7 +385,7 @@ export default function ChecklistPage() {
                             onClick={() => router.push(backPath)}
                             className="flex-1 h-12 bg-primary text-text-inverse rounded-xl font-semibold text-sm hover:bg-primary-hover transition-colors"
                         >
-                            Back to Dashboard
+                            {t('backToDashboard')}
                         </button>
                     )}
 
@@ -394,14 +396,14 @@ export default function ChecklistPage() {
                                 onClick={() => router.push(backPath)}
                                 className="flex-1 h-12 border border-border rounded-xl font-semibold text-sm text-text-primary hover:bg-surface-raised transition-colors"
                             >
-                                Back
+                                {t('back')}
                             </button>
                             <button
                                 onClick={() => setStep(2)}
                                 disabled={!allRequiredAnswered}
                                 className="flex-[2] h-12 bg-primary text-text-inverse rounded-xl font-semibold text-sm hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                             >
-                                Review Audit
+                                {t('reviewAudit')}
                             </button>
                         </>
                     )}
@@ -413,7 +415,7 @@ export default function ChecklistPage() {
                                 onClick={() => setStep(1)}
                                 className="flex-1 h-12 border border-border rounded-xl font-semibold text-sm text-text-primary hover:bg-surface-raised transition-colors"
                             >
-                                Back
+                                {t('back')}
                             </button>
                             <button
                                 onClick={handleSubmit}
@@ -423,10 +425,10 @@ export default function ChecklistPage() {
                                 {submitting ? (
                                     <>
                                         <Loader2 className="w-4 h-4 animate-spin" />
-                                        Submitting...
+                                        {t('submitting')}
                                     </>
                                 ) : (
-                                    'Submit Audit'
+                                    t('submitAudit')
                                 )}
                             </button>
                         </>
@@ -458,3 +460,4 @@ export default function ChecklistPage() {
         </div>
     )
 }
+

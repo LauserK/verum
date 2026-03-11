@@ -1,6 +1,7 @@
 'use client'
 
 import type { SubmissionQuestion } from '@/lib/api'
+import { useTranslations } from '@/components/I18nProvider'
 
 interface Props {
     question: SubmissionQuestion
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export default function YesNoQuestion({ question, value, onChange }: Props) {
+    const { t } = useTranslations('questions')
     return (
         <div className="bg-surface border border-border rounded-2xl p-4 shadow-sm dark:shadow-none">
             <h3 className="text-base font-semibold text-text-primary mb-4">{question.label}</h3>
@@ -24,7 +26,7 @@ export default function YesNoQuestion({ question, value, onChange }: Props) {
                         }
                     `}
                 >
-                    Yes
+                    {t('yes')}
                 </button>
                 <button
                     type="button"
@@ -37,7 +39,7 @@ export default function YesNoQuestion({ question, value, onChange }: Props) {
                         }
                     `}
                 >
-                    No
+                    {t('no')}
                 </button>
             </div>
         </div>

@@ -2,12 +2,15 @@
 
 import { Loader2, Check, WifiOff } from 'lucide-react'
 import type { SaveStatus } from '@/hooks/useAutoSave'
+import { useTranslations } from '@/components/I18nProvider'
 
 interface Props {
     status: SaveStatus
 }
 
 export default function SaveIndicator({ status }: Props) {
+    const { t } = useTranslations('saveIndicator')
+
     if (status === 'idle') return null
 
     return (
@@ -20,19 +23,19 @@ export default function SaveIndicator({ status }: Props) {
             {status === 'saving' && (
                 <>
                     <Loader2 className="w-3 h-3 animate-spin" />
-                    <span>Saving...</span>
+                    <span>{t('saving')}</span>
                 </>
             )}
             {status === 'saved' && (
                 <>
                     <Check className="w-3 h-3" />
-                    <span>Saved</span>
+                    <span>{t('saved')}</span>
                 </>
             )}
             {status === 'error' && (
                 <>
                     <WifiOff className="w-3 h-3" />
-                    <span>Error</span>
+                    <span>{t('error')}</span>
                 </>
             )}
         </div>

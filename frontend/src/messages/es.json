@@ -1,0 +1,80 @@
+{
+  "login": {
+    "title": "VERUM",
+    "subtitle": "Portal de Gestión Operativa",
+    "signIn": "Iniciar Sesión",
+    "employeeId": "ID de Empleado",
+    "employeeIdPlaceholder": "Ingresa tu ID",
+    "password": "Contraseña",
+    "passwordPlaceholder": "••••••••",
+    "rememberMe": "Recordarme",
+    "forgotPassword": "¿Olvidaste tu contraseña?",
+    "signingIn": "Iniciando...",
+    "authorizedOnly": "Solo Personal Autorizado.",
+    "version": "Versión 2.4.0-build.82",
+    "switchLanguage": "Cambiar a Español"
+  },
+  "nav": {
+    "audits": "Auditorías",
+    "history": "Historial",
+    "reports": "Reportes",
+    "settings": "Ajustes"
+  },
+  "dashboard": {
+    "hello": "Hola, {name}",
+    "staff": "Equipo",
+    "morningShift": "Turno Mañana",
+    "midShift": "Turno Tarde",
+    "closingShift": "Turno Cierre",
+    "todaysAudits": "Auditorías de Hoy",
+    "done": "{completed}/{total} completas",
+    "noAuditsTitle": "Sin auditorías en este turno",
+    "noAuditsDesc": "Aún no hay listas asignadas. Contacta a tu administrador."
+  },
+  "checklist": {
+    "title": "Lista de Verificación",
+    "stepCheck": "Revisar",
+    "stepReview": "Resumen",
+    "summaryTitle": "Resumen de Auditoría",
+    "tasksCompleted": "Tareas completadas",
+    "responsesTitle": "Respuestas",
+    "notAnswered": "Sin respuesta",
+    "auditorNotesTitle": "Notas del Auditor",
+    "noNotes": "Sin notas",
+    "notesPlaceholder": "Agrega observaciones o notas...",
+    "confirmedMessage": "Esta auditoría ha sido enviada y confirmada.",
+    "confirmLabel": "Confirmo que esta auditoría se ha completado con precisión y que toda la información es correcta.",
+    "backToDashboard": "Volver al Inicio",
+    "back": "Volver",
+    "reviewAudit": "Revisar Auditoría",
+    "submitAudit": "Enviar Auditoría",
+    "submitting": "Enviando..."
+  },
+  "checklistCard": {
+    "completed": "COMPLETA",
+    "inProgress": "EN CURSO",
+    "pending": "PENDIENTE",
+    "locked": "BLOQUEADA",
+    "tasks": "{answered}/{total} tareas",
+    "tasksTotal": "{total} tareas",
+    "availableFrom": "Disponible desde {time}",
+    "prereqRequiredTime": "Prerreq. y comienza a las {time}",
+    "prereqRequired": "Completa el prerrequisito primero"
+  },
+  "saveIndicator": {
+    "saving": "Guardando...",
+    "saved": "Guardado",
+    "error": "Error"
+  },
+  "questions": {
+    "textPlaceholder": "Ingresa tu respuesta...",
+    "yes": "Sí",
+    "no": "No",
+    "photoUploadError": "Error al subir foto. Intenta de nuevo.",
+    "photoUploading": "Subiendo foto...",
+    "photoCaptured": "Foto capturada",
+    "photoRemove": "Quitar foto",
+    "photoTapToTake": "Toca para tomar foto",
+    "selectOption": "Selecciona una opción..."
+  }
+}

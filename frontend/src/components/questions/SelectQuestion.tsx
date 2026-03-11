@@ -2,6 +2,7 @@
 
 import { ChevronDown } from 'lucide-react'
 import type { SubmissionQuestion } from '@/lib/api'
+import { useTranslations } from '@/components/I18nProvider'
 
 interface Props {
     question: SubmissionQuestion
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export default function SelectQuestion({ question, value, onChange }: Props) {
+    const { t } = useTranslations('questions')
     const options: string[] = question.config?.options || []
     const label = question.config?.label
 
@@ -25,7 +27,7 @@ export default function SelectQuestion({ question, value, onChange }: Props) {
                     onChange={(e) => onChange(e.target.value)}
                     className="w-full bg-surface-raised border border-border rounded-xl px-4 h-12 text-sm text-text-primary appearance-none focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-border-strong transition-all cursor-pointer"
                 >
-                    <option value="" disabled>Select an option...</option>
+                    <option value="" disabled>{t('selectOption')}</option>
                     {options.map((opt) => (
                         <option key={opt} value={opt}>{opt}</option>
                     ))}

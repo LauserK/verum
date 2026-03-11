@@ -1,0 +1,80 @@
+{
+  "login": {
+    "title": "VERUM",
+    "subtitle": "Operational Management Portal",
+    "signIn": "Sign In",
+    "employeeId": "Employee ID",
+    "employeeIdPlaceholder": "Enter your ID",
+    "password": "Password",
+    "passwordPlaceholder": "••••••••",
+    "rememberMe": "Remember me",
+    "forgotPassword": "Forgot password?",
+    "signingIn": "Signing in...",
+    "authorizedOnly": "Authorized Personnel Only.",
+    "version": "Version 2.4.0-build.82",
+    "switchLanguage": "Switch to English"
+  },
+  "nav": {
+    "audits": "Audits",
+    "history": "History",
+    "reports": "Reports",
+    "settings": "Settings"
+  },
+  "dashboard": {
+    "hello": "Hello, {name}",
+    "staff": "Staff",
+    "morningShift": "Morning Shift",
+    "midShift": "Mid Shift",
+    "closingShift": "Closing Shift",
+    "todaysAudits": "Today's Audits",
+    "done": "{completed}/{total} done",
+    "noAuditsTitle": "No audits for this shift",
+    "noAuditsDesc": "There are no checklists assigned yet. Contact your administrator."
+  },
+  "checklist": {
+    "title": "Checklist",
+    "stepCheck": "Check",
+    "stepReview": "Review",
+    "summaryTitle": "Audit Summary",
+    "tasksCompleted": "Tasks completed",
+    "responsesTitle": "Responses",
+    "notAnswered": "Not answered",
+    "auditorNotesTitle": "Auditor Notes",
+    "noNotes": "No notes added",
+    "notesPlaceholder": "Add any observations or notes...",
+    "confirmedMessage": "This audit has been submitted and confirmed.",
+    "confirmLabel": "I confirm that this audit has been completed accurately and all information is correct.",
+    "backToDashboard": "Back to Dashboard",
+    "back": "Back",
+    "reviewAudit": "Review Audit",
+    "submitAudit": "Submit Audit",
+    "submitting": "Submitting..."
+  },
+  "checklistCard": {
+    "completed": "COMPLETED",
+    "inProgress": "IN PROGRESS",
+    "pending": "PENDING",
+    "locked": "LOCKED",
+    "tasks": "{answered}/{total} tasks",
+    "tasksTotal": "{total} tasks",
+    "availableFrom": "Available from {time}",
+    "prereqRequiredTime": "Prereq required & starts at {time}",
+    "prereqRequired": "Complete prerequisite first"
+  },
+  "saveIndicator": {
+    "saving": "Saving...",
+    "saved": "Saved",
+    "error": "Error"
+  },
+  "questions": {
+    "textPlaceholder": "Enter your response...",
+    "yes": "Yes",
+    "no": "No",
+    "photoUploadError": "Failed to upload photo. Try again.",
+    "photoUploading": "Uploading photo...",
+    "photoCaptured": "Photo captured",
+    "photoRemove": "Remove photo",
+    "photoTapToTake": "Tap to take photo",
+    "selectOption": "Select an option..."
+  }
+}

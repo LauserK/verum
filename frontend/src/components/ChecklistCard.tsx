@@ -2,37 +2,7 @@
 
 import { CheckCircle2, PlayCircle, Clock, Lock } from 'lucide-react'
 import type { ChecklistItem } from '@/lib/api'
-
-const statusConfig = {
-    completed: {
-        label: 'COMPLETED',
-        icon: CheckCircle2,
-        badgeClasses: 'bg-success-light text-success border-success/20',
-        cardBorder: 'border-success/30',
-        progressColor: 'bg-success',
-    },
-    in_progress: {
-        label: 'IN PROGRESS',
-        icon: PlayCircle,
-        badgeClasses: 'bg-primary-light text-primary border-primary/20',
-        cardBorder: 'border-primary/30',
-        progressColor: 'bg-primary',
-    },
-    pending: {
-        label: 'PENDING',
-        icon: Clock,
-        badgeClasses: 'bg-surface-raised text-text-secondary border-border',
-        cardBorder: 'border-border',
-        progressColor: 'bg-locked',
-    },
-    locked: {
-        label: 'LOCKED',
-        icon: Lock,
-        badgeClasses: 'bg-surface-raised text-locked border-border',
-        cardBorder: 'border-border',
-        progressColor: 'bg-locked',
-    },
-}
+import { useTranslations } from '@/components/I18nProvider'
 
 interface Props {
     checklist: ChecklistItem
@@ -40,6 +10,39 @@ interface Props {
 }
 
 export default function ChecklistCard({ checklist, onClick }: Props) {
+    const { t } = useTranslations('checklistCard')
+
+    const statusConfig = {
+        completed: {
+            label: t('completed'),
+            icon: CheckCircle2,
+            badgeClasses: 'bg-success-light text-success border-success/20',
+            cardBorder: 'border-success/30',
+            progressColor: 'bg-success',
+        },
+        in_progress: {
+            label: t('inProgress'),
+            icon: PlayCircle,
+            badgeClasses: 'bg-primary-light text-primary border-primary/20',
+            cardBorder: 'border-primary/30',
+            progressColor: 'bg-primary',
+        },
+        pending: {
+            label: t('pending'),
+            icon: Clock,
+            badgeClasses: 'bg-surface-raised text-text-secondary border-border',
+            cardBorder: 'border-border',
+            progressColor: 'bg-locked',
+        },
+        locked: {
+            label: t('locked'),
+            icon: Lock,
+            badgeClasses: 'bg-surface-raised text-locked border-border',
+            cardBorder: 'border-border',
+            progressColor: 'bg-locked',
+        },
+    }
+
     const config = statusConfig[checklist.status]
     const Icon = config.icon
     const isDisabled = checklist.status === 'locked'
@@ -88,7 +91,7 @@ export default function ChecklistCard({ checklist, onClick }: Props) {
                 <div className="mt-3">
                     <div className="flex justify-between items-center mb-1.5">
                         <span className="text-xs text-text-secondary">
-                            {checklist.answered_questions}/{checklist.total_questions} tasks
+                            {t('tasks', { answered: checklist.answered_questions, total: checklist.total_questions })}
                         </span>
                         <span className="text-xs font-semibold text-primary font-mono">
                             {Math.round(progress)}%
@@ -108,8 +111,8 @@ export default function ChecklistCard({ checklist, onClick }: Props) {
                 <div className="mt-3">
                     <span className="text-xs text-text-secondary">
                         {checklist.status === 'completed'
-                            ? `${checklist.total_questions}/${checklist.total_questions} tasks`
-                            : `${checklist.total_questions} tasks`
+                            ? t('tasks', { answered: checklist.total_questions, total: checklist.total_questions })
+                            : t('tasksTotal', { total: checklist.total_questions })
                         }
                     </span>
                 </div>
@@ -122,12 +125,12 @@ export default function ChecklistCard({ checklist, onClick }: Props) {
                     <span className="text-xs text-locked">
                         {(() => {
                             if (checklist.available_from_time && !checklist.prerequisite_template_id) {
-                                return `Available from ${checklist.available_from_time.slice(0, 5)}`
+                                return t('availableFrom', { time: checklist.available_from_time.slice(0, 5) })
                             }
                             if (checklist.available_from_time && checklist.prerequisite_template_id) {
-                                return `Prereq required & starts at ${checklist.available_from_time.slice(0, 5)}`
+                                return t('prereqRequiredTime', { time: checklist.available_from_time.slice(0, 5) })
                             }
-                            return 'Complete prerequisite first'
+                            return t('prereqRequired')
                         })()}
                     </span>
                 </div>
@@ -135,3 +138,4 @@ export default function ChecklistCard({ checklist, onClick }: Props) {
         </button>
     )
 }
+

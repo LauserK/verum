@@ -5,6 +5,7 @@ import { Camera, Loader2, X } from 'lucide-react'
 import imageCompression from 'browser-image-compression'
 import { createClient } from '@/utils/supabase/client'
 import type { SubmissionQuestion } from '@/lib/api'
+import { useTranslations } from '@/components/I18nProvider'
 
 interface Props {
     question: SubmissionQuestion
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export default function PhotoQuestion({ question, value, onChange }: Props) {
+    const { t } = useTranslations('questions')
     const [uploading, setUploading] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
@@ -56,7 +58,7 @@ export default function PhotoQuestion({ question, value, onChange }: Props) {
             onChange(urlData.publicUrl)
         } catch (err: any) {
             console.error('Photo upload error:', err)
-            setError('Failed to upload photo. Try again.')
+            setError(t('photoUploadError'))
         } finally {
             setUploading(false)
             // Reset input so the same file can be re-selected
@@ -92,7 +94,7 @@ export default function PhotoQuestion({ question, value, onChange }: Props) {
             {uploading && (
                 <div className="aspect-video rounded-xl bg-surface-raised flex flex-col items-center justify-center gap-2 border border-border">
                     <Loader2 className="w-8 h-8 text-primary animate-spin" />
-                    <span className="text-sm text-text-secondary font-medium">Uploading photo...</span>
+                    <span className="text-sm text-text-secondary font-medium">{t('photoUploading')}</span>
                 </div>
             )}
 
@@ -120,7 +122,7 @@ export default function PhotoQuestion({ question, value, onChange }: Props) {
                     <div className="aspect-video flex items-center justify-center bg-success/10 border border-success/20 rounded-xl">
                         <div className="text-center">
                             <Camera className="w-8 h-8 text-success mx-auto mb-1" />
-                            <p className="text-sm font-medium text-success">Photo captured</p>
+                            <p className="text-sm font-medium text-success">{t('photoCaptured')}</p>
                         </div>
                     </div>
                     <button
@@ -128,7 +130,7 @@ export default function PhotoQuestion({ question, value, onChange }: Props) {
                         onClick={handleRemove}
                         className="mt-2 text-xs text-error hover:text-error/80 transition-colors"
                     >
-                        Remove photo
+                        {t('photoRemove')}
                     </button>
                 </div>
             )}
@@ -141,7 +143,7 @@ export default function PhotoQuestion({ question, value, onChange }: Props) {
                     className="w-full aspect-video rounded-xl border-2 border-dashed border-border-strong hover:border-primary/50 flex flex-col items-center justify-center gap-2 text-text-secondary hover:text-primary transition-all cursor-pointer bg-surface-raised/50"
                 >
                     <Camera className="w-8 h-8" />
-                    <span className="text-sm font-medium">Tap to take photo</span>
+                    <span className="text-sm font-medium">{t('photoTapToTake')}</span>
                 </button>
             )}
 

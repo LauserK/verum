@@ -7,16 +7,17 @@ import ChecklistCard from '@/components/ChecklistCard'
 import BottomNav from '@/components/BottomNav'
 import { LogOut, Sun, Moon, Sunrise, CloudSun, Sunset, Shield } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from '@/components/I18nProvider'
 
-function getShiftInfo(): { label: string; icon: typeof Sun } {
+function getShiftInfo(t: any): { label: string; icon: typeof Sun } {
     const hour = new Date().getHours()
-    if (hour >= 6 && hour < 14) return { label: 'Morning Shift', icon: Sunrise }
-    if (hour >= 14 && hour < 20) return { label: 'Mid Shift', icon: CloudSun }
-    return { label: 'Closing Shift', icon: Sunset }
+    if (hour >= 6 && hour < 14) return { label: t('morningShift'), icon: Sunrise }
+    if (hour >= 14 && hour < 20) return { label: t('midShift'), icon: CloudSun }
+    return { label: t('closingShift'), icon: Sunset }
 }
 
-function formatDate(): string {
-    return new Date().toLocaleDateString('en-US', {
+function formatDate(locale: string): string {
+    return new Date().toLocaleDateString(locale === 'es' ? 'es-ES' : 'en-US', {
         weekday: 'long',
         year: 'numeric',
         month: 'long',
@@ -42,6 +43,7 @@ function ChecklistSkeleton() {
 
 // ── Main ────────────────────────────────────────────
 export default function DashboardPage() {
+    const { t, language } = useTranslations('dashboard')
     const router = useRouter()
     const [profile, setProfile] = useState<Profile | null>(null)
     const [checklists, setChecklists] = useState<ChecklistItem[]>([])
@@ -50,7 +52,7 @@ export default function DashboardPage() {
     const [mounted, setMounted] = useState(false)
     const [theme, setTheme] = useState<'light' | 'dark'>('light')
 
-    const shiftInfo = getShiftInfo()
+    const shiftInfo = getShiftInfo(t)
     const ShiftIcon = shiftInfo.icon
 
     useEffect(() => {
@@ -112,7 +114,7 @@ export default function DashboardPage() {
                             {loading ? (
                                 <span className="inline-block h-5 w-32 bg-surface-raised rounded animate-pulse" />
                             ) : (
-                                `Hello, ${profile?.full_name?.split(' ')[0] || 'Staff'}`
+                                t('hello', { name: profile?.full_name?.split(' ')[0] || t('staff') })
                             )}
                         </h1>
                     </div>
@@ -157,15 +159,15 @@ export default function DashboardPage() {
                         <ShiftIcon className="w-5 h-5 text-primary" />
                         <span className="text-sm font-semibold text-primary">{shiftInfo.label}</span>
                     </div>
-                    <p className="text-xs text-text-secondary">{formatDate()}</p>
+                    <p className="text-xs text-text-secondary">{formatDate(language)}</p>
                 </div>
 
                 {/* Section Title */}
                 <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-bold text-text-primary">Today&apos;s Audits</h2>
+                    <h2 className="text-lg font-bold text-text-primary">{t('todaysAudits')}</h2>
                     {!loading && checklists.length > 0 && (
                         <span className="text-xs text-text-secondary font-medium">
-                            {checklists.filter(c => c.status === 'completed').length}/{checklists.length} done
+                            {t('done', { completed: checklists.filter(c => c.status === 'completed').length, total: checklists.length })}
                         </span>
                     )}
                 </div>
@@ -207,10 +209,10 @@ export default function DashboardPage() {
                     <div className="bg-surface border border-border rounded-2xl p-8 text-center">
                         <div className="text-4xl mb-3">📋</div>
                         <h3 className="text-base font-semibold text-text-primary mb-1">
-                            No audits for this shift
+                            {t('noAuditsTitle')}
                         </h3>
                         <p className="text-sm text-text-secondary">
-                            There are no checklists assigned yet. Contact your administrator.
+                            {t('noAuditsDesc')}
                         </p>
                     </div>
                 )}
