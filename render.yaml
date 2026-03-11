@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: verum-backend
+    env: python
+    region: ohio # Puedes cambiar la región si prefieres
+    rootDir: backend
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: SUPABASE_URL
+        sync: false # Deberás configurar esto en el dashboard de Render
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false # Deberás configurar esto en el dashboard de Render
