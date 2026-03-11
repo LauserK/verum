@@ -38,7 +38,9 @@ export default function TemplatesPage() {
     const [newDesc, setNewDesc] = useState('')
     const [newFreq, setNewFreq] = useState('daily')
     const [newSchedule, setNewSchedule] = useState<number[]>([])
+    const [newDueDate, setNewDueDate] = useState('')
     const [newDueTime, setNewDueTime] = useState('')
+    const [newAvailableTime, setNewAvailableTime] = useState('')
     const [newPrereq, setNewPrereq] = useState('')
     const [saving, setSaving] = useState(false)
 
@@ -48,7 +50,9 @@ export default function TemplatesPage() {
     const [etDesc, setEtDesc] = useState('')
     const [etFreq, setEtFreq] = useState('daily')
     const [etSchedule, setEtSchedule] = useState<number[]>([])
+    const [etDueDate, setEtDueDate] = useState('')
     const [etDueTime, setEtDueTime] = useState('')
+    const [etAvailableTime, setEtAvailableTime] = useState('')
     const [etPrereq, setEtPrereq] = useState('')
 
     // Question form
@@ -102,14 +106,18 @@ export default function TemplatesPage() {
                 description: newDesc || undefined,
                 frequency: newFreq,
                 schedule: newSchedule.length > 0 ? newSchedule : undefined,
+                due_date: newDueDate || undefined,
                 due_time: newDueTime || undefined,
+                available_from_time: newAvailableTime || undefined,
                 prerequisite_template_id: newPrereq || undefined,
             })
             setTemplates((prev) => [...prev, tmpl])
             setShowNewTemplate(false)
             setNewTitle('')
             setNewDesc('')
+            setNewDueDate('')
             setNewDueTime('')
+            setNewAvailableTime('')
             setNewSchedule([])
             setNewFreq('daily')
             setNewPrereq('')
@@ -126,7 +134,9 @@ export default function TemplatesPage() {
         setEtDesc(t.description || '')
         setEtFreq(t.frequency || 'daily')
         setEtSchedule(t.schedule || [])
+        setEtDueDate(t.due_date || '')
         setEtDueTime(t.due_time || '')
+        setEtAvailableTime(t.available_from_time || '')
         setEtPrereq(t.prerequisite_template_id || '')
     }
 
@@ -135,11 +145,14 @@ export default function TemplatesPage() {
         setSaving(true)
         try {
             const updated = await adminApi.updateTemplate(editingTemplateId, {
+                venue_id: venueId,
                 title: etTitle,
                 description: etDesc || undefined,
                 frequency: etFreq,
                 schedule: etSchedule.length > 0 ? etSchedule : null,
+                due_date: etDueDate || null,
                 due_time: etDueTime || null,
+                available_from_time: etAvailableTime || null,
                 prerequisite_template_id: etPrereq || null,
             } as Partial<TemplateDetail>)
             setTemplates((prev) => prev.map((t) => t.id === editingTemplateId ? { ...t, ...updated } : t))
@@ -271,14 +284,34 @@ export default function TemplatesPage() {
                         onFrequencyChange={setNewFreq}
                         onScheduleChange={setNewSchedule}
                     />
-                    <div>
-                        <label className="text-xs text-text-secondary mb-1 block">Due Time (optional)</label>
-                        <input
-                            type="time"
-                            value={newDueTime}
-                            onChange={(e) => setNewDueTime(e.target.value)}
-                            className="bg-surface border border-border rounded-xl px-3 h-10 text-sm text-text-primary focus:border-primary outline-none w-full"
-                        />
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                        <div>
+                            <label className="text-xs text-text-secondary mb-1 block">Due Date (optional)</label>
+                            <input
+                                type="date"
+                                value={newDueDate}
+                                onChange={(e) => setNewDueDate(e.target.value)}
+                                className="bg-surface border border-border rounded-xl px-3 h-10 text-sm text-text-primary focus:border-primary outline-none w-full"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-xs text-text-secondary mb-1 block">Due Time (optional)</label>
+                            <input
+                                type="time"
+                                value={newDueTime}
+                                onChange={(e) => setNewDueTime(e.target.value)}
+                                className="bg-surface border border-border rounded-xl px-3 h-10 text-sm text-text-primary focus:border-primary outline-none w-full"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-xs text-text-secondary mb-1 block">Available From (optional)</label>
+                            <input
+                                type="time"
+                                value={newAvailableTime}
+                                onChange={(e) => setNewAvailableTime(e.target.value)}
+                                className="bg-surface border border-border rounded-xl px-3 h-10 text-sm text-text-primary focus:border-primary outline-none w-full"
+                            />
+                        </div>
                     </div>
                     <div>
                         <label className="text-xs text-text-secondary mb-1 block">Prerequisite Checklist (optional)</label>
@@ -351,14 +384,34 @@ export default function TemplatesPage() {
                                             onFrequencyChange={setEtFreq}
                                             onScheduleChange={setEtSchedule}
                                         />
-                                        <div>
-                                            <label className="text-xs text-text-secondary mb-1 block">Due Time (optional)</label>
-                                            <input
-                                                type="time"
-                                                value={etDueTime}
-                                                onChange={(e) => setEtDueTime(e.target.value)}
-                                                className="bg-surface border border-border rounded-xl px-3 h-10 text-sm text-text-primary focus:border-primary outline-none w-full"
-                                            />
+                                        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+                                            <div>
+                                                <label className="text-xs text-text-secondary mb-1 block">Due Date (optional)</label>
+                                                <input
+                                                    type="date"
+                                                    value={etDueDate}
+                                                    onChange={(e) => setEtDueDate(e.target.value)}
+                                                    className="bg-surface border border-border rounded-xl px-3 h-10 text-sm text-text-primary focus:border-primary outline-none w-full"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="text-xs text-text-secondary mb-1 block">Due Time (optional)</label>
+                                                <input
+                                                    type="time"
+                                                    value={etDueTime}
+                                                    onChange={(e) => setEtDueTime(e.target.value)}
+                                                    className="bg-surface border border-border rounded-xl px-3 h-10 text-sm text-text-primary focus:border-primary outline-none w-full"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="text-xs text-text-secondary mb-1 block">Available From (optional)</label>
+                                                <input
+                                                    type="time"
+                                                    value={etAvailableTime}
+                                                    onChange={(e) => setEtAvailableTime(e.target.value)}
+                                                    className="bg-surface border border-border rounded-xl px-3 h-10 text-sm text-text-primary focus:border-primary outline-none w-full"
+                                                />
+                                            </div>
                                         </div>
                                         <div>
                                             <label className="text-xs text-text-secondary mb-1 block">Prerequisite Checklist (optional)</label>
@@ -405,6 +458,8 @@ export default function TemplatesPage() {
                                                         : t.frequency === 'monthly' && t.schedule?.length
                                                             ? `Monthly · Day ${t.schedule[0]}${t.schedule[0] === 31 ? ' (last day)' : ''}`
                                                             : t.frequency || 'daily'}
+                                                {t.due_date && ` · Date: ${t.due_date}`}
+                                                {t.available_from_time && ` · From ${t.available_from_time}`}
                                                 {t.due_time && ` · Due ${t.due_time}`}
                                             </p>
                                             {t.prerequisite_template_id && (

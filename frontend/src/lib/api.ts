@@ -48,8 +48,13 @@ export interface Profile {
 export interface ChecklistItem {
     id: string
     title: string
-    description: string | null
-    frequency: string | null
+    description?: string | null
+    frequency?: string | null
+    due_date?: string | null
+    due_time?: string | null
+    available_from_time?: string | null
+    schedule?: number[] | null
+    prerequisite_template_id?: string | null
     status: 'completed' | 'in_progress' | 'pending' | 'locked'
     total_questions: number
     answered_questions: number
@@ -136,7 +141,9 @@ export interface TemplateDetail {
     title: string
     description: string | null
     frequency: string | null
+    due_date: string | null
     due_time: string | null
+    available_from_time: string | null
     schedule: number[] | null
     prerequisite_template_id: string | null
 }

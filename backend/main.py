@@ -78,6 +78,10 @@ class ChecklistItem(BaseModel):
     title: str
     description: Optional[str] = None
     frequency: Optional[str] = None
+    due_date: Optional[str] = None
+    due_time: Optional[str] = None
+    available_from_time: Optional[str] = None
+    prerequisite_template_id: Optional[str] = None
     status: str  # completed | in_progress | pending | locked
     total_questions: int
     answered_questions: int
@@ -258,13 +262,34 @@ async def get_checklists(venue_id: str, user=Depends(get_current_user)):
         # 6. Build response with status calculation
         result: list[dict] = []
         for t in templates:
+            # If due_date is set, only show the checklist on that specific date
+            tmpl_due_date = t.get("due_date")
+            if tmpl_due_date and tmpl_due_date != today:
+                continue
+
             tid = t["id"]
             total_q = questions_by_template.get(tid, 0)
             sub = submissions_map.get(tid)
 
+            # Check available_from_time logic
+            tmpl_available_time = t.get("available_from_time")
+            is_time_locked = False
+            if tmpl_available_time:
+                # Get current time in same format (assuming local HH:MM, but typically server is UTC. 
+                # Be careful: Verum frontend/backend might expect local time or UTC. Currently dashboard uses `get_current_shift()` logic.
+                # Let's use UTC HH:MM for now as that's what we have)
+                now_str = datetime.now(timezone.utc).strftime("%H:%M:%S")
+                # Ensure tmpl_available_time is string
+                if str(now_str) < str(tmpl_available_time):
+                    is_time_locked = True
+
             # Determine status
             prereq = t.get("prerequisite_template_id")
             if prereq and prereq not in completed_ids:
+                status_val = "locked"
+                answered = 0
+                sub_id = None
+            elif is_time_locked and not sub:
                 status_val = "locked"
                 answered = 0
                 sub_id = None
@@ -286,6 +311,10 @@ async def get_checklists(venue_id: str, user=Depends(get_current_user)):
                 "title": t["title"],
                 "description": t.get("description"),
                 "frequency": t.get("frequency"),
+                "due_date": tmpl_due_date,
+                "due_time": t.get("due_time"),
+                "available_from_time": t.get("available_from_time"),
+                "prerequisite_template_id": prereq,
                 "status": status_val,
                 "total_questions": total_q,
                 "answered_questions": answered,
@@ -541,7 +570,9 @@ class CreateTemplateRequest(BaseModel):
     title: str
     description: Optional[str] = None
     frequency: Optional[str] = None
+    due_date: Optional[str] = None  # "YYYY-MM-DD" format
     due_time: Optional[str] = None  # "HH:MM" format
+    available_from_time: Optional[str] = None # "HH:MM" format
     schedule: Optional[list[int]] = None  # [0=Sun..6=Sat]
     prerequisite_template_id: Optional[str] = None
 
@@ -807,8 +838,12 @@ async def create_template(body: CreateTemplateRequest, user=Depends(require_admi
         payload["description"] = body.description
     if body.frequency:
         payload["frequency"] = body.frequency
+    if body.due_date:
+        payload["due_date"] = body.due_date
     if body.due_time:
         payload["due_time"] = body.due_time
+    if body.available_from_time:
+        payload["available_from_time"] = body.available_from_time
     if body.schedule:
         payload["schedule"] = body.schedule
     if body.prerequisite_template_id:
@@ -828,8 +863,12 @@ async def update_template(template_id: str, body: CreateTemplateRequest, user=De
         payload["description"] = body.description
     if body.frequency is not None:
         payload["frequency"] = body.frequency
+    if body.due_date is not None:
+        payload["due_date"] = body.due_date
     if body.due_time is not None:
         payload["due_time"] = body.due_time
+    if body.available_from_time is not None:
+        payload["available_from_time"] = body.available_from_time
     if body.schedule is not None:
         payload["schedule"] = body.schedule
     if body.prerequisite_template_id is not None:
@@ -942,7 +981,7 @@ async def get_compliance_report(
         d_to = date_to or today
 
         # Get templates
-        tmpl_query = supabase.table("checklist_templates").select("id, venue_id, due_time, frequency, schedule")
+        tmpl_query = supabase.table("checklist_templates").select("id, venue_id, due_time, due_date, frequency, schedule")
         if venue_id:
             tmpl_query = tmpl_query.eq("venue_id", venue_id)
         templates = (tmpl_query.execute()).data or []
@@ -1028,10 +1067,23 @@ async def get_compliance_report(
             day_of_month = curr_date.day
             
             for t in templates:
-                freq = t.get("frequency") or "daily"
+                freq = t.get("frequency")
                 sched = t.get("schedule") or []
-                
-                if freq == "daily":
+                due_date_str = t.get("due_date")
+
+                # If template has a specific due date, it only counts on that day
+                if due_date_str:
+                    if curr_date.strftime("%Y-%m-%d") == due_date_str:
+                        total_expected += 1
+                    continue # Ignore recurring frequencies if a specific date is set
+
+                # Default to daily if not specified, but 'none' means it's ignored unless it had a due_date
+                if not freq:
+                    freq = "daily"
+
+                if freq == "none":
+                    continue
+                elif freq == "daily":
                     total_expected += 1
                 elif freq == "shift":
                     vid = t.get("venue_id")

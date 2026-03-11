@@ -8,6 +8,7 @@ interface ScheduleEditorProps {
 }
 
 const FREQUENCIES = [
+    { value: 'none', label: 'None', desc: 'Specific date/time only' },
     { value: 'daily', label: 'Daily', desc: 'Every day' },
     { value: 'shift', label: 'Per Shift', desc: 'Every shift' },
     { value: 'weekly', label: 'Weekly', desc: 'One day per week' },

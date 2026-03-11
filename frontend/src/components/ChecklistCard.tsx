@@ -119,7 +119,17 @@ export default function ChecklistCard({ checklist, onClick }: Props) {
             {checklist.status === 'locked' && (
                 <div className="mt-3 flex items-center gap-1.5">
                     <Lock className="w-3.5 h-3.5 text-locked" />
-                    <span className="text-xs text-locked">Complete prerequisite first</span>
+                    <span className="text-xs text-locked">
+                        {(() => {
+                            if (checklist.available_from_time && !checklist.prerequisite_template_id) {
+                                return `Available from ${checklist.available_from_time.slice(0, 5)}`
+                            }
+                            if (checklist.available_from_time && checklist.prerequisite_template_id) {
+                                return `Prereq required & starts at ${checklist.available_from_time.slice(0, 5)}`
+                            }
+                            return 'Complete prerequisite first'
+                        })()}
+                    </span>
                 </div>
             )}
         </button>
