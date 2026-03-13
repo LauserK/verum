@@ -550,3 +550,14 @@ Antes del Milestone 1, preparar el entorno que todos los milestones usarán:
 - Activar compresión de imágenes con `browser-image-compression` (<200KB).
 - Revisar y optimizar Skeletons en todas las vistas que llaman a Render (mitigar cold start).
 - Auditoría de performance en Lighthouse (target: PWA score > 90).
+
+
+## Code Review Standards
+After completing any implementation, review the code for:
+- Functions longer than 30 lines (likely doing too much)
+- Logic duplicated more than twice (extract to utility)
+- Any `any` type usage in TypeScript (replace with real types)
+- Components with more than 3 props that could be grouped into an object
+- Missing error handling on async operations
+
+Run /simplify before presenting code to the user.
