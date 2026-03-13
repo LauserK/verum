@@ -233,7 +233,7 @@ async def get_checklists(venue_id: str, user=Depends(get_current_user)):
             .eq("venue_id", venue_id)
             .eq("user_id", user.id)
             .eq("shift", shift)
-            .gte("created_at", f"{today}T00:00:00Z")
+            .gte("created_at", f"{today}T00:00:00-04:00")
             .in_("template_id", template_ids)
             .execute()
         )
@@ -348,7 +348,7 @@ async def create_submission(body: CreateSubmissionRequest, user=Depends(get_curr
             .eq("template_id", body.template_id)
             .eq("user_id", user.id)
             .eq("shift", shift)
-            .gte("created_at", f"{today}T00:00:00Z")
+            .gte("created_at", f"{today}T00:00:00-04:00")
             .order("created_at", desc=True)
             .limit(1)
             .execute()
@@ -953,9 +953,9 @@ async def list_submissions(
     if status:
         query = query.eq("status", status)
     if date_from:
-        query = query.gte("created_at", f"{date_from}T00:00:00Z")
+        query = query.gte("created_at", f"{date_from}T00:00:00-04:00")
     if date_to:
-        query = query.lte("created_at", f"{date_to}T23:59:59Z")
+        query = query.lte("created_at", f"{date_to}T23:59:59-04:00")
 
     query = query.order("created_at", desc=True).limit(100)
     res = query.execute()
@@ -999,13 +999,13 @@ async def get_compliance_report(
 
         template_ids = [t["id"] for t in templates]
 
-        # Get submissions in date range
+        # Get submissions in date range (using Caracas offset -04:00)
         sub_query = (
             supabase.table("submissions")
             .select("id, template_id, status, started_at, completed_at, created_at, shift")
             .in_("template_id", template_ids)
-            .gte("created_at", f"{d_from}T00:00:00Z")
-            .lte("created_at", f"{d_to}T23:59:59Z")
+            .gte("created_at", f"{d_from}T00:00:00-04:00")
+            .lte("created_at", f"{d_to}T23:59:59-04:00")
         )
         submissions = (sub_query.execute()).data or []
 

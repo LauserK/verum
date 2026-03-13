@@ -7,12 +7,18 @@ import {
     Loader2
 } from 'lucide-react'
 
+import DatePicker from 'react-datepicker'
+import 'react-datepicker/dist/react-datepicker.css'
+import { es } from 'date-fns/locale/es'
+
 export default function AdminDashboard() {
     const [profile, setProfile] = useState<Profile | null>(null)
     const [report, setReport] = useState<ComplianceReport | null>(null)
     const [loading, setLoading] = useState(true)
     const [venueId, setVenueId] = useState<string>('')
-    const [dateRange, setDateRange] = useState<'today' | 'week' | 'month'>('today')
+    const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | 'custom'>('today')
+    const [customFrom, setCustomFrom] = useState<Date | null>(new Date())
+    const [customTo, setCustomTo] = useState<Date | null>(new Date())
 
     useEffect(() => {
         async function load() {
@@ -29,6 +35,8 @@ export default function AdminDashboard() {
 
     useEffect(() => {
         if (!venueId) return
+        if (dateRange === 'custom' && (!customFrom || !customTo)) return
+
         setLoading(true)
 
         const getLocalDateString = (d: Date) => {
@@ -50,13 +58,16 @@ export default function AdminDashboard() {
             const d = new Date(today)
             d.setDate(d.getDate() - 29)
             dateFrom = getLocalDateString(d)
+        } else if (dateRange === 'custom' && customFrom && customTo) {
+            dateFrom = getLocalDateString(customFrom)
+            dateTo = getLocalDateString(customTo)
         }
 
         adminApi.getCompliance({ venue_id: venueId, date_from: dateFrom, date_to: dateTo })
             .then(setReport)
             .catch(console.error)
             .finally(() => setLoading(false))
-    }, [venueId, dateRange])
+    }, [venueId, dateRange, customFrom, customTo])
 
     const complianceColor = (pct: number) => {
         if (pct >= 90) return 'text-success'
@@ -79,17 +90,39 @@ export default function AdminDashboard() {
                 </select>
 
                 <div className="flex bg-surface-raised rounded-xl border border-border overflow-hidden">
-                    {(['today', 'week', 'month'] as const).map((r) => (
+                    {(['today', 'week', 'month', 'custom'] as const).map((r) => (
                         <button
                             key={r}
                             onClick={() => setDateRange(r)}
                             className={`px-4 py-2 text-xs font-medium transition-colors capitalize
                                 ${dateRange === r ? 'bg-primary text-text-inverse' : 'text-text-secondary hover:text-text-primary'}`}
                         >
-                            {r === 'today' ? 'Today' : r === 'week' ? '7 Days' : '30 Days'}
+                            {r === 'today' ? 'Today' : r === 'week' ? '7 Days' : r === 'month' ? '30 Days' : 'Custom'}
                         </button>
                     ))}
                 </div>
+
+                {dateRange === 'custom' && (
+                    <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2 duration-300">
+                        <DatePicker
+                            selected={customFrom}
+                            onChange={(date) => setCustomFrom(date)}
+                            dateFormat="dd/MM/yyyy"
+                            className="bg-surface border border-border rounded-xl px-3 h-10 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none w-[120px] cursor-pointer"
+                            locale={es}
+                            placeholderText="DD/MM/YYYY"
+                        />
+                        <span className="text-text-secondary text-sm font-medium">to</span>
+                        <DatePicker
+                            selected={customTo}
+                            onChange={(date) => setCustomTo(date)}
+                            dateFormat="dd/MM/yyyy"
+                            className="bg-surface border border-border rounded-xl px-3 h-10 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none w-[120px] cursor-pointer"
+                            locale={es}
+                            placeholderText="DD/MM/YYYY"
+                        />
+                    </div>
+                )}
             </div>
 
             {loading && (
