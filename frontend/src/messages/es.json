@@ -90,5 +90,20 @@
     "photoRemove": "Quitar foto",
     "photoTapToTake": "Toca para tomar foto",
     "selectOption": "Selecciona una opción..."
+  },
+  "settings": {
+    "title": "Configuración",
+    "appearance": "Apariencia",
+    "darkMode": "Modo Oscuro",
+    "lightMode": "Modo Claro",
+    "language": "Idioma",
+    "info": "Información",
+    "organization": "Organización",
+    "venue": "Local",
+    "logout": "Cerrar Sesión",
+    "system": "Sistema",
+    "version": "Versión",
+    "user": "Usuario",
+    "role": "Rol"
   }
 }

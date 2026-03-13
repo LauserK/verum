@@ -81,14 +81,29 @@
     "error": "Error"
   },
   "questions": {
-    "textPlaceholder": "Enter your response...",
+    "textPlaceholder": "Enter your answer...",
     "yes": "Yes",
     "no": "No",
-    "photoUploadError": "Failed to upload photo. Try again.",
+    "photoUploadError": "Error uploading photo. Try again.",
     "photoUploading": "Uploading photo...",
     "photoCaptured": "Photo captured",
     "photoRemove": "Remove photo",
     "photoTapToTake": "Tap to take photo",
     "selectOption": "Select an option..."
+  },
+  "settings": {
+    "title": "Settings",
+    "appearance": "Appearance",
+    "darkMode": "Dark Mode",
+    "lightMode": "Light Mode",
+    "language": "Language",
+    "info": "Information",
+    "organization": "Organization",
+    "venue": "Venue",
+    "logout": "Log Out",
+    "system": "System",
+    "version": "Version",
+    "user": "User",
+    "role": "Role"
   }
-}
+  }
