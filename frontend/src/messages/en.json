@@ -59,7 +59,10 @@
     "tasksTotal": "{total} tasks",
     "availableFrom": "Available from {time}",
     "prereqRequiredTime": "Prereq required & starts at {time}",
-    "prereqRequired": "Complete prerequisite first"
+    "prereqRequired": "Complete prerequisite first",
+    "dueTime": "Due time: {time}",
+    "dueDate": "Due: {date}",
+    "dueDateTime": "Due: {date} at {time}"
   },
   "saveIndicator": {
     "saving": "Saving...",

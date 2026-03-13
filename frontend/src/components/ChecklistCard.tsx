@@ -9,6 +9,11 @@ interface Props {
     onClick?: () => void
 }
 
+function formatDueDate(isoDate: string): string {
+    const d = new Date(isoDate + 'T00:00:00')
+    return d.toLocaleDateString(undefined, { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
 export default function ChecklistCard({ checklist, onClick }: Props) {
     const { t } = useTranslations('checklistCard')
 
@@ -49,6 +54,18 @@ export default function ChecklistCard({ checklist, onClick }: Props) {
     const progress = checklist.total_questions > 0
         ? (checklist.answered_questions / checklist.total_questions) * 100
         : 0
+
+    const dueLabel =
+        checklist.due_date && checklist.due_time
+            ? t('dueDateTime', {
+                date: formatDueDate(checklist.due_date),
+                time: (checklist.due_time || '').slice(0, 5),
+            })
+            : checklist.due_time
+                ? t('dueTime', { time: checklist.due_time.slice(0, 5) })
+                : checklist.due_date
+                    ? t('dueDate', { date: formatDueDate(checklist.due_date) })
+                    : null
 
     return (
         <button
@@ -93,9 +110,17 @@ export default function ChecklistCard({ checklist, onClick }: Props) {
                         <span className="text-xs text-text-secondary">
                             {t('tasks', { answered: checklist.answered_questions, total: checklist.total_questions })}
                         </span>
-                        <span className="text-xs font-semibold text-primary font-mono">
-                            {Math.round(progress)}%
-                        </span>
+                        <div className="flex items-center gap-2">
+                            {dueLabel && (
+                                <span className="text-xs text-text-secondary flex items-center gap-1">
+                                    <Clock className="w-3 h-3 shrink-0" />
+                                    {dueLabel}
+                                </span>
+                            )}
+                            <span className="text-xs font-semibold text-primary font-mono">
+                                {Math.round(progress)}%
+                            </span>
+                        </div>
                     </div>
                     <div className="w-full h-1.5 bg-surface-raised rounded-full overflow-hidden">
                         <div
@@ -108,31 +133,45 @@ export default function ChecklistCard({ checklist, onClick }: Props) {
 
             {/* Tasks counter (for pending/completed) */}
             {(checklist.status === 'pending' || checklist.status === 'completed') && checklist.total_questions > 0 && (
-                <div className="mt-3">
+                <div className="mt-3 flex justify-between items-center">
                     <span className="text-xs text-text-secondary">
                         {checklist.status === 'completed'
                             ? t('tasks', { answered: checklist.total_questions, total: checklist.total_questions })
                             : t('tasksTotal', { total: checklist.total_questions })
                         }
                     </span>
+                    {dueLabel && checklist.status !== 'completed' && (
+                        <span className="text-xs text-text-secondary flex items-center gap-1">
+                            <Clock className="w-3 h-3 shrink-0" />
+                            {dueLabel}
+                        </span>
+                    )}
                 </div>
             )}
 
             {/* Lock message */}
             {checklist.status === 'locked' && (
-                <div className="mt-3 flex items-center gap-1.5">
-                    <Lock className="w-3.5 h-3.5 text-locked" />
-                    <span className="text-xs text-locked">
-                        {(() => {
-                            if (checklist.available_from_time && !checklist.prerequisite_template_id) {
-                                return t('availableFrom', { time: checklist.available_from_time.slice(0, 5) })
-                            }
-                            if (checklist.available_from_time && checklist.prerequisite_template_id) {
-                                return t('prereqRequiredTime', { time: checklist.available_from_time.slice(0, 5) })
-                            }
-                            return t('prereqRequired')
-                        })()}
-                    </span>
+                <div className="mt-3 flex justify-between items-center gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                        <Lock className="w-3.5 h-3.5 text-locked shrink-0" />
+                        <span className="text-xs text-locked">
+                            {(() => {
+                                if (checklist.available_from_time && !checklist.prerequisite_template_id) {
+                                    return t('availableFrom', { time: checklist.available_from_time.slice(0, 5) })
+                                }
+                                if (checklist.available_from_time && checklist.prerequisite_template_id) {
+                                    return t('prereqRequiredTime', { time: checklist.available_from_time.slice(0, 5) })
+                                }
+                                return t('prereqRequired')
+                            })()}
+                        </span>
+                    </div>
+                    {dueLabel && (
+                        <span className="text-xs text-text-secondary flex items-center gap-1 shrink-0">
+                            <Clock className="w-3 h-3" />
+                            {dueLabel}
+                        </span>
+                    )}
                 </div>
             )}
         </button>

@@ -59,7 +59,10 @@
     "tasksTotal": "{total} tareas",
     "availableFrom": "Disponible desde {time}",
     "prereqRequiredTime": "Prerreq. y comienza a las {time}",
-    "prereqRequired": "Completa el prerrequisito primero"
+    "prereqRequired": "Completa el prerrequisito primero",
+    "dueTime": "Hora límite: {time}",
+    "dueDate": "Vence: {date}",
+    "dueDateTime": "Vence: {date} a las {time}"
   },
   "saveIndicator": {
     "saving": "Guardando...",
