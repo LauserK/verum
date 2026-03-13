@@ -86,7 +86,7 @@ export default function SubmissionsPage() {
                         <div
                             key={s.id}
                             className="bg-surface border border-border rounded-2xl p-4 flex items-center justify-between gap-4 hover:border-border-strong transition-colors cursor-pointer"
-                            onClick={() => router.push(`/checklist/${s.template_id}?venue=${s.venue_id}&submission_id=${s.id}`)}
+                            onClick={() => router.push(`/checklist/${s.template_id}?venue=${s.venue_id}&submission_id=${s.id}&from=admin`)}
                         >
                             <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-2">

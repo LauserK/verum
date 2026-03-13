@@ -330,6 +330,95 @@ async def get_checklists(venue_id: str, user=Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ── Staff History ────────────────────────────────────────
+
+class HistoryItem(BaseModel):
+    id: str
+    template_title: str
+    shift: str
+    completed_at: str
+    total_questions: int
+    venue_name: Optional[str] = None
+    started_at: Optional[str] = None
+
+
+@app.get("/submissions/history", response_model=list[HistoryItem])
+async def get_submission_history(user=Depends(get_current_user)):
+    """
+    Returns the current user's completed submissions, ordered by most recent.
+    Only shows submissions belonging to the authenticated user.
+    """
+    try:
+        # Get completed submissions for this user only
+        subs_res = (
+            supabase.table("submissions")
+            .select("id, template_id, venue_id, shift, status, started_at, completed_at")
+            .eq("user_id", user.id)
+            .eq("status", "completed")
+            .order("completed_at", desc=True)
+            .limit(50)
+            .execute()
+        )
+        submissions = subs_res.data or []
+
+        if not submissions:
+            return []
+
+        # Collect unique template_ids and venue_ids
+        template_ids = list(set(s["template_id"] for s in submissions))
+        venue_ids = list(set(s["venue_id"] for s in submissions if s.get("venue_id")))
+
+        # Fetch template titles
+        tmpl_res = (
+            supabase.table("checklist_templates")
+            .select("id, title")
+            .in_("id", template_ids)
+            .execute()
+        )
+        tmpl_map = {t["id"]: t["title"] for t in (tmpl_res.data or [])}
+
+        # Fetch question counts per template
+        q_res = (
+            supabase.table("questions")
+            .select("id, template_id")
+            .in_("template_id", template_ids)
+            .execute()
+        )
+        q_counts: dict[str, int] = {}
+        for q in (q_res.data or []):
+            tid = q["template_id"]
+            q_counts[tid] = q_counts.get(tid, 0) + 1
+
+        # Fetch venue names
+        venue_map: dict[str, str] = {}
+        if venue_ids:
+            v_res = (
+                supabase.table("venues")
+                .select("id, name")
+                .in_("id", venue_ids)
+                .execute()
+            )
+            venue_map = {v["id"]: v["name"] for v in (v_res.data or [])}
+
+        # Build result
+        result = []
+        for s in submissions:
+            result.append({
+                "id": s["id"],
+                "template_title": tmpl_map.get(s["template_id"], "Untitled"),
+                "shift": s["shift"],
+                "completed_at": s.get("completed_at", s.get("created_at", "")),
+                "total_questions": q_counts.get(s["template_id"], 0),
+                "venue_name": venue_map.get(s.get("venue_id", ""), None),
+                "started_at": s.get("started_at"),
+            })
+
+        return result
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/submissions")
 async def create_submission(body: CreateSubmissionRequest, user=Depends(get_current_user)):
     """
@@ -544,6 +633,7 @@ async def bulk_save_answers(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 
 # ── Admin Helpers ────────────────────────────────────────

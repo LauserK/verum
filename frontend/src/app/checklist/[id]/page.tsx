@@ -69,7 +69,13 @@ export default function ChecklistPage() {
     const templateId = params.id as string
     const venueId = searchParams.get('venue') || ''
     const submissionIdParam = searchParams.get('submission_id') || ''
-    const backPath = submissionIdParam ? '/admin/submissions' : '/dashboard'
+    const fromParam = searchParams.get('from')
+
+    let backPath = '/dashboard'
+    if (fromParam === 'history') backPath = '/history'
+    else if (fromParam === 'admin') backPath = '/admin/submissions'
+    else if (fromParam === 'dashboard') backPath = '/dashboard'
+    else if (submissionIdParam) backPath = '/admin/submissions'
 
     const [submission, setSubmission] = useState<SubmissionDetail | null>(null)
     const [answers, setAnswers] = useState<Record<string, string>>({})

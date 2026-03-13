@@ -20,6 +20,17 @@
     "reports": "Reports",
     "settings": "Settings"
   },
+  "history": {
+    "title": "History",
+    "subtitle": "Completed Audits",
+    "totalCount": "{count} audits",
+    "completed": "COMPLETED",
+    "noHistoryTitle": "No completed audits yet",
+    "noHistoryDesc": "Your completed checklists will appear here.",
+    "morningShift": "Morning",
+    "midShift": "Mid",
+    "closingShift": "Closing"
+  },
   "dashboard": {
     "hello": "Hello, {name}",
     "staff": "Staff",

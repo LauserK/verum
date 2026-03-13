@@ -105,6 +105,23 @@ export function getSubmission(submissionId: string): Promise<SubmissionDetail> {
     return fetchWithAuth(`/submissions/${submissionId}`)
 }
 
+
+// ── Staff History ───────────────────────────────────
+
+export interface HistoryItem {
+    id: string
+    template_title: string
+    shift: string
+    completed_at: string
+    total_questions: number
+    venue_name: string | null
+    started_at: string | null
+}
+
+export function getHistory(): Promise<HistoryItem[]> {
+    return fetchWithAuth('/submissions/history')
+}
+
 export function submitAudit(
     submissionId: string,
     data: {

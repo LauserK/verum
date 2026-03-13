@@ -20,6 +20,17 @@
     "reports": "Reportes",
     "settings": "Ajustes"
   },
+  "history": {
+    "title": "Historial",
+    "subtitle": "Auditorías Completadas",
+    "totalCount": "{count} auditorías",
+    "completed": "COMPLETA",
+    "noHistoryTitle": "Sin auditorías completadas",
+    "noHistoryDesc": "Tus checklists completados aparecerán aquí.",
+    "morningShift": "Mañana",
+    "midShift": "Tarde",
+    "closingShift": "Cierre"
+  },
   "dashboard": {
     "hello": "Hola, {name}",
     "staff": "Equipo",

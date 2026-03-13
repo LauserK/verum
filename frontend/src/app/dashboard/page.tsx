@@ -197,7 +197,7 @@ export default function DashboardPage() {
                                 checklist={checklist}
                                 onClick={() => {
                                     const venueId = profile?.venues?.[0]?.id || ''
-                                    router.push(`/checklist/${checklist.id}?venue=${venueId}`)
+                                    router.push(`/checklist/${checklist.id}?venue=${venueId}&from=dashboard`)
                                 }}
                             />
                         ))}

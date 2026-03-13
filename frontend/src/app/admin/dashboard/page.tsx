@@ -106,7 +106,7 @@ export default function AdminDashboard() {
                     <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2 duration-300">
                         <DatePicker
                             selected={customFrom}
-                            onChange={(date) => setCustomFrom(date)}
+                            onChange={(date: Date | null) => setCustomFrom(date)}
                             dateFormat="dd/MM/yyyy"
                             className="bg-surface border border-border rounded-xl px-3 h-10 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none w-[120px] cursor-pointer"
                             locale={es}
@@ -115,7 +115,7 @@ export default function AdminDashboard() {
                         <span className="text-text-secondary text-sm font-medium">to</span>
                         <DatePicker
                             selected={customTo}
-                            onChange={(date) => setCustomTo(date)}
+                            onChange={(date: Date | null) => setCustomTo(date)}
                             dateFormat="dd/MM/yyyy"
                             className="bg-surface border border-border rounded-xl px-3 h-10 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none w-[120px] cursor-pointer"
                             locale={es}
