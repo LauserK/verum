@@ -143,10 +143,6 @@ export default function AssetsPage() {
         setNewSerial('')
         setNewBrand('')
         setNewModel('')
-        // Prompt user to print immediately
-        if (confirm(t('qrPrompt'))) {
-          handlePrint(data as Asset)
-        }
       }
     } catch (err: unknown) {
       if (err instanceof Error) {
