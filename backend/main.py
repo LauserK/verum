@@ -1937,3 +1937,177 @@ async def close_ticket(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Inventory: Utensil Movements & Counts Models (M11) ────
+
+class UtensilMovementRequest(BaseModel):
+    utensil_id: str
+    from_venue_id: Optional[str] = None
+    to_venue_id: Optional[str] = None
+    quantity: int
+    type: str  # entry, exit, transfer, adjustment
+    notes: Optional[str] = None
+
+
+class UtensilCountItemSchema(BaseModel):
+    utensil_id: str
+    count: int
+
+
+class CreateUtensilCountRequest(BaseModel):
+    venue_id: str
+    items: list[UtensilCountItemSchema]
+
+
+class ConfirmCountItemSchema(BaseModel):
+    utensil_id: str
+    confirmed_count: int
+
+
+class ConfirmCountRequest(BaseModel):
+    items: list[ConfirmCountItemSchema]
+
+
+# ── Inventory: Utensil Movements & Counts Endpoints (M11) ──
+
+@app.post("/utensil-movements")
+async def record_utensil_movement(
+    body: UtensilMovementRequest,
+    current_user=Depends(get_current_user),
+    db=Depends(get_db),
+    _=Depends(require_permission("inventory_utensils.manage_items")),
+):
+    """
+    Records an inventory movement (entry, exit, transfer).
+    """
+    try:
+        # Get org_id from utensil
+        ut_res = db.table("utensils").select("org_id").eq("id", body.utensil_id).single().execute()
+        if not ut_res.data:
+            raise HTTPException(404, "Utensil not found")
+        org_id = ut_res.data["org_id"]
+
+        movement_data = {
+            "org_id": org_id,
+            "utensil_id": body.utensil_id,
+            "from_venue_id": body.from_venue_id,
+            "to_venue_id": body.to_venue_id,
+            "quantity": body.quantity,
+            "type": body.type,
+            "created_by": current_user.id,
+            "notes": body.notes,
+        }
+        res = db.table("utensil_movements").insert(movement_data).execute()
+        return res.data[0]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/utensil-counts")
+async def create_utensil_count(
+    body: CreateUtensilCountRequest,
+    current_user=Depends(get_current_user),
+    db=Depends(get_db),
+    _=Depends(require_permission("inventory_utensils.count")),
+):
+    """
+    Staff submits a physical count for a venue.
+    """
+    try:
+        # 1. Create count header
+        count_data = {
+            "venue_id": body.venue_id,
+            "created_by": current_user.id,
+            "status": "pending",
+        }
+        count_res = db.table("utensil_counts").insert(count_data).execute()
+        count_id = count_res.data[0]["id"]
+
+        # 2. Create count items
+        items_data = [
+            {
+                "count_id": count_id,
+                "utensil_id": item.utensil_id,
+                "initial_count": item.count,
+            }
+            for item in body.items
+        ]
+        db.table("utensil_count_items").insert(items_data).execute()
+
+        return {"id": count_id, "status": "pending"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/utensil-counts")
+async def list_utensil_counts(
+    venue_id: Optional[str] = None,
+    status: Optional[str] = None,
+    db=Depends(get_db),
+    _=Depends(require_permission("inventory_utensils.view")),
+):
+    """
+    Lists utensil counts with optional filters.
+    """
+    query = db.table("utensil_counts").select("*, profiles!utensil_counts_created_by_fkey(full_name)")
+    if venue_id:
+        query = query.eq("venue_id", venue_id)
+    if status:
+        query = query.eq("status", status)
+    
+    res = query.order("created_at", desc=True).execute()
+    return res.data
+
+
+@app.get("/utensil-counts/{count_id}")
+async def get_utensil_count_detail(
+    count_id: str,
+    db=Depends(get_db),
+    _=Depends(require_permission("inventory_utensils.view")),
+):
+    """
+    Returns full detail of a specific count.
+    """
+    # Header
+    count_res = db.table("utensil_counts").select("*, profiles!utensil_counts_created_by_fkey(full_name), venues(name)").eq("id", count_id).single().execute()
+    if not count_res.data:
+        raise HTTPException(404, "Count not found")
+    
+    # Items
+    items_res = db.table("utensil_count_items").select("*, utensils(name, unit)").eq("count_id", count_id).execute()
+    
+    result = count_res.data
+    result["items"] = items_res.data
+    return result
+
+
+@app.patch("/utensil-counts/{count_id}/confirm")
+async def confirm_utensil_count(
+    count_id: str,
+    body: ConfirmCountRequest,
+    current_user=Depends(get_current_user),
+    db=Depends(get_db),
+    _=Depends(require_permission("inventory_utensils.confirm_count")),
+):
+    """
+    Supervisor confirms/adjusts a count.
+    """
+    try:
+        # 1. Update items with confirmed quantities
+        for item in body.items:
+            db.table("utensil_count_items").update({
+                "confirmed_count": item.confirmed_count
+            }).eq("count_id", count_id).eq("utensil_id", item.utensil_id).execute()
+
+        # 2. Update header status
+        now_iso = datetime.now(timezone.utc).isoformat()
+        db.table("utensil_counts").update({
+            "status": "confirmed",
+            "confirmed_at": now_iso,
+            "confirmed_by": current_user.id
+        }).eq("id", count_id).execute()
+
+        return {"ok": True, "confirmed_at": now_iso}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
