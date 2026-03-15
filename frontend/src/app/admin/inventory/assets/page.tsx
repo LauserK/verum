@@ -7,6 +7,7 @@ import { Plus, QrCode, Edit3, Save, X, Loader2 } from 'lucide-react'
 import { useReactToPrint } from 'react-to-print'
 import { QRCodePrint } from '@/components/inventory/QRCodePrint'
 import { v4 as uuidv4 } from 'uuid'
+import Link from 'next/link'
 
 interface Asset {
   id: string
@@ -158,8 +159,16 @@ export default function AssetsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-text-primary">Activos Fijos</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-text-primary">Activos Fijos</h1>
+          <div className="flex items-center gap-6 mt-2">
+            <span className="text-sm font-semibold text-primary border-b-2 border-primary pb-1">Lista de Activos</span>
+            <Link href="/admin/inventory/categories" className="text-sm font-medium text-text-secondary hover:text-text-primary pb-1 border-b-2 border-transparent hover:border-border transition-colors">
+              Categorías
+            </Link>
+          </div>
+        </div>
         <button 
           onClick={() => setShowCreate(!showCreate)}
           className="flex items-center gap-2 bg-primary text-text-inverse px-4 h-10 rounded-xl text-sm font-medium hover:bg-primary-hover transition-colors"

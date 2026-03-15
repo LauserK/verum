@@ -4,6 +4,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import { Plus, Edit3, Save, X, Loader2 } from 'lucide-react'
+import Link from 'next/link'
 
 interface Category {
   id: string
@@ -91,10 +92,15 @@ export default function CategoriesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-text-primary">Categorías de Activos</h1>
-          <p className="text-sm text-text-secondary mt-1">Configura los tipos de equipos y sus intervalos de revisión.</p>
+          <h1 className="text-2xl font-bold text-text-primary mb-1">Categorías de Activos</h1>
+          <div className="flex items-center gap-6 mt-2">
+            <Link href="/admin/inventory/assets" className="text-sm font-medium text-text-secondary hover:text-text-primary pb-1 border-b-2 border-transparent hover:border-border transition-colors">
+              Lista de Activos
+            </Link>
+            <span className="text-sm font-semibold text-primary border-b-2 border-primary pb-1">Categorías</span>
+          </div>
         </div>
         <button 
           onClick={() => setShowCreate(!showCreate)}
