@@ -26,6 +26,67 @@
     "history": "Historial",
     "reports": "Reportes"
   },
+  "inventory": {
+    "assets": {
+      "title": "Activos Fijos",
+      "listTab": "Lista de Activos",
+      "categoriesTab": "Categorías",
+      "newAsset": "Nuevo Activo",
+      "cancel": "Cancelar",
+      "createTitle": "Registrar Nuevo Activo",
+      "nameLabel": "Nombre *",
+      "namePlaceholder": "Ej. Nevera Principal",
+      "categoryLabel": "Categoría *",
+      "selectCategory": "Seleccionar categoría",
+      "venueLabel": "Sede *",
+      "selectVenue": "Seleccionar sede",
+      "serialLabel": "Número de Serial (Opcional)",
+      "serialPlaceholder": "SN-123456789",
+      "brandLabel": "Marca (Opcional)",
+      "brandPlaceholder": "Ej. Samsung",
+      "modelLabel": "Modelo (Opcional)",
+      "modelPlaceholder": "Ej. RF28R7201",
+      "saving": "Guardando...",
+      "saveAndQR": "Guardar y Generar QR",
+      "noAssetsTitle": "Sin activos registrados",
+      "noAssetsDesc": "Comienza registrando tus equipos y maquinarias para generarles un código QR.",
+      "createFirst": "Registrar mi primer activo",
+      "table": {
+        "name": "Nombre",
+        "category": "Categoría",
+        "status": "Estado",
+        "actions": "Acciones"
+      },
+      "status": {
+        "operativo": "Operativo",
+        "en_reparacion": "En reparación",
+        "baja": "Baja"
+      },
+      "qrPrompt": "Activo guardado exitosamente. ¿Deseas imprimir el código QR ahora?",
+      "errors": {
+        "required": "Nombre, categoría y sede son obligatorios.",
+        "generic": "Error al guardar el activo"
+      }
+    },
+    "categories": {
+      "title": "Categorías de Activos",
+      "subtitle": "Configura los tipos de equipos y sus intervalos de revisión.",
+      "newCategory": "Nueva Categoría",
+      "createTitle": "Crear Categoría",
+      "nameLabel": "Nombre de la Categoría *",
+      "namePlaceholder": "Ej. Equipos de Cocción",
+      "intervalLabel": "Días entre Revisiones *",
+      "intervalHint": "Cada cuántos días se pedirá mantenimiento preventivo.",
+      "saving": "Guardando...",
+      "create": "Crear Categoría",
+      "noCategories": "No hay categorías registradas.",
+      "reviewEvery": "Revisión cada {days} días",
+      "errors": {
+        "required": "El nombre de la categoría es obligatorio.",
+        "generic": "Error al crear la categoría"
+      }
+    }
+  },
   "history": {
     "title": "Historial",
     "subtitle": "Auditorías Completadas",

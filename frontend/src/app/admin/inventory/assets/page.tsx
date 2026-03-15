@@ -8,6 +8,7 @@ import { useReactToPrint } from 'react-to-print'
 import { QRCodePrint } from '@/components/inventory/QRCodePrint'
 import { v4 as uuidv4 } from 'uuid'
 import Link from 'next/link'
+import { useTranslations } from '@/components/I18nProvider'
 
 interface Asset {
   id: string
@@ -31,6 +32,7 @@ interface Venue {
 }
 
 export default function AssetsPage() {
+  const { t } = useTranslations('inventory.assets')
   const [assets, setAssets] = useState<Asset[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [venues, setVenues] = useState<Venue[]>([])
@@ -111,7 +113,7 @@ export default function AssetsPage() {
   const handleCreate = async () => {
     setError('')
     if (!newName || !newCategoryId || !newVenueId) {
-      setError('Nombre, categoría y sede son obligatorios.')
+      setError(t('errors.required'))
       return
     }
 
@@ -142,7 +144,7 @@ export default function AssetsPage() {
         setNewBrand('')
         setNewModel('')
         // Prompt user to print immediately
-        if (confirm('Activo guardado exitosamente. ¿Deseas imprimir el código QR ahora?')) {
+        if (confirm(t('qrPrompt'))) {
           handlePrint(data as Asset)
         }
       }
@@ -150,7 +152,7 @@ export default function AssetsPage() {
       if (err instanceof Error) {
         setError(err.message)
       } else {
-        setError('Error al guardar el activo')
+        setError(t('errors.generic'))
       }
     } finally {
       setSaving(false)
@@ -161,11 +163,11 @@ export default function AssetsPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-text-primary">Activos Fijos</h1>
+          <h1 className="text-2xl font-bold text-text-primary mb-1">{t('title')}</h1>
           <div className="flex items-center gap-6 mt-2">
-            <span className="text-sm font-semibold text-primary border-b-2 border-primary pb-1">Lista de Activos</span>
+            <span className="text-sm font-semibold text-primary border-b-2 border-primary pb-1">{t('listTab')}</span>
             <Link href="/admin/inventory/categories" className="text-sm font-medium text-text-secondary hover:text-text-primary pb-1 border-b-2 border-transparent hover:border-border transition-colors">
-              Categorías
+              {t('categoriesTab')}
             </Link>
           </div>
         </div>
@@ -174,14 +176,14 @@ export default function AssetsPage() {
           className="flex items-center gap-2 bg-primary text-text-inverse px-4 h-10 rounded-xl text-sm font-medium hover:bg-primary-hover transition-colors"
         >
           {showCreate ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-          {showCreate ? 'Cancelar' : 'Nuevo Activo'}
+          {showCreate ? t('cancel') : t('newAsset')}
         </button>
       </div>
 
       {/* Formulario Crear Activo */}
       {showCreate && (
         <div className="bg-surface border border-primary/30 rounded-2xl p-6 space-y-4 shadow-sm animate-in fade-in slide-in-from-top-4">
-          <h2 className="text-lg font-bold text-text-primary">Registrar Nuevo Activo</h2>
+          <h2 className="text-lg font-bold text-text-primary">{t('createTitle')}</h2>
           
           {error && (
             <div className="p-3 bg-error-light text-error text-sm rounded-xl border border-error/20">
@@ -191,62 +193,62 @@ export default function AssetsPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="text-sm font-semibold text-text-secondary">Nombre *</label>
+              <label className="text-sm font-semibold text-text-secondary">{t('nameLabel')}</label>
               <input 
-                placeholder="Ej. Nevera Principal"
+                placeholder={t('namePlaceholder')}
                 value={newName}
                 onChange={e => setNewName(e.target.value)}
                 className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-semibold text-text-secondary">Categoría *</label>
+              <label className="text-sm font-semibold text-text-secondary">{t('categoryLabel')}</label>
               <select 
                 value={newCategoryId}
                 onChange={e => setNewCategoryId(e.target.value)}
                 className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all appearance-none"
               >
-                <option value="">Seleccionar categoría</option>
+                <option value="">{t('selectCategory')}</option>
                 {categories.map(c => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-semibold text-text-secondary">Sede *</label>
+              <label className="text-sm font-semibold text-text-secondary">{t('venueLabel')}</label>
               <select 
                 value={newVenueId}
                 onChange={e => setNewVenueId(e.target.value)}
                 className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all appearance-none"
               >
-                <option value="">Seleccionar sede</option>
+                <option value="">{t('selectVenue')}</option>
                 {venues.map(v => (
                   <option key={v.id} value={v.id}>{v.name}</option>
                 ))}
               </select>
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-semibold text-text-secondary">Número de Serial (Opcional)</label>
+              <label className="text-sm font-semibold text-text-secondary">{t('serialLabel')}</label>
               <input 
-                placeholder="SN-123456789"
+                placeholder={t('serialPlaceholder')}
                 value={newSerial}
                 onChange={e => setNewSerial(e.target.value)}
                 className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-semibold text-text-secondary">Marca (Opcional)</label>
+              <label className="text-sm font-semibold text-text-secondary">{t('brandLabel')}</label>
               <input 
-                placeholder="Ej. Samsung"
+                placeholder={t('brandPlaceholder')}
                 value={newBrand}
                 onChange={e => setNewBrand(e.target.value)}
                 className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-semibold text-text-secondary">Modelo (Opcional)</label>
+              <label className="text-sm font-semibold text-text-secondary">{t('modelLabel')}</label>
               <input 
-                placeholder="Ej. RF28R7201"
+                placeholder={t('modelPlaceholder')}
                 value={newModel}
                 onChange={e => setNewModel(e.target.value)}
                 className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
@@ -261,7 +263,7 @@ export default function AssetsPage() {
               className="flex items-center gap-2 bg-primary text-text-inverse px-6 h-11 rounded-xl text-sm font-semibold hover:bg-primary-hover transition-colors disabled:opacity-50"
             >
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              {saving ? 'Guardando...' : 'Guardar y Generar QR'}
+              {saving ? t('saving') : t('saveAndQR')}
             </button>
           </div>
         </div>
@@ -276,13 +278,13 @@ export default function AssetsPage() {
       ) : assets.length === 0 ? (
         <div className="text-center py-16 bg-surface border border-border rounded-2xl">
           <QrCode className="w-12 h-12 text-text-secondary mx-auto mb-4 opacity-50" />
-          <h3 className="text-lg font-bold text-text-primary mb-1">Sin activos registrados</h3>
-          <p className="text-sm text-text-secondary max-w-sm mx-auto mb-6">Comienza registrando tus equipos y maquinarias para generarles un código QR.</p>
+          <h3 className="text-lg font-bold text-text-primary mb-1">{t('noAssetsTitle')}</h3>
+          <p className="text-sm text-text-secondary max-w-sm mx-auto mb-6">{t('noAssetsDesc')}</p>
           <button 
             onClick={() => setShowCreate(true)}
             className="text-primary font-medium hover:underline"
           >
-            Registrar mi primer activo
+            {t('createFirst')}
           </button>
         </div>
       ) : (
@@ -290,10 +292,10 @@ export default function AssetsPage() {
           <table className="w-full text-left text-sm">
             <thead className="bg-surface-raised text-text-secondary font-semibold">
               <tr>
-                <th className="px-6 py-4">Nombre</th>
-                <th className="px-6 py-4">Categoría</th>
-                <th className="px-6 py-4">Estado</th>
-                <th className="px-6 py-4 text-right">Acciones</th>
+                <th className="px-6 py-4">{t('table.name')}</th>
+                <th className="px-6 py-4">{t('table.category')}</th>
+                <th className="px-6 py-4">{t('table.status')}</th>
+                <th className="px-6 py-4 text-right">{t('table.actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -308,7 +310,7 @@ export default function AssetsPage() {
                     <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider
                       ${asset.status === 'operativo' ? 'bg-success/10 text-success' : 
                         asset.status === 'baja' ? 'bg-error/10 text-error' : 'bg-warning/10 text-warning'}`}>
-                      {asset.status.replace('_', ' ')}
+                      {t(`status.${asset.status}` as any)}
                     </span>
                   </td>
                   <td className="px-6 py-4 flex justify-end gap-2">

@@ -26,6 +26,67 @@
     "history": "History",
     "reports": "Reports"
   },
+  "inventory": {
+    "assets": {
+      "title": "Fixed Assets",
+      "listTab": "Asset List",
+      "categoriesTab": "Categories",
+      "newAsset": "New Asset",
+      "cancel": "Cancel",
+      "createTitle": "Register New Asset",
+      "nameLabel": "Name *",
+      "namePlaceholder": "E.g. Main Refrigerator",
+      "categoryLabel": "Category *",
+      "selectCategory": "Select category",
+      "venueLabel": "Venue *",
+      "selectVenue": "Select venue",
+      "serialLabel": "Serial Number (Optional)",
+      "serialPlaceholder": "SN-123456789",
+      "brandLabel": "Brand (Optional)",
+      "brandPlaceholder": "E.g. Samsung",
+      "modelLabel": "Model (Optional)",
+      "modelPlaceholder": "E.g. RF28R7201",
+      "saving": "Saving...",
+      "saveAndQR": "Save and Generate QR",
+      "noAssetsTitle": "No assets registered",
+      "noAssetsDesc": "Start by registering your equipment and machinery to generate a QR code for them.",
+      "createFirst": "Register my first asset",
+      "table": {
+        "name": "Name",
+        "category": "Category",
+        "status": "Status",
+        "actions": "Actions"
+      },
+      "status": {
+        "operativo": "Operational",
+        "en_reparacion": "In repair",
+        "baja": "Discarded"
+      },
+      "qrPrompt": "Asset saved successfully. Would you like to print the QR code now?",
+      "errors": {
+        "required": "Name, category, and venue are required.",
+        "generic": "Error saving the asset"
+      }
+    },
+    "categories": {
+      "title": "Asset Categories",
+      "subtitle": "Configure equipment types and their review intervals.",
+      "newCategory": "New Category",
+      "createTitle": "Create Category",
+      "nameLabel": "Category Name *",
+      "namePlaceholder": "E.g. Cooking Equipment",
+      "intervalLabel": "Days between Reviews *",
+      "intervalHint": "How often preventive maintenance will be requested.",
+      "saving": "Saving...",
+      "create": "Create Category",
+      "noCategories": "No categories registered.",
+      "reviewEvery": "Review every {days} days",
+      "errors": {
+        "required": "Category name is required.",
+        "generic": "Error creating category"
+      }
+    }
+  },
   "history": {
     "title": "History",
     "subtitle": "Completed Audits",

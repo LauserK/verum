@@ -5,6 +5,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import { Plus, Edit3, Save, X, Loader2 } from 'lucide-react'
 import Link from 'next/link'
+import { useTranslations } from '@/components/I18nProvider'
 
 interface Category {
   id: string
@@ -14,6 +15,7 @@ interface Category {
 }
 
 export default function CategoriesPage() {
+  const { t } = useTranslations('inventory.categories')
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
@@ -56,7 +58,7 @@ export default function CategoriesPage() {
   const handleCreate = async () => {
     setError('')
     if (!newName) {
-      setError('El nombre de la categoría es obligatorio.')
+      setError(t('errors.required'))
       return
     }
 
@@ -83,7 +85,7 @@ export default function CategoriesPage() {
       if (err instanceof Error) {
         setError(err.message)
       } else {
-        setError('Error al crear la categoría')
+        setError(t('errors.generic'))
       }
     } finally {
       setSaving(false)
@@ -94,12 +96,12 @@ export default function CategoriesPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-text-primary mb-1">Categorías de Activos</h1>
+          <h1 className="text-2xl font-bold text-text-primary mb-1">{t('title')}</h1>
           <div className="flex items-center gap-6 mt-2">
             <Link href="/admin/inventory/assets" className="text-sm font-medium text-text-secondary hover:text-text-primary pb-1 border-b-2 border-transparent hover:border-border transition-colors">
-              Lista de Activos
+              {t('inventory.assets.listTab' as any)}
             </Link>
-            <span className="text-sm font-semibold text-primary border-b-2 border-primary pb-1">Categorías</span>
+            <span className="text-sm font-semibold text-primary border-b-2 border-primary pb-1">{t('inventory.assets.categoriesTab' as any)}</span>
           </div>
         </div>
         <button 
@@ -107,13 +109,13 @@ export default function CategoriesPage() {
           className="flex items-center gap-2 bg-primary text-text-inverse px-4 h-10 rounded-xl text-sm font-medium hover:bg-primary-hover transition-colors"
         >
           {showCreate ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-          {showCreate ? 'Cancelar' : 'Nueva Categoría'}
+          {showCreate ? t('inventory.assets.cancel' as any) : t('newCategory')}
         </button>
       </div>
 
       {showCreate && (
         <div className="bg-surface border border-primary/30 rounded-2xl p-6 space-y-4 shadow-sm animate-in fade-in slide-in-from-top-4">
-          <h2 className="text-lg font-bold text-text-primary">Crear Categoría</h2>
+          <h2 className="text-lg font-bold text-text-primary">{t('createTitle')}</h2>
           
           {error && (
             <div className="p-3 bg-error-light text-error text-sm rounded-xl border border-error/20">
@@ -123,16 +125,16 @@ export default function CategoriesPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="text-sm font-semibold text-text-secondary">Nombre de la Categoría *</label>
+              <label className="text-sm font-semibold text-text-secondary">{t('nameLabel')}</label>
               <input 
-                placeholder="Ej. Equipos de Cocción"
+                placeholder={t('namePlaceholder')}
                 value={newName}
                 onChange={e => setNewName(e.target.value)}
                 className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-semibold text-text-secondary">Días entre Revisiones *</label>
+              <label className="text-sm font-semibold text-text-secondary">{t('intervalLabel')}</label>
               <input 
                 type="number"
                 min="1"
@@ -141,7 +143,7 @@ export default function CategoriesPage() {
                 onChange={e => setNewInterval(e.target.value)}
                 className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
               />
-              <p className="text-xs text-text-secondary">Cada cuántos días se pedirá mantenimiento preventivo.</p>
+              <p className="text-xs text-text-secondary">{t('intervalHint')}</p>
             </div>
           </div>
           
@@ -152,7 +154,7 @@ export default function CategoriesPage() {
               className="flex items-center gap-2 bg-primary text-text-inverse px-6 h-11 rounded-xl text-sm font-semibold hover:bg-primary-hover transition-colors disabled:opacity-50"
             >
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              {saving ? 'Guardando...' : 'Crear Categoría'}
+              {saving ? t('saving') : t('create')}
             </button>
           </div>
         </div>
@@ -166,7 +168,7 @@ export default function CategoriesPage() {
         </div>
       ) : categories.length === 0 ? (
         <div className="text-center py-12 text-text-secondary">
-          No hay categorías registradas.
+          {t('noCategories')}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -180,7 +182,7 @@ export default function CategoriesPage() {
               </div>
               <div className="flex items-center gap-2">
                 <span className="bg-surface-raised text-text-secondary text-xs font-semibold px-2.5 py-1 rounded-lg">
-                  Revisión cada {cat.review_interval_days} días
+                  {t('reviewEvery', { days: cat.review_interval_days })}
                 </span>
               </div>
             </div>
