@@ -8,7 +8,7 @@ from typing import Optional, List
 
 CARACAS_TZ = pytz.timezone("America/Caracas")
 
-from database import supabase
+from database import supabase, get_db
 from config import settings
 
 app = FastAPI(title="VERUM API")
@@ -52,10 +52,6 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
-
-
-def get_db():
-    return supabase
 
 
 from permissions import resolve_permission
