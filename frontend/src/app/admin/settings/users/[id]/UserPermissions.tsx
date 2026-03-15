@@ -5,7 +5,7 @@ export function UserPermissions({ userId }: { userId: string }) {
   return (
     <div className="space-y-6">
       <div className="bg-surface border border-border p-4 rounded-xl">
-        <h2 className="font-semibold mb-4 text-text-primary">Rol Asignado</h2>
+        <h2 className="font-semibold mb-4 text-text-primary">Rol Asignado para {userId}</h2>
         <select className="bg-surface border border-border rounded-xl px-4 h-12 w-full text-text-primary focus:border-primary ring-2 ring-primary/20 outline-none">
           <option>Seleccionar rol...</option>
         </select>
