@@ -250,7 +250,7 @@ export default function AssetsPage() {
           <div className="relative bg-surface border border-border rounded-t-3xl sm:rounded-2xl w-full max-w-lg p-6 space-y-4 animate-in slide-in-from-bottom-4 max-h-[85vh] overflow-y-auto shadow-2xl">
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-xl font-bold text-text-primary">
-                {editingAsset ? 'Editar Activo' : t('inventory.assets.createTitle')}
+                {editingAsset ? t('inventory.assets.editTitle') : t('inventory.assets.createTitle')}
               </h2>
               <button onClick={() => { setShowCreate(false); resetForm(); }} className="p-2 text-text-secondary hover:bg-surface-raised rounded-full transition-colors">
                 <X className="w-5 h-5" />
@@ -348,7 +348,7 @@ export default function AssetsPage() {
                 className="flex-[2] flex items-center justify-center gap-2 bg-primary text-text-inverse px-6 h-12 rounded-xl text-sm font-bold hover:bg-primary-hover transition-colors disabled:opacity-50"
               >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                {saving ? t('inventory.assets.saving') : editingAsset ? 'Guardar Cambios' : t('inventory.assets.saveAndQR')}
+                {saving ? t('inventory.assets.saving') : editingAsset ? t('inventory.assets.save') : t('inventory.assets.saveAndQR')}
               </button>
             </div>
           </div>

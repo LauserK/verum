@@ -73,6 +73,17 @@
           "required": "El nombre de la categoría es obligatorio.",
           "generic": "Error al crear la categoría"
         }
+      },
+      "countFlow": {
+        "title": "Conteo de Utensilios",
+        "subtitle": "Ingresa las cantidades físicas actuales",
+        "instructions": "Asegúrate de contar todos los ítems disponibles en la sede.",
+        "submit": "Enviar Conteo",
+        "submitting": "Enviando...",
+        "success": "Conteo enviado exitosamente",
+        "error": "Error al enviar el conteo",
+        "empty": "No hay utensilios activos para contar.",
+        "confirmExit": "¿Estás seguro de que quieres salir? Se perderán los datos no enviados."
       }
     },
     "assets": {

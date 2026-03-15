@@ -157,7 +157,7 @@ export default function CategoriesPage() {
           <div className="relative bg-surface border border-border rounded-t-3xl sm:rounded-2xl w-full max-w-lg p-6 space-y-4 animate-in slide-in-from-bottom-4 shadow-2xl">
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-xl font-bold text-text-primary">
-                {editingCategory ? 'Editar Categoría' : t('inventory.categories.createTitle')}
+                {editingCategory ? t('inventory.categories.editTitle') : t('inventory.categories.createTitle')}
               </h2>
               <button onClick={() => { setShowCreate(false); resetForm(); }} className="p-2 text-text-secondary hover:bg-surface-raised rounded-full transition-colors">
                 <X className="w-5 h-5" />
@@ -207,7 +207,7 @@ export default function CategoriesPage() {
                 className="flex-[2] flex items-center justify-center gap-2 bg-primary text-text-inverse px-6 h-12 rounded-xl text-sm font-bold hover:bg-primary-hover transition-colors disabled:opacity-50"
               >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                {saving ? t('inventory.categories.saving') : editingCategory ? 'Guardar Cambios' : t('inventory.categories.create')}
+                {saving ? t('inventory.categories.saving') : editingCategory ? t('inventory.assets.save') : t('inventory.categories.create')}
               </button>
             </div>
           </div>

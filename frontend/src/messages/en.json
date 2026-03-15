@@ -73,6 +73,17 @@
           "required": "Category name is required.",
           "generic": "Error creating category"
         }
+      },
+      "countFlow": {
+        "title": "Utensil Counting",
+        "subtitle": "Enter current physical quantities",
+        "instructions": "Ensure you count all available items at the venue.",
+        "submit": "Submit Count",
+        "submitting": "Submitting...",
+        "success": "Count submitted successfully",
+        "error": "Error submitting count",
+        "empty": "No active utensils to count.",
+        "confirmExit": "Are you sure you want to exit? Unsubmitted data will be lost."
       }
     },
     "assets": {

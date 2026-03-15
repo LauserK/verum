@@ -2,8 +2,8 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { adminApi, getProfile, type Utensil, type UtensilCategory } from '@/lib/api'
-import { Plus, Edit3, Save, X, Loader2, Search, Filter } from 'lucide-react'
+import { adminApi, getProfile, type Utensil, type UtensilCategory, type VenueInfo } from '@/lib/api'
+import { Plus, Edit3, Save, X, Loader2, Search, Filter, ArrowRightLeft } from 'lucide-react'
 import Link from 'next/link'
 import { useTranslations } from '@/components/I18nProvider'
 
@@ -11,22 +11,37 @@ export default function UtensilsPage() {
   const { t } = useTranslations()
   const [utensils, setUtensils] = useState<Utensil[]>([])
   const [categories, setCategories] = useState<UtensilCategory[]>([])
+  const [venues, setVenues] = useState<VenueInfo[]>([])
   const [uniqueUnits, setUniqueUnits] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
+  
+  // Modals visibility
   const [showCreate, setShowCreate] = useState(false)
+  const [showMovement, setShowMovement] = useState(false)
+  
   const [editingUtensil, setEditingUtensil] = useState<Utensil | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  
+  // Search & Filters
   const [searchTerm, setSearchTerm] = useState('')
   const [showFilters, setShowFilters] = useState(false)
   const [categoryFilter, setCategoryFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
 
-  // Form State
+  // Create/Edit Form State
   const [newName, setNewName] = useState('')
   const [newCategoryId, setNewCategoryId] = useState('')
   const [newUnit, setNewUnit] = useState('')
   const [newMinStock, setNewMinStock] = useState('0')
+
+  // Movement Form State
+  const [moveUtensilId, setMoveUtensilId] = useState('')
+  const [moveType, setMoveType] = useState<'entry' | 'exit' | 'transfer' | 'adjustment'>('entry')
+  const [moveQty, setMoveQty] = useState('1')
+  const [moveFromVenue, setMoveFromVenue] = useState('')
+  const [moveToVenue, setMoveToVenue] = useState('')
+  const [moveNotes, setMoveNotes] = useState('')
 
   const resetForm = () => {
     setNewName('')
@@ -37,6 +52,16 @@ export default function UtensilsPage() {
     setError('')
   }
 
+  const resetMovementForm = () => {
+    setMoveUtensilId('')
+    setMoveType('entry')
+    setMoveQty('1')
+    setMoveFromVenue('')
+    setMoveToVenue('')
+    setMoveNotes('')
+    setError('')
+  }
+
   const startEdit = (item: Utensil) => {
     setEditingUtensil(item)
     setNewName(item.name)
@@ -44,6 +69,11 @@ export default function UtensilsPage() {
     setNewUnit(item.unit)
     setNewMinStock(item.min_stock.toString())
     setShowCreate(true)
+  }
+
+  const startMovement = (item?: Utensil) => {
+    if (item) setMoveUtensilId(item.id)
+    setShowMovement(true)
   }
 
   const fetchData = useCallback(async () => {
@@ -57,6 +87,7 @@ export default function UtensilsPage() {
         ])
         setUtensils(utRes)
         setCategories(catRes)
+        setVenues(profile.venues || [])
         
         // Extract unique units for suggestions
         const units = Array.from(new Set(utRes.map(u => u.unit))).filter(Boolean)
@@ -105,7 +136,6 @@ export default function UtensilsPage() {
         if (data) {
           setUtensils(prev => [data, ...prev].sort((a, b) => a.name.localeCompare(b.name)))
           
-          // Update unique units if a new one was added
           if (newUnit && !uniqueUnits.includes(newUnit)) {
             setUniqueUnits(prev => [...prev, newUnit].sort())
           }
@@ -119,6 +149,38 @@ export default function UtensilsPage() {
         setError(err.message)
       } else {
         setError(t('inventory.utensils.categories.errors.generic'))
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleRecordMovement = async () => {
+    setError('')
+    if (!moveUtensilId || !moveQty) {
+      setError('Utensilio y cantidad son obligatorios.')
+      return
+    }
+
+    setSaving(true)
+    try {
+      await adminApi.recordUtensilMovement({
+        utensil_id: moveUtensilId,
+        type: moveType,
+        quantity: parseInt(moveQty),
+        from_venue_id: moveFromVenue || undefined,
+        to_venue_id: moveToVenue || undefined,
+        notes: moveNotes || undefined
+      })
+
+      setShowMovement(false)
+      resetMovementForm()
+      alert('Movimiento registrado exitosamente')
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message)
+      } else {
+        setError('Error al registrar movimiento')
       }
     } finally {
       setSaving(false)
@@ -153,25 +215,37 @@ export default function UtensilsPage() {
             <Link href="/admin/inventory/utensils/categories" className="text-sm font-medium text-text-secondary hover:text-text-primary pb-1 border-b-2 border-transparent hover:border-border transition-colors">
               {t('inventory.utensils.categoriesTab')}
             </Link>
+            <Link href="/admin/inventory/utensils/counts" className="text-sm font-medium text-text-secondary hover:text-text-primary pb-1 border-b-2 border-transparent hover:border-border transition-colors">
+              Historial
+            </Link>
           </div>
         </div>
-        <button 
-          onClick={() => { resetForm(); setShowCreate(true); }}
-          className="flex items-center gap-2 bg-primary text-text-inverse px-4 h-10 rounded-xl text-sm font-medium hover:bg-primary-hover transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          {t('inventory.utensils.newItem')}
-        </button>
+        <div className="flex gap-2">
+          <button 
+            onClick={() => startMovement()}
+            className="flex items-center gap-2 border border-border text-text-primary px-4 h-10 rounded-xl text-sm font-medium hover:bg-surface-raised transition-colors"
+          >
+            <ArrowRightLeft className="w-4 h-4" />
+            Movimiento
+          </button>
+          <button 
+            onClick={() => { resetForm(); setShowCreate(true); }}
+            className="flex items-center gap-2 bg-primary text-text-inverse px-4 h-10 rounded-xl text-sm font-medium hover:bg-primary-hover transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            {t('inventory.utensils.newItem')}
+          </button>
+        </div>
       </div>
 
-      {/* Formulario Crear Utensilio (Modal) */}
+      {/* Formulario Crear/Editar Utensilio (Modal) */}
       {showCreate && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => { setShowCreate(false); resetForm(); }} />
           <div className="relative bg-surface border border-border rounded-t-3xl sm:rounded-2xl w-full max-w-lg p-6 space-y-4 animate-in slide-in-from-bottom-4 max-h-[85vh] overflow-y-auto shadow-2xl">
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-xl font-bold text-text-primary">
-                {editingUtensil ? 'Editar Utensilio' : t('inventory.utensils.createTitle')}
+                {editingUtensil ? t('inventory.utensils.editTitle') : t('inventory.utensils.createTitle')}
               </h2>
               <button onClick={() => { setShowCreate(false); resetForm(); }} className="p-2 text-text-secondary hover:bg-surface-raised rounded-full transition-colors">
                 <X className="w-5 h-5" />
@@ -249,7 +323,128 @@ export default function UtensilsPage() {
                 className="flex-[2] flex items-center justify-center gap-2 bg-primary text-text-inverse px-6 h-12 rounded-xl text-sm font-bold hover:bg-primary-hover transition-colors disabled:opacity-50"
               >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                {saving ? t('inventory.utensils.saving') : editingUtensil ? 'Guardar Cambios' : t('inventory.utensils.save')}
+                {saving ? t('inventory.utensils.saving') : editingUtensil ? t('inventory.utensils.save') : t('inventory.utensils.create')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Formulario Registrar Movimiento (Modal) */}
+      {showMovement && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => { setShowMovement(false); resetMovementForm(); }} />
+          <div className="relative bg-surface border border-border rounded-t-3xl sm:rounded-2xl w-full max-w-lg p-6 space-y-4 animate-in slide-in-from-bottom-4 max-h-[85vh] overflow-y-auto shadow-2xl">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-xl font-bold text-text-primary">Registrar Movimiento</h2>
+              <button onClick={() => { setShowMovement(false); resetMovementForm(); }} className="p-2 text-text-secondary hover:bg-surface-raised rounded-full transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            {error && (
+              <div className="p-3 bg-error-light text-error text-sm rounded-xl border border-error/20">
+                {error}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-text-secondary">Utensilio *</label>
+                <select 
+                  value={moveUtensilId}
+                  onChange={e => setMoveUtensilId(e.target.value)}
+                  className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary focus:border-primary outline-none transition-all appearance-none"
+                >
+                  <option value="">Seleccionar ítem</option>
+                  {utensils.map(u => (
+                    <option key={u.id} value={u.id}>{u.name} ({u.unit})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold text-text-secondary">Tipo de Movimiento</label>
+                  <select 
+                    value={moveType}
+                    onChange={e => setMoveType(e.target.value as any)}
+                    className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary focus:border-primary outline-none appearance-none"
+                  >
+                    <option value="entry">Entrada (Ingreso)</option>
+                    <option value="exit">Salida (Merma/Baja)</option>
+                    <option value="transfer">Traslado entre Sedes</option>
+                    <option value="adjustment">Ajuste Manual</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold text-text-secondary">Cantidad *</label>
+                  <input 
+                    type="number"
+                    min="1"
+                    value={moveQty}
+                    onChange={e => setMoveQty(e.target.value)}
+                    className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary focus:border-primary outline-none"
+                  />
+                </div>
+              </div>
+
+              {moveType === 'transfer' && (
+                <div className="grid grid-cols-2 gap-4 animate-in fade-in">
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-semibold text-text-secondary">Desde Sede</label>
+                    <select 
+                      value={moveFromVenue}
+                      onChange={e => setMoveFromVenue(e.target.value)}
+                      className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary focus:border-primary outline-none appearance-none"
+                    >
+                      <option value="">Seleccionar origen</option>
+                      {venues.map(v => (
+                        <option key={v.id} value={v.id}>{v.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-semibold text-text-secondary">Hacia Sede</label>
+                    <select 
+                      value={moveToVenue}
+                      onChange={e => setMoveToVenue(e.target.value)}
+                      className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary focus:border-primary outline-none appearance-none"
+                    >
+                      <option value="">Seleccionar destino</option>
+                      {venues.map(v => (
+                        <option key={v.id} value={v.id}>{v.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-text-secondary">Notas / Observaciones</label>
+                <textarea 
+                  placeholder="Ej. Reposición por rotura o Traslado de emergencia..."
+                  value={moveNotes}
+                  onChange={e => setMoveNotes(e.target.value)}
+                  className="w-full bg-surface border border-border rounded-xl p-4 text-sm text-text-primary focus:border-primary outline-none transition-all h-24 resize-none"
+                />
+              </div>
+            </div>
+            
+            <div className="flex gap-3 pt-2">
+              <button 
+                onClick={() => { setShowMovement(false); resetMovementForm(); }}
+                className="flex-1 h-12 rounded-xl font-semibold text-sm border border-border text-text-primary hover:bg-surface-raised transition-colors"
+              >
+                {t('inventory.assets.cancel')}
+              </button>
+              <button 
+                onClick={handleRecordMovement}
+                disabled={saving || (moveType === 'transfer' && (!moveFromVenue || !moveToVenue))}
+                className="flex-[2] flex items-center justify-center gap-2 bg-primary text-text-inverse px-6 h-12 rounded-xl text-sm font-bold hover:bg-primary-hover transition-colors disabled:opacity-50"
+              >
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                {saving ? 'Registrando...' : 'Confirmar Movimiento'}
               </button>
             </div>
           </div>
@@ -368,6 +563,13 @@ export default function UtensilsPage() {
                     </span>
                   </td>
                   <td className="px-6 py-4 flex justify-end gap-2">
+                    <button 
+                      onClick={() => startMovement(item)}
+                      className="p-2 text-text-secondary hover:text-primary transition-colors bg-surface-raised rounded-lg" 
+                      title="Mover"
+                    >
+                      <ArrowRightLeft className="w-4 h-4" />
+                    </button>
                     <button 
                       onClick={() => startEdit(item)}
                       className="p-2 text-text-secondary hover:text-primary transition-colors bg-surface-raised rounded-lg" 

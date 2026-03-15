@@ -324,6 +324,31 @@ export const adminApi = {
 
     updateUtensil: (id: string, data: Partial<Utensil>): Promise<Utensil> =>
         fetchWithAuth(`/utensils/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+
+    recordUtensilMovement: (data: { 
+        utensil_id: string; 
+        type: 'entry' | 'exit' | 'transfer' | 'adjustment'; 
+        quantity: number; 
+        from_venue_id?: string; 
+        to_venue_id?: string; 
+        notes?: string 
+    }): Promise<any> =>
+        fetchWithAuth('/utensil-movements', { method: 'POST', body: JSON.stringify(data) }),
+
+    createUtensilCount: (data: {
+        venue_id: string;
+        items: Array<{ utensil_id: string; count: number }>
+    }): Promise<{ id: string; status: string }> =>
+        fetchWithAuth('/utensil-counts', { method: 'POST', body: JSON.stringify(data) }),
+
+    getUtensilsCounts: (venueId?: string): Promise<any[]> =>
+        fetchWithAuth(`/utensil-counts${venueId ? `?venue_id=${venueId}` : ''}`),
+
+    getUtensilCountDetail: (countId: string): Promise<any> =>
+        fetchWithAuth(`/utensil-counts/${countId}`),
+
+    confirmUtensilCount: (countId: string, items: Array<{ utensil_id: string; confirmed_count: number }>): Promise<any> =>
+        fetchWithAuth(`/utensil-counts/${countId}/confirm`, { method: 'PATCH', body: JSON.stringify({ items }) }),
 }
 
 // Public venue shifts (for staff)
