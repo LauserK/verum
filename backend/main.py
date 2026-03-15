@@ -1377,3 +1377,130 @@ async def get_effective_permissions(profile_id: str, db=Depends(get_db)):
             effective.append(p["key"])
     return {"permissions": effective}
 
+
+# ── Inventory: Assets Models ─────────────────────────────
+
+class CreateAssetCategoryRequest(BaseModel):
+    org_id: str
+    name: str
+    icon: Optional[str] = None
+    review_interval_days: int = 30
+
+class UpdateAssetCategoryRequest(BaseModel):
+    name: Optional[str] = None
+    icon: Optional[str] = None
+    review_interval_days: Optional[int] = None
+
+class CreateAssetRequest(BaseModel):
+    org_id: str
+    venue_id: str
+    category_id: str
+    name: str
+    serial: Optional[str] = None
+    brand: Optional[str] = None
+    model: Optional[str] = None
+    purchase_date: Optional[str] = None
+    location_note: Optional[str] = None
+    photo_url: Optional[str] = None
+
+class UpdateAssetRequest(BaseModel):
+    name: Optional[str] = None
+    category_id: Optional[str] = None
+    venue_id: Optional[str] = None
+    serial: Optional[str] = None
+    brand: Optional[str] = None
+    model: Optional[str] = None
+    purchase_date: Optional[str] = None
+    status: Optional[str] = None
+    location_note: Optional[str] = None
+    photo_url: Optional[str] = None
+
+class AssetReviewRequest(BaseModel):
+    notes: Optional[str] = None
+    photo_url: Optional[str] = None
+
+# ── Inventory: Assets Endpoints (M8) ─────────────────────
+
+@app.get("/asset-categories")
+async def list_asset_categories(org_id: str, db=Depends(get_db)):
+    res = db.table("asset_categories").select("*").eq("org_id", org_id).execute()
+    return res.data or []
+
+@app.post("/asset-categories")
+async def create_asset_category(body: CreateAssetCategoryRequest, db=Depends(get_db), _=Depends(require_permission("inventory_assets.manage_categories" if False else "inventory_assets.create"))): # Using create as generic admin fallback for now
+    res = db.table("asset_categories").insert(body.dict(exclude_none=True)).execute()
+    return res.data[0]
+
+@app.patch("/asset-categories/{category_id}")
+async def update_asset_category(category_id: str, body: UpdateAssetCategoryRequest, db=Depends(get_db), _=Depends(require_permission("inventory_assets.edit"))):
+    payload = body.dict(exclude_none=True)
+    if not payload:
+        raise HTTPException(400, "No fields to update")
+    res = db.table("asset_categories").update(payload).eq("id", category_id).execute()
+    return res.data[0] if res.data else {}
+
+@app.get("/assets")
+async def list_assets(venue_id: Optional[str] = None, status: Optional[str] = None, category_id: Optional[str] = None, include_archived: bool = False, db=Depends(get_db), _=Depends(require_permission("inventory_assets.view"))):
+    query = db.table("assets").select("*, asset_categories(name)")
+    if venue_id:
+        query = query.eq("venue_id", venue_id)
+    if status:
+        query = query.eq("status", status)
+    elif not include_archived:
+        query = query.neq("status", "baja")
+    if category_id:
+        query = query.eq("category_id", category_id)
+        
+    res = query.execute()
+    return res.data or []
+
+@app.post("/assets")
+async def create_asset(body: CreateAssetRequest, db=Depends(get_db), _=Depends(require_permission("inventory_assets.create"))):
+    import uuid
+    payload = body.dict(exclude_none=True)
+    payload["qr_code"] = str(uuid.uuid4())
+    res = db.table("assets").insert(payload).execute()
+    return res.data[0]
+
+@app.get("/assets/{asset_id}")
+async def get_asset(asset_id: str, db=Depends(get_db), _=Depends(require_permission("inventory_assets.view"))):
+    res = db.table("assets").select("*, asset_categories(name)").eq("id", asset_id).execute()
+    if not res.data:
+        raise HTTPException(404, "Asset not found")
+    return res.data[0]
+
+@app.patch("/assets/{asset_id}")
+async def update_asset(asset_id: str, body: UpdateAssetRequest, db=Depends(get_db), _=Depends(require_permission("inventory_assets.edit"))):
+    payload = body.dict(exclude_none=True)
+    if not payload:
+        raise HTTPException(400, "No fields to update")
+    res = db.table("assets").update(payload).eq("id", asset_id).execute()
+    return res.data[0] if res.data else {}
+
+@app.get("/assets/qr/{qr_code}")
+async def resolve_asset_by_qr(qr_code: str, db=Depends(get_db), current_user=Depends(get_current_user)):
+    # Any authenticated user can scan a QR to get the asset summary
+    res = db.table("assets").select("*, asset_categories(name, icon, review_interval_days)").eq("qr_code", qr_code).execute()
+    if not res.data:
+        raise HTTPException(404, "Asset not found for this QR")
+    return res.data[0]
+
+@app.post("/assets/{asset_id}/review")
+async def review_asset(asset_id: str, body: AssetReviewRequest, current_user=Depends(get_current_user), db=Depends(get_db), _=Depends(require_permission("inventory_assets.review"))):
+    from datetime import datetime, timezone
+    
+    # Insert review log
+    review_data = {
+        "asset_id": asset_id,
+        "reviewed_by": current_user.id,
+        "notes": body.notes,
+        "photo_url": body.photo_url
+    }
+    db.table("asset_reviews").insert(review_data).execute()
+    
+    # Update asset last_reviewed_at
+    now_iso = datetime.now(timezone.utc).isoformat()
+    res = db.table("assets").update({"last_reviewed_at": now_iso}).eq("id", asset_id).execute()
+    
+    return {"ok": True, "asset": res.data[0] if res.data else None}
+
