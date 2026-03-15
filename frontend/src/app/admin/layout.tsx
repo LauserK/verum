@@ -15,12 +15,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     const [loading, setLoading] = useState(true)
 
     const NAV_ITEMS = [
-        { href: '/admin/dashboard', label: t('nav.dashboard' as any), icon: LayoutDashboard },
-        { href: '/admin/templates', label: t('nav.templates' as any), icon: ClipboardList },
-        { href: '/admin/submissions', label: t('nav.submissions' as any), icon: FileText },
-        { href: '/admin/team', label: t('nav.team' as any), icon: Users },
-        { href: '/admin/venues', label: t('nav.venues' as any), icon: Building2 },
-        { href: '/admin/settings/roles', label: t('nav.settings' as any), icon: Settings },
+        { href: '/admin/dashboard', label: t('nav.dashboard'), icon: LayoutDashboard },
+        { href: '/admin/templates', label: t('nav.templates'), icon: ClipboardList },
+        { href: '/admin/submissions', label: t('nav.submissions'), icon: FileText },
+        { href: '/admin/team', label: t('nav.team'), icon: Users },
+        { href: '/admin/venues', label: t('nav.venues'), icon: Building2 },
+        { href: '/admin/settings/roles', label: t('nav.settings'), icon: Settings },
     ]
 
     useEffect(() => {
