@@ -32,6 +32,7 @@ interface Venue {
 }
 
 export default function AssetsPage() {
+  // @ts-expect-error: 'inventory.assets' is not a top-level translation key but valid nested namespace
   const { t } = useTranslations('inventory.assets')
   const [assets, setAssets] = useState<Asset[]>([])
   const [categories, setCategories] = useState<Category[]>([])
@@ -298,15 +299,17 @@ export default function AssetsPage() {
               {assets.map(asset => (
                 <tr key={asset.id} className="hover:bg-surface-raised/50 transition-colors">
                   <td className="px-6 py-4">
-                    <p className="font-semibold text-text-primary">{asset.name}</p>
-                    <p className="text-xs text-text-secondary font-mono mt-0.5" title={asset.qr_code}>ID: {asset.qr_code.substring(0,8)}</p>
+                    <Link href={`/inventory/assets/${asset.qr_code}`} className="block hover:opacity-80 transition-opacity">
+                      <p className="font-semibold text-primary hover:underline">{asset.name}</p>
+                      <p className="text-xs text-text-secondary font-mono mt-0.5" title={asset.qr_code}>ID: {asset.qr_code.substring(0,8)}</p>
+                    </Link>
                   </td>
                   <td className="px-6 py-4 text-text-secondary">{asset.asset_categories?.name || 'N/A'}</td>
                   <td className="px-6 py-4">
                     <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider
                       ${asset.status === 'operativo' ? 'bg-success/10 text-success' : 
                         asset.status === 'baja' ? 'bg-error/10 text-error' : 'bg-warning/10 text-warning'}`}>
-                      {t(`status.${asset.status}` as any)}
+                      {t(`status.${asset.status}`)}
                     </span>
                   </td>
                   <td className="px-6 py-4 flex justify-end gap-2">

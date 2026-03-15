@@ -1,0 +1,6 @@
+
+C:\Users\kilda\PROYECTOS\Verum\frontend\src\app\admin\inventory\assets\page.tsx
+  35:3  error  Use "@ts-expect-error" instead of "@ts-ignore", as "@ts-ignore" will do nothing if the following line is error-free  @typescript-eslint/ban-ts-comment
+
+✖ 1 problem (1 error, 0 warnings)
+

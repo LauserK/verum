@@ -1511,6 +1511,8 @@ async def resolve_asset_by_qr(qr_code: str, db=Depends(get_db), current_user=Dep
 async def review_asset(asset_id: str, body: AssetReviewRequest, current_user=Depends(get_current_user), db=Depends(get_db), _=Depends(require_permission("inventory_assets.review"))):
     from datetime import datetime, timezone
     
+    now_iso = datetime.now(timezone.utc).isoformat()
+
     # Insert review log
     review_data = {
         "asset_id": asset_id,
@@ -1521,8 +1523,344 @@ async def review_asset(asset_id: str, body: AssetReviewRequest, current_user=Dep
     db.table("asset_reviews").insert(review_data).execute()
     
     # Update asset last_reviewed_at
-    now_iso = datetime.now(timezone.utc).isoformat()
     res = db.table("assets").update({"last_reviewed_at": now_iso}).eq("id", asset_id).execute()
+    
+    # Auto-create closed ticket for the review history
+    ticket_data = {
+        "asset_id": asset_id,
+        "opened_by": current_user.id,
+        "title": "Revisión Preventiva",
+        "priority": "baja",
+        "status": "resuelto",
+        "closed_at": now_iso,
+        "closed_by": current_user.id
+    }
+    ticket_res = db.table("repair_tickets").insert(ticket_data).execute()
+    
+    if ticket_res.data:
+        ticket = ticket_res.data[0]
+        entry_data = {
+            "ticket_id": ticket["id"],
+            "created_by": current_user.id,
+            "type": "nota",
+            "description": body.notes or "Revisión preventiva completada sin novedades.",
+            "status_after": "resuelto"
+        }
+        db.table("repair_ticket_entries").insert(entry_data).execute()
     
     return {"ok": True, "asset": res.data[0] if res.data else None}
 
+
+# ── Inventory: Repair Tickets Models (M9) ─────────────────
+
+class CreateTicketRequest(BaseModel):
+    title: str
+    priority: str = "media"  # baja, media, alta, critica
+    description: str
+    photo_url: Optional[str] = None
+
+
+class CreateTicketEntryRequest(BaseModel):
+    type: str  # visita, presupuesto, compra, nota
+    description: str
+    technician: Optional[str] = None
+    cost: Optional[float] = None
+    attachments: Optional[list[str]] = None  # Array of URLs
+    next_action: Optional[str] = None
+    status_after: Optional[str] = None  # abierto, en_progreso, esperando, resuelto
+
+
+class CloseTicketRequest(BaseModel):
+    description: str = "Reparación completada y verificada."
+    cost: Optional[float] = None
+    attachments: Optional[list[str]] = None
+
+
+# ── Inventory: Repair Tickets Endpoints (M9) ─────────────
+
+@app.post("/assets/{asset_id}/tickets")
+async def open_repair_ticket(
+    asset_id: str,
+    body: CreateTicketRequest,
+    current_user=Depends(get_current_user),
+    db=Depends(get_db),
+    _=Depends(require_permission("inventory_assets.report_fault")),
+):
+    """Opens a new repair ticket for an asset. Sets asset status to 'en_reparacion'."""
+    try:
+        # Check asset exists
+        asset_res = db.table("assets").select("id, status").eq("id", asset_id).execute()
+        if not asset_res.data:
+            raise HTTPException(404, "Asset not found")
+
+        # Check no open ticket already exists
+        existing = (
+            db.table("repair_tickets")
+            .select("id")
+            .eq("asset_id", asset_id)
+            .neq("status", "resuelto")
+            .execute()
+        )
+        if existing.data and len(existing.data) > 0:
+            raise HTTPException(400, "This asset already has an open ticket")
+
+        # Create ticket
+        ticket_data = {
+            "asset_id": asset_id,
+            "opened_by": current_user.id,
+            "title": body.title,
+            "priority": body.priority,
+        }
+        ticket_res = db.table("repair_tickets").insert(ticket_data).execute()
+        ticket = ticket_res.data[0]
+
+        # Create initial entry (apertura)
+        entry_data = {
+            "ticket_id": ticket["id"],
+            "created_by": current_user.id,
+            "type": "nota",
+            "description": body.description,
+            "attachments": [body.photo_url] if body.photo_url else None,
+            "status_after": "abierto",
+        }
+        db.table("repair_ticket_entries").insert(entry_data).execute()
+
+        # Update asset status
+        db.table("assets").update({"status": "en_reparacion"}).eq("id", asset_id).execute()
+
+        return ticket
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/assets/{asset_id}/tickets")
+async def list_asset_tickets(
+    asset_id: str,
+    db=Depends(get_db),
+    _=Depends(require_permission("inventory_assets.view")),
+):
+    """Returns all tickets for an asset (active and closed), with cost summary."""
+    try:
+        res = (
+            db.table("repair_tickets")
+            .select("*, profiles!repair_tickets_opened_by_fkey(full_name)")
+            .eq("asset_id", asset_id)
+            .order("opened_at", desc=True)
+            .execute()
+        )
+        tickets = res.data or []
+
+        # Enrich with cost data from entries
+        ticket_ids = [t["id"] for t in tickets]
+        if ticket_ids:
+            entries_res = (
+                db.table("repair_ticket_entries")
+                .select("ticket_id, cost, type")
+                .in_("ticket_id", ticket_ids)
+                .execute()
+            )
+            # Aggregate costs per ticket
+            cost_map: dict = {}
+            entry_count_map: dict = {}
+            for e in (entries_res.data or []):
+                tid = e["ticket_id"]
+                if tid not in cost_map:
+                    cost_map[tid] = 0
+                    entry_count_map[tid] = 0
+                if e.get("cost"):
+                    cost_map[tid] += float(e["cost"])
+                entry_count_map[tid] += 1
+
+            for t in tickets:
+                t["total_cost"] = cost_map.get(t["id"], 0)
+                t["entry_count"] = entry_count_map.get(t["id"], 0)
+
+        return tickets
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/tickets/{ticket_id}")
+async def get_ticket_detail(
+    ticket_id: str,
+    db=Depends(get_db),
+    _=Depends(require_permission("inventory_assets.view")),
+):
+    """Returns a ticket with all its entries ordered chronologically."""
+    try:
+        # Get ticket
+        ticket_res = (
+            db.table("repair_tickets")
+            .select("*, assets(id, name, qr_code, venue_id, status), profiles!repair_tickets_opened_by_fkey(full_name)")
+            .eq("id", ticket_id)
+            .execute()
+        )
+        if not ticket_res.data:
+            raise HTTPException(404, "Ticket not found")
+
+        ticket = ticket_res.data[0]
+
+        # Get entries
+        entries_res = (
+            db.table("repair_ticket_entries")
+            .select("*, profiles!repair_ticket_entries_created_by_fkey(full_name)")
+            .eq("ticket_id", ticket_id)
+            .order("created_at")
+            .execute()
+        )
+        ticket["entries"] = entries_res.data or []
+
+        # Calculate total cost
+        total_cost = sum(
+            float(e["cost"]) for e in ticket["entries"] if e.get("cost")
+        )
+        ticket["total_cost"] = total_cost
+
+        return ticket
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/tickets/{ticket_id}/entries")
+async def add_ticket_entry(
+    ticket_id: str,
+    body: CreateTicketEntryRequest,
+    current_user=Depends(get_current_user),
+    db=Depends(get_db),
+    _=Depends(require_permission("inventory_assets.add_ticket_entry")),
+):
+    """
+    Adds an entry to a ticket. Updates ticket status per status_after.
+    Does NOT update asset.last_reviewed_at (only closing does that).
+    If user selects status_after='resuelto' but lacks close_ticket permission,
+    entry is saved with status_after='en_progreso' instead.
+    """
+    try:
+        # Check ticket exists and is not closed
+        ticket_res = (
+            db.table("repair_tickets")
+            .select("id, asset_id, status")
+            .eq("id", ticket_id)
+            .execute()
+        )
+        if not ticket_res.data:
+            raise HTTPException(404, "Ticket not found")
+
+        ticket = ticket_res.data[0]
+        if ticket["status"] == "resuelto":
+            raise HTTPException(400, "Cannot add entries to a closed ticket")
+
+        # Check if user is trying to close via entry
+        effective_status = body.status_after
+        if body.status_after == "resuelto":
+            has_close = await resolve_permission(
+                current_user.id, "inventory_assets.close_ticket", db
+            )
+            if not has_close:
+                # Downgrade to en_progreso, don't block the entry
+                effective_status = "en_progreso"
+
+        # Create entry
+        entry_data = {
+            "ticket_id": ticket_id,
+            "created_by": current_user.id,
+            "type": body.type,
+            "description": body.description,
+            "technician": body.technician,
+            "cost": body.cost,
+            "attachments": body.attachments,
+            "next_action": body.next_action,
+            "status_after": effective_status,
+        }
+        entry_res = db.table("repair_ticket_entries").insert(entry_data).execute()
+
+        # Update ticket status if status_after provided
+        if effective_status:
+            update_data: dict = {"status": effective_status}
+            if effective_status == "resuelto":
+                now_iso = datetime.now(timezone.utc).isoformat()
+                update_data["closed_at"] = now_iso
+                update_data["closed_by"] = current_user.id
+                # Also update asset
+                db.table("assets").update({
+                    "status": "operativo",
+                    "last_reviewed_at": now_iso,
+                }).eq("id", ticket["asset_id"]).execute()
+
+            db.table("repair_tickets").update(update_data).eq("id", ticket_id).execute()
+
+        return entry_res.data[0] if entry_res.data else {"ok": True}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.patch("/tickets/{ticket_id}/close")
+async def close_ticket(
+    ticket_id: str,
+    body: CloseTicketRequest,
+    current_user=Depends(get_current_user),
+    db=Depends(get_db),
+    _=Depends(require_permission("inventory_assets.close_ticket")),
+):
+    """
+    Closes a repair ticket. Creates a 'cierre' entry, sets ticket to 'resuelto',
+    updates asset status to 'operativo' and asset.last_reviewed_at.
+    """
+    try:
+        # Get ticket
+        ticket_res = (
+            db.table("repair_tickets")
+            .select("id, asset_id, status")
+            .eq("id", ticket_id)
+            .execute()
+        )
+        if not ticket_res.data:
+            raise HTTPException(404, "Ticket not found")
+
+        ticket = ticket_res.data[0]
+        if ticket["status"] == "resuelto":
+            raise HTTPException(400, "Ticket is already closed")
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+
+        # Create cierre entry
+        entry_data = {
+            "ticket_id": ticket_id,
+            "created_by": current_user.id,
+            "type": "cierre",
+            "description": body.description,
+            "cost": body.cost,
+            "attachments": body.attachments,
+            "status_after": "resuelto",
+        }
+        db.table("repair_ticket_entries").insert(entry_data).execute()
+
+        # Close ticket
+        db.table("repair_tickets").update({
+            "status": "resuelto",
+            "closed_at": now_iso,
+            "closed_by": current_user.id,
+        }).eq("id", ticket_id).execute()
+
+        # Update asset: back to operativo + update last_reviewed_at
+        db.table("assets").update({
+            "status": "operativo",
+            "last_reviewed_at": now_iso,
+        }).eq("id", ticket["asset_id"]).execute()
+
+        return {"ok": True, "closed_at": now_iso}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
