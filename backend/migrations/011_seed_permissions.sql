@@ -1,0 +1,26 @@
+-- backend/migrations/011_seed_permissions.sql
+INSERT INTO permissions (module, action, key, description) VALUES
+  ('checklists', 'view', 'checklists.view', 'Ver lista de checklists del turno'),
+  ('checklists', 'execute', 'checklists.execute', 'Ejecutar y enviar un checklist'),
+  ('checklists', 'view_all', 'checklists.view_all', 'Ver checklists de otros usuarios/turnos'),
+  ('checklists', 'manage_templates', 'checklists.manage_templates', 'Crear y editar plantillas de checklist'),
+  ('inventory_assets', 'view', 'inventory_assets.view', 'Ver lista y ficha de activos'),
+  ('inventory_assets', 'report_fault', 'inventory_assets.report_fault', 'Reportar falla en un activo (abre ticket)'),
+  ('inventory_assets', 'add_ticket_entry', 'inventory_assets.add_ticket_entry', 'Agregar entradas a un ticket de reparación abierto'),
+  ('inventory_assets', 'close_ticket', 'inventory_assets.close_ticket', 'Marcar un ticket de reparación como resuelto'),
+  ('inventory_assets', 'create', 'inventory_assets.create', 'Crear nuevos activos'),
+  ('inventory_assets', 'edit', 'inventory_assets.edit', 'Editar datos de un activo'),
+  ('inventory_assets', 'delete', 'inventory_assets.delete', 'Eliminar activos (solo admin)'),
+  ('inventory_assets', 'print_qr', 'inventory_assets.print_qr', 'Imprimir código QR de un activo'),
+  ('inventory_assets', 'review', 'inventory_assets.review', 'Marcar un activo como revisado (revisión preventiva)'),
+  ('inventory_utensils', 'view', 'inventory_utensils.view', 'Ver ítems y último conteo'),
+  ('inventory_utensils', 'count', 'inventory_utensils.count', 'Ejecutar un conteo de utensilios'),
+  ('inventory_utensils', 'confirm_count', 'inventory_utensils.confirm_count', 'Confirmar o corregir conteos pendientes'),
+  ('inventory_utensils', 'manage_items', 'inventory_utensils.manage_items', 'Crear/editar ítems y categorías'),
+  ('inventory_utensils', 'view_reports', 'inventory_utensils.view_reports', 'Ver reportes históricos de pérdidas'),
+  ('admin', 'manage_users', 'admin.manage_users', 'Invitar usuarios, asignar roles'),
+  ('admin', 'manage_roles', 'admin.manage_roles', 'Crear y editar roles personalizados'),
+  ('admin', 'manage_venues', 'admin.manage_venues', 'Crear y editar sedes'),
+  ('admin', 'view_dashboard', 'admin.view_dashboard', 'Acceso al dashboard administrativo'),
+  ('admin', 'view_reports', 'admin.view_reports', 'Ver todos los reportes de compliance')
+ON CONFLICT (key) DO NOTHING;
