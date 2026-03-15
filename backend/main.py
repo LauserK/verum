@@ -246,22 +246,44 @@ async def get_checklists(venue_id: str, user=Depends(require_permission("checkli
             tid = q["template_id"]
             questions_by_template[tid] = questions_by_template.get(tid, 0) + 1
 
-        # 3. Get today's submissions for the current shift and user
+        # 3. Get today's submissions for the current venue and user (all shifts)
         submissions_res = (
             db.table("submissions")
             .select("*")
             .eq("venue_id", venue_id)
             .eq("user_id", user.id)
-            .eq("shift", shift)
             .gte("created_at", f"{today}T00:00:00-04:00")
             .in_("template_id", template_ids)
             .execute()
         )
+        all_today_submissions = submissions_res.data or []
+        
+        # 4. Map submissions to templates based on frequency
+        # For 'shift' frequency, we only care about the current shift.
+        # For others (daily, weekly, etc.), any submission today counts.
         submissions_map: dict = {}
-        for s in (submissions_res.data or []):
-            submissions_map[s["template_id"]] = s
+        for s in all_today_submissions:
+            tid = s["template_id"]
+            # If we already have a 'completed' one for this template, keep it
+            if submissions_map.get(tid, {}).get("status") == "completed":
+                continue
+            
+            # Find the template to check its frequency
+            tmpl = next((t for t in templates if t["id"] == tid), None)
+            freq = tmpl.get("frequency") if tmpl else "daily"
+            
+            if freq == "shift":
+                # Only map if it's the current shift
+                if s["shift"] == shift:
+                    submissions_map[tid] = s
+            else:
+                # For non-shift checklists, any submission today counts.
+                # Prioritize completed or in_progress over draft if multiple exist.
+                existing = submissions_map.get(tid)
+                if not existing or s["status"] == "completed" or (s["status"] == "in_progress" and existing["status"] == "draft"):
+                    submissions_map[tid] = s
 
-        # 4. Get answer counts for these submissions
+        # 5. Get answer counts for these matched submissions
         submission_ids = [s["id"] for s in submissions_map.values()]
         answers_counts: dict[str, int] = {}
         
