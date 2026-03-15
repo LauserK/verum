@@ -1,11 +1,11 @@
 // frontend/src/app/admin/inventory/assets/page.tsx
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { createClient } from '@/utils/supabase/client'
-import { Plus, Trash2, Edit3, Save, X, QrCode, Search, Filter } from 'lucide-react'
-import { useTranslations } from '@/components/I18nProvider'
+import { Plus, QrCode, Edit3 } from 'lucide-react'
+import { useReactToPrint } from 'react-to-print'
+import { QRCodePrint } from '@/components/inventory/QRCodePrint'
 
 interface Asset {
   id: string
@@ -20,13 +20,12 @@ interface Asset {
 export default function AssetsPage() {
   const [assets, setAssets] = useState<Asset[]>([])
   const [loading, setLoading] = useState(true)
+  const [assetToPrint, setAssetToPrint] = useState<Asset | null>(null)
+  
+  const printRef = useRef<HTMLDivElement>(null)
   const supabase = createClient()
 
-  useEffect(() => {
-    fetchAssets()
-  }, [])
-
-  const fetchAssets = async () => {
+  const fetchAssets = useCallback(async () => {
     setLoading(true)
     const { data } = await supabase
       .from('assets')
@@ -34,6 +33,24 @@ export default function AssetsPage() {
       .neq('status', 'baja')
     if (data) setAssets(data as Asset[])
     setLoading(false)
+  }, [supabase])
+
+  useEffect(() => {
+    fetchAssets()
+  }, [fetchAssets])
+
+  const handlePrintTrigger = useReactToPrint({
+    contentRef: printRef,
+    documentTitle: assetToPrint ? `QR-${assetToPrint.name}` : 'QR-Code',
+    onAfterPrint: () => setAssetToPrint(null)
+  })
+
+  const handlePrint = (asset: Asset) => {
+    setAssetToPrint(asset)
+    // Small delay to allow the component to render before printing
+    setTimeout(() => {
+      handlePrintTrigger()
+    }, 100)
   }
 
   return (
@@ -78,7 +95,11 @@ export default function AssetsPage() {
                     </span>
                   </td>
                   <td className="px-6 py-4 flex justify-end gap-2">
-                    <button className="p-2 text-text-secondary hover:text-primary transition-colors bg-surface-raised rounded-lg" title="Imprimir QR">
+                    <button 
+                      onClick={() => handlePrint(asset)}
+                      className="p-2 text-text-secondary hover:text-primary transition-colors bg-surface-raised rounded-lg" 
+                      title="Imprimir QR"
+                    >
                       <QrCode className="w-4 h-4" />
                     </button>
                     <button className="p-2 text-text-secondary hover:text-primary transition-colors bg-surface-raised rounded-lg" title="Editar">
@@ -91,6 +112,20 @@ export default function AssetsPage() {
           </table>
         </div>
       )}
+
+      {/* Hidden print container */}
+      <div className="hidden">
+        {assetToPrint && (
+          <QRCodePrint 
+            ref={printRef} 
+            asset={{
+              name: assetToPrint.name,
+              qr_code: assetToPrint.qr_code,
+              venueName: 'Sede' // TODO: Fetch real venue name
+            }} 
+          />
+        )}
+      </div>
     </div>
   )
 }
