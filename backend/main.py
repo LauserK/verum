@@ -54,6 +54,27 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         )
 
 
+def get_db():
+    return supabase
+
+
+from permissions import resolve_permission
+
+
+def require_permission(permission_key: str):
+    async def _check(current_user=Depends(get_current_user), db=Depends(get_db)):
+        # profile_id is current_user.id in Supabase Auth
+        has_perm = await resolve_permission(current_user.id, permission_key, db)
+        if not has_perm:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"detail": "missing_permission", "required": permission_key},
+            )
+        return current_user
+
+    return _check
+
+
 # ── Models ───────────────────────────────────────────────
 
 class SyncResponse(BaseModel):
