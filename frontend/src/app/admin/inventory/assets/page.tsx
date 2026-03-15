@@ -1,7 +1,7 @@
 // frontend/src/app/admin/inventory/assets/page.tsx
 'use client'
 
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import { Plus, QrCode, Edit3 } from 'lucide-react'
 import { useReactToPrint } from 'react-to-print'
@@ -25,19 +25,27 @@ export default function AssetsPage() {
   const printRef = useRef<HTMLDivElement>(null)
   const supabase = createClient()
 
-  const fetchAssets = useCallback(async () => {
-    setLoading(true)
-    const { data } = await supabase
-      .from('assets')
-      .select('*, asset_categories(name)')
-      .neq('status', 'baja')
-    if (data) setAssets(data as Asset[])
-    setLoading(false)
-  }, [supabase])
-
   useEffect(() => {
+    let isMounted = true
+    
+    const fetchAssets = async () => {
+      const { data } = await supabase
+        .from('assets')
+        .select('*, asset_categories(name)')
+        .neq('status', 'baja')
+      
+      if (isMounted) {
+        if (data) setAssets(data as Asset[])
+        setLoading(false)
+      }
+    }
+
     fetchAssets()
-  }, [fetchAssets])
+
+    return () => {
+      isMounted = false
+    }
+  }, [supabase])
 
   const handlePrintTrigger = useReactToPrint({
     contentRef: printRef,
@@ -47,7 +55,6 @@ export default function AssetsPage() {
 
   const handlePrint = (asset: Asset) => {
     setAssetToPrint(asset)
-    // Small delay to allow the component to render before printing
     setTimeout(() => {
       handlePrintTrigger()
     }, 100)
