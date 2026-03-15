@@ -15,10 +15,15 @@
     "switchLanguage": "Cambiar a Español"
   },
   "nav": {
+    "dashboard": "Dashboard",
+    "templates": "Plantillas",
+    "submissions": "Envíos",
+    "team": "Equipo",
+    "venues": "Sedes",
+    "settings": "Ajustes",
     "audits": "Auditorías",
     "history": "Historial",
-    "reports": "Reportes",
-    "settings": "Ajustes"
+    "reports": "Reportes"
   },
   "history": {
     "title": "Historial",
@@ -122,6 +127,35 @@
       "individualOverrides": "Overrides Individuales",
       "overridesDesc": "Los overrides sobrescriben los permisos del rol asignado.",
       "addOverride": "Añadir Override"
+    },
+    "team": {
+      "title": "Miembros del Equipo ({count})",
+      "addUser": "Añadir Usuario",
+      "newUser": "Nuevo Usuario",
+      "firstName": "Nombre",
+      "lastName": "Apellido",
+      "email": "Email",
+      "password": "Contraseña",
+      "role": "Rol",
+      "venue": "Sede",
+      "shift": "Turno",
+      "create": "Crear Usuario",
+      "creating": "Creando...",
+      "cancel": "Cancelar",
+      "save": "Guardar",
+      "saving": "Guardando...",
+      "noMembers": "No se encontraron miembros del equipo.",
+      "noEmail": "Sin email",
+      "noVenueAssigned": "Sin sede asignada",
+      "noShiftAssigned": "Sin turno asignado",
+      "noVenue": "Sin sede",
+      "newPasswordPlaceholder": "Nueva contraseña (min 6 carac.)",
+      "changePassword": "Cambiar Contraseña",
+      "setPassword": "Fijar",
+      "deleteConfirm": "¿Estás seguro de que quieres eliminar este usuario? Esto no se puede deshacer.",
+      "permissions": "Permisos",
+      "edit": "Editar",
+      "delete": "Eliminar"
     }
     }
     }

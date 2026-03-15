@@ -1,13 +1,17 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
     adminApi, getProfile,
     type Profile, type AdminUser, type Shift
 } from '@/lib/api'
-import { Plus, Trash2, Edit3, Save, X, Loader2, UserPlus, Shield, User, KeyRound } from 'lucide-react'
+import { Plus, Trash2, Edit3, Save, X, Loader2, UserPlus, Shield, User, KeyRound, Fingerprint } from 'lucide-react'
+import { useTranslations } from '@/components/I18nProvider'
 
 export default function TeamPage() {
+    const { t } = useTranslations('admin.team')
+    const router = useRouter()
     const [profile, setProfile] = useState<Profile | null>(null)
     const [users, setUsers] = useState<AdminUser[]>([])
     const [loading, setLoading] = useState(true)
@@ -172,45 +176,45 @@ export default function TeamPage() {
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <h2 className="text-sm font-bold text-text-secondary uppercase tracking-wider">
-                    Team Members ({users.length})
+                    {t('title', { count: users.length })}
                 </h2>
                 <button
                     onClick={() => setShowCreate(true)}
                     className="flex items-center gap-1.5 bg-primary text-text-inverse px-4 h-10 rounded-xl text-sm font-medium hover:bg-primary-hover transition-colors"
                 >
-                    <UserPlus className="w-4 h-4" /> Add User
+                    <UserPlus className="w-4 h-4" /> {t('addUser')}
                 </button>
             </div>
 
             {/* Create User Form */}
             {showCreate && (
                 <div className="bg-surface border border-primary/30 rounded-2xl p-5 space-y-3">
-                    <h3 className="text-sm font-bold text-text-primary">New User</h3>
+                    <h3 className="text-sm font-bold text-text-primary">{t('newUser')}</h3>
                     {error && (
                         <div className="text-xs text-error bg-error-light px-3 py-2 rounded-xl">{error}</div>
                     )}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <input
-                            placeholder="First Name"
+                            placeholder={t('firstName')}
                             value={newFirstName}
                             onChange={(e) => setNewFirstName(e.target.value)}
                             className="bg-surface border border-border rounded-xl px-4 h-10 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
                         />
                         <input
-                            placeholder="Last Name"
+                            placeholder={t('lastName')}
                             value={newLastName}
                             onChange={(e) => setNewLastName(e.target.value)}
                             className="bg-surface border border-border rounded-xl px-4 h-10 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
                         />
                         <input
-                            placeholder="Email"
+                            placeholder={t('email')}
                             type="email"
                             value={newEmail}
                             onChange={(e) => setNewEmail(e.target.value)}
                             className="bg-surface border border-border rounded-xl px-4 h-10 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
                         />
                         <input
-                            placeholder="Password"
+                            placeholder={t('password')}
                             type="password"
                             value={newPass}
                             onChange={(e) => setNewPass(e.target.value)}
@@ -238,7 +242,7 @@ export default function TeamPage() {
                             }}
                             className="bg-surface border border-border rounded-xl px-3 h-10 text-sm text-text-primary focus:border-primary outline-none"
                         >
-                            <option value="">No venue assigned</option>
+                            <option value="">{t('noVenueAssigned')}</option>
                             {profile?.venues.map((v) => (
                                 <option key={v.id} value={v.id}>{v.name}</option>
                             ))}
@@ -249,7 +253,7 @@ export default function TeamPage() {
                                 onChange={(e) => setNewShift(e.target.value)}
                                 className="bg-surface border border-border rounded-xl px-3 h-10 text-sm text-text-primary focus:border-primary outline-none"
                             >
-                                <option value="">No shift assigned</option>
+                                <option value="">{t('noShiftAssigned')}</option>
                                 {newVenueShifts.map((s) => (
                                     <option key={s.id} value={s.id}>{s.name} ({s.start_time?.substring(0, 5)} – {s.end_time?.substring(0, 5)})</option>
                                 ))}
@@ -262,13 +266,13 @@ export default function TeamPage() {
                             disabled={saving || !newEmail || !newPass || !newFirstName || !newLastName}
                             className="flex items-center gap-1.5 bg-primary text-text-inverse px-4 h-10 rounded-xl text-sm font-medium hover:bg-primary-hover transition-colors disabled:opacity-50"
                         >
-                            <Save className="w-4 h-4" /> {saving ? 'Creating...' : 'Create User'}
+                            <Save className="w-4 h-4" /> {saving ? t('creating') : t('create')}
                         </button>
                         <button
                             onClick={() => { setShowCreate(false); setError('') }}
                             className="flex items-center gap-1.5 border border-border text-text-primary px-4 h-10 rounded-xl text-sm font-medium hover:bg-surface-raised transition-colors"
                         >
-                            <X className="w-4 h-4" /> Cancel
+                            <X className="w-4 h-4" /> {t('cancel')}
                         </button>
                     </div>
                 </div>
@@ -276,7 +280,7 @@ export default function TeamPage() {
 
             {/* Users List */}
             {users.length === 0 ? (
-                <div className="text-center py-10 text-text-secondary text-sm">No team members found.</div>
+                <div className="text-center py-10 text-text-secondary text-sm">{t('noMembers')}</div>
             ) : (
                 <div className="space-y-3">
                     {users.map((u) => (
@@ -285,17 +289,17 @@ export default function TeamPage() {
                                 <div className="space-y-3">
                                     {/* Email (read-only) */}
                                     <div className="bg-surface-raised rounded-xl px-4 py-2.5 text-sm text-text-secondary">
-                                        ✉️ {editEmail || 'No email'}
+                                        ✉️ {editEmail || t('noEmail')}
                                     </div>
                                     <div className="grid grid-cols-2 gap-3">
                                         <input
-                                            placeholder="First Name"
+                                            placeholder={t('firstName')}
                                             value={editFirstName}
                                             onChange={(e) => setEditFirstName(e.target.value)}
                                             className="bg-surface border border-border rounded-xl px-4 h-10 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
                                         />
                                         <input
-                                            placeholder="Last Name"
+                                            placeholder={t('lastName')}
                                             value={editLastName}
                                             onChange={(e) => setEditLastName(e.target.value)}
                                             className="bg-surface border border-border rounded-xl px-4 h-10 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
@@ -324,7 +328,7 @@ export default function TeamPage() {
                                             }}
                                             className="bg-surface border border-border rounded-xl px-3 h-10 text-sm text-text-primary focus:border-primary outline-none flex-1"
                                         >
-                                            <option value="">No venue</option>
+                                            <option value="">{t('noVenue')}</option>
                                             {profile?.venues.map((v) => (
                                                 <option key={v.id} value={v.id}>{v.name}</option>
                                             ))}
@@ -336,7 +340,7 @@ export default function TeamPage() {
                                             onChange={(e) => setEditShift(e.target.value)}
                                             className="w-full bg-surface border border-border rounded-xl px-3 h-10 text-sm text-text-primary focus:border-primary outline-none"
                                         >
-                                            <option value="">No shift assigned</option>
+                                            <option value="">{t('noShiftAssigned')}</option>
                                             {editVenueShifts.map((s) => (
                                                 <option key={s.id} value={s.id}>{s.name} ({s.start_time?.substring(0, 5)} – {s.end_time?.substring(0, 5)})</option>
                                             ))}
@@ -349,7 +353,7 @@ export default function TeamPage() {
                                             <div className="flex gap-2">
                                                 <input
                                                     type="password"
-                                                    placeholder="New password (min 6 chars)"
+                                                    placeholder={t('newPasswordPlaceholder')}
                                                     value={newPassword}
                                                     onChange={(e) => setNewPassword(e.target.value)}
                                                     className="flex-1 bg-surface border border-border rounded-xl px-4 h-9 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
@@ -359,7 +363,7 @@ export default function TeamPage() {
                                                     disabled={passwordSaving}
                                                     className="flex items-center gap-1 bg-warning/10 text-warning px-3 h-9 rounded-xl text-xs font-medium hover:bg-warning/20 transition-colors disabled:opacity-50"
                                                 >
-                                                    <Save className="w-3.5 h-3.5" /> {passwordSaving ? '...' : 'Set'}
+                                                    <Save className="w-3.5 h-3.5" /> {passwordSaving ? '...' : t('setPassword')}
                                                 </button>
                                                 <button
                                                     onClick={() => { setChangingPasswordId(null); setNewPassword(''); setPasswordMsg('') }}
@@ -377,7 +381,7 @@ export default function TeamPage() {
                                             onClick={() => setChangingPasswordId(u.id)}
                                             className="flex items-center gap-1.5 text-xs text-text-secondary hover:text-primary transition-colors"
                                         >
-                                            <KeyRound className="w-3.5 h-3.5" /> Change Password
+                                            <KeyRound className="w-3.5 h-3.5" /> {t('changePassword')}
                                         </button>
                                     )}
 
@@ -387,13 +391,13 @@ export default function TeamPage() {
                                             disabled={saving}
                                             className="flex items-center gap-1.5 bg-primary text-text-inverse px-4 h-9 rounded-xl text-sm font-medium hover:bg-primary-hover transition-colors disabled:opacity-50"
                                         >
-                                            <Save className="w-3.5 h-3.5" /> {saving ? 'Saving...' : 'Save'}
+                                            <Save className="w-3.5 h-3.5" /> {saving ? t('saving') : t('save')}
                                         </button>
                                         <button
                                             onClick={() => setEditingId(null)}
                                             className="flex items-center gap-1.5 border border-border text-text-primary px-4 h-9 rounded-xl text-sm font-medium hover:bg-surface-raised transition-colors"
                                         >
-                                            <X className="w-3.5 h-3.5" /> Cancel
+                                            <X className="w-3.5 h-3.5" /> {t('cancel')}
                                         </button>
                                     </div>
                                 </div>
@@ -429,8 +433,16 @@ export default function TeamPage() {
                                     </div>
                                     <div className="flex items-center gap-1 flex-shrink-0">
                                         <button
+                                            onClick={() => router.push(`/admin/settings/users/${u.id}`)}
+                                            className="text-text-secondary hover:text-primary transition-colors p-1"
+                                            title={t('permissions')}
+                                        >
+                                            <Fingerprint className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button
                                             onClick={() => startEdit(u)}
                                             className="text-text-secondary hover:text-primary transition-colors p-1"
+                                            title={t('edit')}
                                         >
                                             <Edit3 className="w-3.5 h-3.5" />
                                         </button>
@@ -438,6 +450,7 @@ export default function TeamPage() {
                                             <button
                                                 onClick={() => handleDelete(u.id)}
                                                 className="text-text-secondary hover:text-error transition-colors p-1"
+                                                title={t('delete')}
                                             >
                                                 <Trash2 className="w-3.5 h-3.5" />
                                             </button>

@@ -4,21 +4,24 @@ import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { getProfile, type Profile } from '@/lib/api'
 import { logout } from '@/app/login/actions'
-import { LayoutDashboard, ClipboardList, FileText, LogOut, ChevronLeft, Users, Building2 } from 'lucide-react'
-
-const NAV_ITEMS = [
-    { href: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { href: '/admin/templates', label: 'Templates', icon: ClipboardList },
-    { href: '/admin/submissions', label: 'Submissions', icon: FileText },
-    { href: '/admin/team', label: 'Team', icon: Users },
-    { href: '/admin/venues', label: 'Venues', icon: Building2 },
-]
+import { LayoutDashboard, ClipboardList, FileText, LogOut, ChevronLeft, Users, Building2, Settings } from 'lucide-react'
+import { useTranslations } from '@/components/I18nProvider'
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
+    const { t } = useTranslations()
     const router = useRouter()
     const pathname = usePathname()
     const [profile, setProfile] = useState<Profile | null>(null)
     const [loading, setLoading] = useState(true)
+
+    const NAV_ITEMS = [
+        { href: '/admin/dashboard', label: t('nav.dashboard' as any), icon: LayoutDashboard },
+        { href: '/admin/templates', label: t('nav.templates' as any), icon: ClipboardList },
+        { href: '/admin/submissions', label: t('nav.submissions' as any), icon: FileText },
+        { href: '/admin/team', label: t('nav.team' as any), icon: Users },
+        { href: '/admin/venues', label: t('nav.venues' as any), icon: Building2 },
+        { href: '/admin/settings/roles', label: t('nav.settings' as any), icon: Settings },
+    ]
 
     useEffect(() => {
         async function checkAccess() {
