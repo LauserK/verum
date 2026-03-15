@@ -2,7 +2,7 @@
 
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { ClipboardCheck, History, BarChart3, Settings } from 'lucide-react'
+import { ClipboardCheck, History, Box, Settings } from 'lucide-react'
 import { useTranslations } from '@/components/I18nProvider'
 
 export default function BottomNav() {
@@ -12,7 +12,7 @@ export default function BottomNav() {
     const tabs = [
         { label: t('audits'), href: '/dashboard', icon: ClipboardCheck },
         { label: t('history'), href: '/history', icon: History },
-        { label: t('reports'), href: '/reports', icon: BarChart3 },
+        { label: t('inventory'), href: '/inventory/utensils/count', icon: Box },
         { label: t('settings'), href: '/settings', icon: Settings },
     ]
 
