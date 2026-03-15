@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import pytz
 from datetime import datetime, timezone
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 
 CARACAS_TZ = pytz.timezone("America/Caracas")
 
@@ -1252,4 +1252,96 @@ async def get_compliance_report(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Permissions & Roles Endpoints ─────────────────────────
+
+@app.get("/permissions")
+async def list_permissions(db=Depends(get_db)):
+    res = db.table("permissions").select("*").execute()
+    return res.data
+
+
+class RoleCreate(BaseModel):
+    org_id: str
+    name: str
+    description: Optional[str] = None
+    is_admin: bool = False
+
+
+@app.get("/roles")
+async def list_roles(org_id: str, db=Depends(get_db)):
+    res = db.table("custom_roles").select("*").eq("org_id", org_id).execute()
+    return res.data
+
+
+@app.post("/roles")
+async def create_role(
+    role: RoleCreate,
+    db=Depends(get_db),
+    _=Depends(require_permission("admin.manage_roles")),
+):
+    res = db.table("custom_roles").insert(role.dict()).execute()
+    return res.data[0]
+
+
+@app.post("/roles/{role_id}/permissions")
+async def assign_role_permissions(
+    role_id: str,
+    permission_ids: List[str],
+    db=Depends(get_db),
+    _=Depends(require_permission("admin.manage_roles")),
+):
+    # delete old permissions
+    db.table("role_permissions").delete().eq("role_id", role_id).execute()
+    # insert new
+    inserts = [{"role_id": role_id, "permission_id": pid} for pid in permission_ids]
+    if inserts:
+        db.table("role_permissions").insert(inserts).execute()
+    return {"status": "success"}
+
+
+class OverrideCreate(BaseModel):
+    permission_key: str
+    granted: bool
+    reason: Optional[str] = None
+
+
+@app.post("/profiles/{profile_id}/overrides")
+async def create_override(
+    profile_id: str,
+    override: OverrideCreate,
+    current_user=Depends(get_current_user),
+    db=Depends(get_db),
+    _=Depends(require_permission("admin.manage_users")),
+):
+    # Fetch perm id
+    perm_res = (
+        db.table("permissions").select("id").eq("key", override.permission_key).execute()
+    )
+    if not perm_res.data:
+        raise HTTPException(404, "Permission not found")
+    perm_id = perm_res.data[0]["id"]
+
+    data = {
+        "profile_id": profile_id,
+        "permission_id": perm_id,
+        "granted": override.granted,
+        "reason": override.reason,
+        "created_by": current_user.id,
+    }
+    res = db.table("profile_permission_overrides").upsert(data).execute()
+    return res.data
+
+
+@app.get("/profiles/{profile_id}/permissions")
+async def get_effective_permissions(profile_id: str, db=Depends(get_db)):
+    # Simple logic to return all effective permissions to frontend
+    perms = db.table("permissions").select("*").execute().data
+    effective = []
+    for p in perms:
+        has_perm = await resolve_permission(profile_id, p["key"], db)
+        if has_perm:
+            effective.append(p["key"])
+    return {"permissions": effective}
 
