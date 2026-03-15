@@ -153,7 +153,8 @@ def read_root():
 async def sync_user(user=Depends(get_current_user)):
     """Syncs the Supabase Auth user into public.profiles with default staff role."""
     try:
-        existing = supabase.table("profiles").select("*").eq("id", user.id).execute()
+        db = get_db()
+        existing = db.table("profiles").select("*").eq("id", user.id).execute()
 
         if existing.data and len(existing.data) > 0:
             return {"id": user.id, "role": existing.data[0].get("role")}
@@ -163,7 +164,7 @@ async def sync_user(user=Depends(get_current_user)):
             "role": "staff",
             "full_name": user.user_metadata.get("full_name", user.email) if user else "",
         }
-        supabase.table("profiles").insert(new_profile).execute()
+        db.table("profiles").insert(new_profile).execute()
 
         return {"id": user.id, "role": "staff"}
     except Exception as e:
@@ -174,7 +175,8 @@ async def sync_user(user=Depends(get_current_user)):
 async def get_profile(user=Depends(get_current_user)):
     """Returns the authenticated user's profile with their venues."""
     try:
-        result = supabase.table("profiles").select("*").eq("id", user.id).execute()
+        db = get_db()
+        result = db.table("profiles").select("*").eq("id", user.id).execute()
         if not result.data or len(result.data) == 0:
             raise HTTPException(status_code=404, detail="Profile not found")
         
@@ -185,7 +187,7 @@ async def get_profile(user=Depends(get_current_user)):
         venues = []
         if org_id:
             venues_res = (
-                supabase.table("venues")
+                db.table("venues")
                 .select("id, name")
                 .eq("org_id", org_id)
                 .execute()
@@ -208,18 +210,19 @@ async def get_profile(user=Depends(get_current_user)):
 
 
 @app.get("/checklists/{venue_id}", response_model=list[ChecklistItem])
-async def get_checklists(venue_id: str, user=Depends(get_current_user)):
+async def get_checklists(venue_id: str, user=Depends(require_permission("checklists.view"))):
     """
     Returns checklist templates for a venue with their computed status
     for the current shift. Handles prerequisite locking.
     """
     try:
+        db = get_db()
         shift = get_current_shift()
         today = datetime.now(CARACAS_TZ).strftime("%Y-%m-%d")
 
         # 1. Get all templates for this venue
         templates_res = (
-            supabase.table("checklist_templates")
+            db.table("checklist_templates")
             .select("*")
             .eq("venue_id", venue_id)
             .execute()
@@ -233,7 +236,7 @@ async def get_checklists(venue_id: str, user=Depends(get_current_user)):
 
         # 2. Get question counts per template
         questions_res = (
-            supabase.table("questions")
+            db.table("questions")
             .select("id, template_id")
             .in_("template_id", template_ids)
             .execute()
@@ -245,7 +248,7 @@ async def get_checklists(venue_id: str, user=Depends(get_current_user)):
 
         # 3. Get today's submissions for the current shift and user
         submissions_res = (
-            supabase.table("submissions")
+            db.table("submissions")
             .select("*")
             .eq("venue_id", venue_id)
             .eq("user_id", user.id)
@@ -264,7 +267,7 @@ async def get_checklists(venue_id: str, user=Depends(get_current_user)):
         
         if submission_ids:
             answers_res = (
-                supabase.table("answers")
+                db.table("answers")
                 .select("submission_id")
                 .in_("submission_id", submission_ids)
                 .execute()
@@ -360,15 +363,16 @@ class HistoryItem(BaseModel):
 
 
 @app.get("/submissions/history", response_model=list[HistoryItem])
-async def get_submission_history(user=Depends(get_current_user)):
+async def get_submission_history(user=Depends(require_permission("checklists.view"))):
     """
     Returns the current user's completed submissions, ordered by most recent.
     Only shows submissions belonging to the authenticated user.
     """
     try:
+        db = get_db()
         # Get completed submissions for this user only
         subs_res = (
-            supabase.table("submissions")
+            db.table("submissions")
             .select("id, template_id, venue_id, shift, status, started_at, completed_at")
             .eq("user_id", user.id)
             .eq("status", "completed")
@@ -387,7 +391,7 @@ async def get_submission_history(user=Depends(get_current_user)):
 
         # Fetch template titles
         tmpl_res = (
-            supabase.table("checklist_templates")
+            db.table("checklist_templates")
             .select("id, title")
             .in_("id", template_ids)
             .execute()
@@ -396,7 +400,7 @@ async def get_submission_history(user=Depends(get_current_user)):
 
         # Fetch question counts per template
         q_res = (
-            supabase.table("questions")
+            db.table("questions")
             .select("id, template_id")
             .in_("template_id", template_ids)
             .execute()
@@ -410,7 +414,7 @@ async def get_submission_history(user=Depends(get_current_user)):
         venue_map: dict[str, str] = {}
         if venue_ids:
             v_res = (
-                supabase.table("venues")
+                db.table("venues")
                 .select("id, name")
                 .in_("id", venue_ids)
                 .execute()
@@ -437,19 +441,20 @@ async def get_submission_history(user=Depends(get_current_user)):
 
 
 @app.post("/submissions")
-async def create_submission(body: CreateSubmissionRequest, user=Depends(get_current_user)):
+async def create_submission(body: CreateSubmissionRequest, user=Depends(require_permission("checklists.execute"))):
     """
     Creates a draft submission when opening a checklist.
     Idempotent: returns existing submission (draft or completed) if one
     already exists for the same user/template/shift/today.
     """
     try:
+        db = get_db()
         shift = get_current_shift()
         today = datetime.now(CARACAS_TZ).strftime("%Y-%m-%d")
 
         # Check for ANY existing submission today (completed or draft)
         existing = (
-            supabase.table("submissions")
+            db.table("submissions")
             .select("*")
             .eq("template_id", body.template_id)
             .eq("user_id", user.id)
@@ -471,7 +476,7 @@ async def create_submission(body: CreateSubmissionRequest, user=Depends(get_curr
             "shift": shift,
             "status": "draft",
         }
-        result = supabase.table("submissions").insert(new_sub).execute()
+        result = db.table("submissions").insert(new_sub).execute()
         return result.data[0]
 
     except Exception as e:
@@ -482,11 +487,13 @@ async def create_submission(body: CreateSubmissionRequest, user=Depends(get_curr
 async def get_submission(submission_id: str, user=Depends(get_current_user)):
     """
     Returns a submission with its questions and any existing answers.
+    Security: Only owner or users with 'checklists.view_all' can see the submission.
     """
     try:
+        db = get_db()
         # Get submission
         sub_res = (
-            supabase.table("submissions")
+            db.table("submissions")
             .select("*")
             .eq("id", submission_id)
             .execute()
@@ -496,9 +503,20 @@ async def get_submission(submission_id: str, user=Depends(get_current_user)):
 
         sub = sub_res.data[0]
 
+        # --- PERMISSION CHECK ---
+        is_owner = sub["user_id"] == user.id
+        if not is_owner:
+            can_view_all = await resolve_permission(user.id, "checklists.view_all", db)
+            if not can_view_all:
+                raise HTTPException(status_code=403, detail="Forbidden: You do not have permission to view this submission")
+        else:
+            can_view = await resolve_permission(user.id, "checklists.view", db)
+            if not can_view:
+                raise HTTPException(status_code=403, detail="Forbidden: Missing checklists.view permission")
+
         # Get template info
         tmpl_res = (
-            supabase.table("checklist_templates")
+            db.table("checklist_templates")
             .select("title")
             .eq("id", sub["template_id"])
             .execute()
@@ -507,7 +525,7 @@ async def get_submission(submission_id: str, user=Depends(get_current_user)):
 
         # Get questions ordered by sort_order
         questions_res = (
-            supabase.table("questions")
+            db.table("questions")
             .select("*")
             .eq("template_id", sub["template_id"])
             .order("sort_order")
@@ -517,7 +535,7 @@ async def get_submission(submission_id: str, user=Depends(get_current_user)):
 
         # Get existing answers
         answers_res = (
-            supabase.table("answers")
+            db.table("answers")
             .select("question_id, value, answered_at")
             .eq("submission_id", submission_id)
             .execute()
@@ -560,18 +578,19 @@ async def get_submission(submission_id: str, user=Depends(get_current_user)):
 async def patch_submission(
     submission_id: str,
     body: PatchSubmissionRequest,
-    user=Depends(get_current_user),
+    user=Depends(require_permission("checklists.execute")),
 ):
     """
     Updates submission fields: status, auditor_notes, auditor_confirmed, answers.
     When status='completed', sets completed_at.
     """
     try:
+        db = get_db()
         # Save answers if provided
         if body.answers:
             now_iso = datetime.now(timezone.utc).isoformat()
             for ans in body.answers:
-                supabase.table("answers").upsert(
+                db.table("answers").upsert(
                     {
                         "submission_id": submission_id,
                         "question_id": ans["question_id"],
@@ -593,7 +612,7 @@ async def patch_submission(
                 update["completed_at"] = datetime.now(timezone.utc).isoformat()
 
         if update:
-            supabase.table("submissions").update(update).eq("id", submission_id).execute()
+            db.table("submissions").update(update).eq("id", submission_id).execute()
 
         return {"ok": True}
 
@@ -609,13 +628,14 @@ class BulkAnswersRequest(BaseModel):
 async def bulk_save_answers(
     submission_id: str,
     body: BulkAnswersRequest,
-    user=Depends(get_current_user),
+    user=Depends(require_permission("checklists.execute")),
 ):
     """
     Bulk upsert answers for auto-save. Updates last_saved_at.
     Sets started_at on first save.
     """
     try:
+        db = get_db()
         # Upsert all answers
         for ans in body.answers:
             upsert_data = {
@@ -626,7 +646,7 @@ async def bulk_save_answers(
             if "answered_at" in ans:
                 upsert_data["answered_at"] = ans["answered_at"]
 
-            supabase.table("answers").upsert(
+            db.table("answers").upsert(
                 upsert_data,
                 on_conflict="submission_id,question_id",
             ).execute()
@@ -635,7 +655,7 @@ async def bulk_save_answers(
         now_iso = datetime.now(timezone.utc).isoformat()
 
         sub_res = (
-            supabase.table("submissions")
+            db.table("submissions")
             .select("started_at")
             .eq("id", submission_id)
             .execute()
@@ -644,23 +664,13 @@ async def bulk_save_answers(
         if sub_res.data and sub_res.data[0].get("started_at") is None:
             update_payload["started_at"] = now_iso
 
-        supabase.table("submissions").update(update_payload).eq("id", submission_id).execute()
+        db.table("submissions").update(update_payload).eq("id", submission_id).execute()
 
         return {"ok": True, "saved": len(body.answers)}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
-
-# ── Admin Helpers ────────────────────────────────────────
-
-async def require_admin(user=Depends(get_current_user)):
-    """Dependency that ensures the user has admin role."""
-    profile_res = supabase.table("profiles").select("role").eq("id", user.id).execute()
-    if not profile_res.data or profile_res.data[0].get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
-    return user
 
 
 # ── Admin Models ─────────────────────────────────────────
@@ -736,34 +746,39 @@ class UpdateShiftRequest(BaseModel):
 # ── Admin CRUD Routes ───────────────────────────────────
 
 @app.get("/admin/organizations")
-async def list_organizations(user=Depends(require_admin)):
-    res = supabase.table("organizations").select("*").execute()
+async def list_organizations(user=Depends(require_permission("admin.manage_venues"))):
+    db = get_db()
+    res = db.table("organizations").select("*").execute()
     return res.data or []
 
 
 @app.post("/admin/organizations")
-async def create_organization(body: CreateOrgRequest, user=Depends(require_admin)):
-    res = supabase.table("organizations").insert({"name": body.name}).execute()
+async def create_organization(body: CreateOrgRequest, user=Depends(require_permission("admin.manage_venues"))):
+    db = get_db()
+    res = db.table("organizations").insert({"name": body.name}).execute()
     return res.data[0]
 
 
 @app.get("/admin/organizations/{org_id}/venues")
-async def list_venues(org_id: str, user=Depends(require_admin)):
-    res = supabase.table("venues").select("*").eq("org_id", org_id).execute()
+async def list_venues(org_id: str, user=Depends(require_permission("admin.manage_venues"))):
+    db = get_db()
+    res = db.table("venues").select("*").eq("org_id", org_id).execute()
     return res.data or []
 
 
 @app.post("/admin/venues")
-async def create_venue(body: CreateVenueRequest, user=Depends(require_admin)):
+async def create_venue(body: CreateVenueRequest, user=Depends(require_permission("admin.manage_venues"))):
+    db = get_db()
     payload = {"org_id": body.org_id, "name": body.name}
     if body.address:
         payload["address"] = body.address
-    res = supabase.table("venues").insert(payload).execute()
+    res = db.table("venues").insert(payload).execute()
     return res.data[0]
 
 
 @app.put("/admin/venues/{venue_id}")
-async def update_venue(venue_id: str, body: UpdateVenueRequest, user=Depends(require_admin)):
+async def update_venue(venue_id: str, body: UpdateVenueRequest, user=Depends(require_permission("admin.manage_venues"))):
+    db = get_db()
     payload = {}
     if body.name is not None:
         payload["name"] = body.name
@@ -771,31 +786,33 @@ async def update_venue(venue_id: str, body: UpdateVenueRequest, user=Depends(req
         payload["address"] = body.address
     if not payload:
         raise HTTPException(400, "No fields to update")
-    res = supabase.table("venues").update(payload).eq("id", venue_id).execute()
+    res = db.table("venues").update(payload).eq("id", venue_id).execute()
     return res.data[0] if res.data else {}
 
 
 @app.delete("/admin/venues/{venue_id}")
-async def delete_venue(venue_id: str, user=Depends(require_admin)):
-    supabase.table("venues").delete().eq("id", venue_id).execute()
+async def delete_venue(venue_id: str, user=Depends(require_permission("admin.manage_venues"))):
+    db = get_db()
+    db.table("venues").delete().eq("id", venue_id).execute()
     return {"ok": True}
 
 
 # ── Admin Users CRUD ────────────────────────────────────
 
 @app.get("/admin/users")
-async def list_users(user=Depends(require_admin)):
+async def list_users(user=Depends(require_permission("admin.manage_users"))):
     """List all profiles in the admin's organization."""
-    admin_profile = supabase.table("profiles").select("organization_id").eq("id", user.id).single().execute()
+    db = get_db()
+    admin_profile = db.table("profiles").select("organization_id").eq("id", user.id).single().execute()
     org_id = admin_profile.data.get("organization_id")
     if not org_id:
         return []
-    res = supabase.table("profiles").select("id, full_name, role, organization_id, venue_id, shift_id").eq("organization_id", org_id).execute()
+    res = db.table("profiles").select("id, full_name, role, organization_id, venue_id, shift_id").eq("organization_id", org_id).execute()
     # Get emails from auth users
     profiles = res.data or []
     for p in profiles:
         try:
-            auth_user = supabase.auth.admin.get_user_by_id(p["id"])
+            auth_user = db.auth.admin.get_user_by_id(p["id"])
             p["email"] = auth_user.user.email if auth_user.user else None
         except Exception:
             p["email"] = None
@@ -803,10 +820,11 @@ async def list_users(user=Depends(require_admin)):
 
 
 @app.post("/admin/users")
-async def create_user(body: CreateUserRequest, user=Depends(require_admin)):
+async def create_user(body: CreateUserRequest, user=Depends(require_permission("admin.manage_users"))):
     """Create a new user via Supabase Auth admin API + profile."""
     try:
-        auth_res = supabase.auth.admin.create_user({
+        db = get_db()
+        auth_res = db.auth.admin.create_user({
             "email": body.email,
             "password": body.password,
             "email_confirm": True,
@@ -826,7 +844,7 @@ async def create_user(body: CreateUserRequest, user=Depends(require_admin)):
             profile_data["venue_id"] = body.venue_id
         if body.shift_id:
             profile_data["shift_id"] = body.shift_id
-        supabase.table("profiles").upsert(profile_data).execute()
+        db.table("profiles").upsert(profile_data).execute()
 
         return {"id": new_user.id, "email": body.email, "full_name": body.full_name, "role": body.role, "venue_id": body.venue_id, "shift_id": body.shift_id, "organization_id": body.organization_id}
     except HTTPException:
@@ -836,7 +854,8 @@ async def create_user(body: CreateUserRequest, user=Depends(require_admin)):
 
 
 @app.put("/admin/users/{user_id}")
-async def update_user(user_id: str, body: UpdateUserRequest, user=Depends(require_admin)):
+async def update_user(user_id: str, body: UpdateUserRequest, user=Depends(require_permission("admin.manage_users"))):
+    db = get_db()
     payload = {}
     if body.full_name is not None:
         payload["full_name"] = body.full_name
@@ -848,28 +867,30 @@ async def update_user(user_id: str, body: UpdateUserRequest, user=Depends(requir
         payload["shift_id"] = body.shift_id
     if not payload:
         raise HTTPException(400, "No fields to update")
-    res = supabase.table("profiles").update(payload).eq("id", user_id).execute()
+    res = db.table("profiles").update(payload).eq("id", user_id).execute()
     return res.data[0] if res.data else {}
 
 
 @app.delete("/admin/users/{user_id}")
-async def delete_user(user_id: str, user=Depends(require_admin)):
+async def delete_user(user_id: str, user=Depends(require_permission("admin.manage_users"))):
     """Delete auth user (cascades to profile)."""
     try:
-        supabase.auth.admin.delete_user(user_id)
+        db = get_db()
+        db.auth.admin.delete_user(user_id)
     except Exception as e:
         raise HTTPException(400, str(e))
     return {"ok": True}
 
 
 @app.patch("/admin/users/{user_id}/password")
-async def change_user_password(user_id: str, body: dict, user=Depends(require_admin)):
+async def change_user_password(user_id: str, body: dict, user=Depends(require_permission("admin.manage_users"))):
     """Change a user's password via Supabase Auth admin API."""
+    db = get_db()
     new_password = body.get("password")
     if not new_password or len(new_password) < 6:
         raise HTTPException(400, "Password must be at least 6 characters")
     try:
-        supabase.auth.admin.update_user_by_id(user_id, {"password": new_password})
+        db.auth.admin.update_user_by_id(user_id, {"password": new_password})
     except Exception as e:
         raise HTTPException(400, str(e))
     return {"ok": True}
@@ -878,13 +899,15 @@ async def change_user_password(user_id: str, body: dict, user=Depends(require_ad
 # ── Admin Shifts CRUD ───────────────────────────────────
 
 @app.get("/admin/venues/{venue_id}/shifts")
-async def list_shifts(venue_id: str, user=Depends(require_admin)):
-    res = supabase.table("shifts").select("*").eq("venue_id", venue_id).order("sort_order").execute()
+async def list_shifts(venue_id: str, user=Depends(require_permission("admin.manage_venues"))):
+    db = get_db()
+    res = db.table("shifts").select("*").eq("venue_id", venue_id).order("sort_order").execute()
     return res.data or []
 
 
 @app.post("/admin/shifts")
-async def create_shift(body: CreateShiftRequest, user=Depends(require_admin)):
+async def create_shift(body: CreateShiftRequest, user=Depends(require_permission("admin.manage_venues"))):
+    db = get_db()
     payload = {
         "venue_id": body.venue_id,
         "name": body.name,
@@ -892,12 +915,13 @@ async def create_shift(body: CreateShiftRequest, user=Depends(require_admin)):
         "end_time": body.end_time,
         "sort_order": body.sort_order,
     }
-    res = supabase.table("shifts").insert(payload).execute()
+    res = db.table("shifts").insert(payload).execute()
     return res.data[0]
 
 
 @app.put("/admin/shifts/{shift_id}")
-async def update_shift(shift_id: str, body: UpdateShiftRequest, user=Depends(require_admin)):
+async def update_shift(shift_id: str, body: UpdateShiftRequest, user=Depends(require_permission("admin.manage_venues"))):
+    db = get_db()
     payload = {}
     if body.name is not None:
         payload["name"] = body.name
@@ -909,28 +933,31 @@ async def update_shift(shift_id: str, body: UpdateShiftRequest, user=Depends(req
         payload["sort_order"] = body.sort_order
     if not payload:
         raise HTTPException(400, "No fields to update")
-    res = supabase.table("shifts").update(payload).eq("id", shift_id).execute()
+    res = db.table("shifts").update(payload).eq("id", shift_id).execute()
     return res.data[0] if res.data else {}
 
 
 @app.delete("/admin/shifts/{shift_id}")
-async def delete_shift(shift_id: str, user=Depends(require_admin)):
-    supabase.table("shifts").delete().eq("id", shift_id).execute()
+async def delete_shift(shift_id: str, user=Depends(require_permission("admin.manage_venues"))):
+    db = get_db()
+    db.table("shifts").delete().eq("id", shift_id).execute()
     return {"ok": True}
 
 
 # ── Public: Shifts for a venue (staff) ──────────────────
 
 @app.get("/venues/{venue_id}/shifts")
-async def get_venue_shifts(venue_id: str, user=Depends(get_current_user)):
-    res = supabase.table("shifts").select("*").eq("venue_id", venue_id).order("sort_order").execute()
+async def get_venue_shifts(venue_id: str, user=Depends(require_permission("checklists.view"))):
+    db = get_db()
+    res = db.table("shifts").select("*").eq("venue_id", venue_id).order("sort_order").execute()
     return res.data or []
 
 
 @app.get("/admin/venues/{venue_id}/templates")
-async def list_templates(venue_id: str, user=Depends(require_admin)):
+async def list_templates(venue_id: str, user=Depends(require_permission("checklists.manage_templates"))):
+    db = get_db()
     res = (
-        supabase.table("checklist_templates")
+        db.table("checklist_templates")
         .select("*")
         .eq("venue_id", venue_id)
         .execute()
@@ -939,7 +966,8 @@ async def list_templates(venue_id: str, user=Depends(require_admin)):
 
 
 @app.post("/admin/templates")
-async def create_template(body: CreateTemplateRequest, user=Depends(require_admin)):
+async def create_template(body: CreateTemplateRequest, user=Depends(require_permission("checklists.manage_templates"))):
+    db = get_db()
     payload = {
         "venue_id": body.venue_id,
         "title": body.title,
@@ -959,12 +987,13 @@ async def create_template(body: CreateTemplateRequest, user=Depends(require_admi
     if body.prerequisite_template_id:
         payload["prerequisite_template_id"] = body.prerequisite_template_id
 
-    res = supabase.table("checklist_templates").insert(payload).execute()
+    res = db.table("checklist_templates").insert(payload).execute()
     return res.data[0]
 
 
 @app.put("/admin/templates/{template_id}")
-async def update_template(template_id: str, body: CreateTemplateRequest, user=Depends(require_admin)):
+async def update_template(template_id: str, body: CreateTemplateRequest, user=Depends(require_permission("checklists.manage_templates"))):
+    db = get_db()
     payload = {
         "venue_id": body.venue_id,
         "title": body.title,
@@ -984,20 +1013,22 @@ async def update_template(template_id: str, body: CreateTemplateRequest, user=De
     if body.prerequisite_template_id is not None:
         payload["prerequisite_template_id"] = body.prerequisite_template_id
 
-    res = supabase.table("checklist_templates").update(payload).eq("id", template_id).execute()
+    res = db.table("checklist_templates").update(payload).eq("id", template_id).execute()
     return res.data[0] if res.data else {"ok": True}
 
 
 @app.delete("/admin/templates/{template_id}")
-async def delete_template(template_id: str, user=Depends(require_admin)):
-    supabase.table("checklist_templates").delete().eq("id", template_id).execute()
+async def delete_template(template_id: str, user=Depends(require_permission("checklists.manage_templates"))):
+    db = get_db()
+    db.table("checklist_templates").delete().eq("id", template_id).execute()
     return {"ok": True}
 
 
 @app.get("/admin/templates/{template_id}/questions")
-async def list_questions(template_id: str, user=Depends(require_admin)):
+async def list_questions(template_id: str, user=Depends(require_permission("checklists.manage_templates"))):
+    db = get_db()
     res = (
-        supabase.table("questions")
+        db.table("questions")
         .select("*")
         .eq("template_id", template_id)
         .order("sort_order")
@@ -1007,7 +1038,8 @@ async def list_questions(template_id: str, user=Depends(require_admin)):
 
 
 @app.post("/admin/questions")
-async def create_question(body: CreateQuestionRequest, user=Depends(require_admin)):
+async def create_question(body: CreateQuestionRequest, user=Depends(require_permission("checklists.manage_templates"))):
+    db = get_db()
     payload = {
         "template_id": body.template_id,
         "label": body.label,
@@ -1017,12 +1049,13 @@ async def create_question(body: CreateQuestionRequest, user=Depends(require_admi
     }
     if body.config:
         payload["config"] = body.config
-    res = supabase.table("questions").insert(payload).execute()
+    res = db.table("questions").insert(payload).execute()
     return res.data[0]
 
 
 @app.put("/admin/questions/{question_id}")
-async def update_question(question_id: str, body: CreateQuestionRequest, user=Depends(require_admin)):
+async def update_question(question_id: str, body: CreateQuestionRequest, user=Depends(require_permission("checklists.manage_templates"))):
+    db = get_db()
     payload = {
         "label": body.label,
         "type": body.type,
@@ -1031,13 +1064,14 @@ async def update_question(question_id: str, body: CreateQuestionRequest, user=De
     }
     if body.config is not None:
         payload["config"] = body.config
-    res = supabase.table("questions").update(payload).eq("id", question_id).execute()
+    res = db.table("questions").update(payload).eq("id", question_id).execute()
     return res.data[0] if res.data else {"ok": True}
 
 
 @app.delete("/admin/questions/{question_id}")
-async def delete_question(question_id: str, user=Depends(require_admin)):
-    supabase.table("questions").delete().eq("id", question_id).execute()
+async def delete_question(question_id: str, user=Depends(require_permission("checklists.manage_templates"))):
+    db = get_db()
+    db.table("questions").delete().eq("id", question_id).execute()
     return {"ok": True}
 
 
@@ -1049,10 +1083,11 @@ async def list_submissions(
     status: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
-    user=Depends(require_admin),
+    user=Depends(require_permission("admin.view_reports")),
 ):
     """Lists submissions with optional filters."""
-    query = supabase.table("submissions").select(
+    db = get_db()
+    query = db.table("submissions").select(
         "*, profiles(full_name), checklist_templates(title)"
     )
     if venue_id:
@@ -1076,7 +1111,7 @@ async def get_compliance_report(
     venue_id: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
-    user=Depends(require_admin),
+    user=Depends(require_permission("admin.view_reports")),
 ):
     """
     Returns compliance metrics:
@@ -1086,12 +1121,13 @@ async def get_compliance_report(
     - avg_execution_minutes
     """
     try:
+        db = get_db()
         today = datetime.now(CARACAS_TZ).strftime("%Y-%m-%d")
         d_from = date_from or today
         d_to = date_to or today
 
         # Get templates
-        tmpl_query = supabase.table("checklist_templates").select("id, venue_id, due_time, due_date, frequency, schedule")
+        tmpl_query = db.table("checklist_templates").select("id, venue_id, due_time, due_date, frequency, schedule")
         if venue_id:
             tmpl_query = tmpl_query.eq("venue_id", venue_id)
         templates = (tmpl_query.execute()).data or []
@@ -1108,7 +1144,7 @@ async def get_compliance_report(
 
         # Get submissions in date range (using Caracas offset -04:00)
         sub_query = (
-            supabase.table("submissions")
+            db.table("submissions")
             .select("id, template_id, status, started_at, completed_at, created_at, shift")
             .in_("template_id", template_ids)
             .gte("created_at", f"{d_from}T00:00:00-04:00")
@@ -1157,7 +1193,7 @@ async def get_compliance_report(
         # Get shift counts per venue
         shifts_per_venue = {}
         if venue_ids:
-            shifts_res = supabase.table("shifts").select("venue_id").in_("venue_id", venue_ids).execute()
+            shifts_res = db.table("shifts").select("venue_id").in_("venue_id", venue_ids).execute()
             for s in (shifts_res.data or []):
                 vid = s["venue_id"]
                 shifts_per_venue[vid] = shifts_per_venue.get(vid, 0) + 1
@@ -1221,7 +1257,7 @@ async def get_compliance_report(
 
         if sub_ids:
             issues_res = (
-                supabase.table("answers")
+                db.table("answers")
                 .select("is_critical_failure, is_non_critical_issue")
                 .in_("submission_id", sub_ids)
                 .execute()
@@ -1253,7 +1289,7 @@ async def get_compliance_report(
 # ── Permissions & Roles Endpoints ─────────────────────────
 
 @app.get("/permissions")
-async def list_permissions(db=Depends(get_db)):
+async def list_permissions(db=Depends(get_db), _=Depends(require_permission("admin.manage_users"))):
     res = db.table("permissions").select("*").execute()
     return res.data
 
@@ -1266,7 +1302,7 @@ class RoleCreate(BaseModel):
 
 
 @app.get("/roles")
-async def list_roles(org_id: str, db=Depends(get_db)):
+async def list_roles(org_id: str, db=Depends(get_db), _=Depends(require_permission("admin.manage_users"))):
     res = db.table("custom_roles").select("*").eq("org_id", org_id).execute()
     return res.data
 
