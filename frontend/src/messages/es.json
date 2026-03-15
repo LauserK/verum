@@ -105,5 +105,23 @@
     "version": "Versión",
     "user": "Usuario",
     "role": "Rol"
-  }
-}
+    },
+    "admin": {
+    "roles": {
+      "title": "Gestión de Roles",
+      "rolesSubtitle": "Roles",
+      "permissionsSubtitle": "Permisos",
+      "createRole": "+ Crear rol",
+      "selectRoleToEdit": "Selecciona un rol para editar sus permisos"
+    },
+    "users": {
+      "profileTitle": "Perfil de Usuario",
+      "assignedRole": "Rol Asignado",
+      "assignedRoleFor": "Rol Asignado para {userId}",
+      "selectRolePlaceholder": "Seleccionar rol...",
+      "individualOverrides": "Overrides Individuales",
+      "overridesDesc": "Los overrides sobrescriben los permisos del rol asignado.",
+      "addOverride": "Añadir Override"
+    }
+    }
+    }
