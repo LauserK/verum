@@ -28,6 +28,53 @@
     "reports": "Reportes"
   },
   "inventory": {
+    "utensils": {
+      "title": "Catálogo de Utensilios",
+      "listTab": "Lista de Utensilios",
+      "categoriesTab": "Categorías de Utensilios",
+      "newItem": "Nuevo Ítem",
+      "newCategory": "Nueva Categoría",
+      "createTitle": "Registrar Nuevo Ítem",
+      "editTitle": "Editar Ítem",
+      "nameLabel": "Nombre del Ítem *",
+      "namePlaceholder": "Ej. Platos Llanos 24cm",
+      "unitLabel": "Unidad de Medida *",
+      "unitPlaceholder": "Ej. Unidades, Docenas, Cajas",
+      "minStockLabel": "Stock Mínimo (Alerta)",
+      "categoryLabel": "Categoría *",
+      "selectCategory": "Seleccionar categoría",
+      "statusLabel": "Activo",
+      "cancel": "Cancelar",
+      "saving": "Guardando...",
+      "save": "Guardar Cambios",
+      "create": "Guardar Ítem",
+      "noItemsTitle": "Sin utensilios registrados",
+      "noItemsDesc": "Registra el catálogo de loza, cristalería y otros suministros para realizar conteos.",
+      "createFirst": "Registrar mi primer ítem",
+      "table": {
+        "name": "Nombre",
+        "category": "Categoría",
+        "unit": "Unidad",
+        "minStock": "Min. Stock",
+        "status": "Estado",
+        "actions": "Acciones"
+      },
+      "status": {
+        "active": "Activo",
+        "inactive": "Inactivo"
+      },
+      "categories": {
+        "title": "Categorías de Utensilios",
+        "newCategory": "Nueva Categoría",
+        "createTitle": "Crear Categoría",
+        "editTitle": "Editar Categoría",
+        "noCategories": "No hay categorías de utensilios registradas.",
+        "errors": {
+          "required": "El nombre de la categoría es obligatorio.",
+          "generic": "Error al crear la categoría"
+        }
+      }
+    },
     "assets": {
       "title": "Activos Fijos",
       "listTab": "Lista de Activos",
@@ -35,6 +82,7 @@
       "newAsset": "Nuevo Activo",
       "cancel": "Cancelar",
       "createTitle": "Registrar Nuevo Activo",
+      "editTitle": "Editar Activo",
       "nameLabel": "Nombre *",
       "namePlaceholder": "Ej. Nevera Principal",
       "categoryLabel": "Categoría *",
@@ -48,6 +96,7 @@
       "modelLabel": "Modelo (Opcional)",
       "modelPlaceholder": "Ej. RF28R7201",
       "saving": "Guardando...",
+      "save": "Guardar Cambios",
       "saveAndQR": "Guardar y Generar QR",
       "noAssetsTitle": "Sin activos registrados",
       "noAssetsDesc": "Comienza registrando tus equipos y maquinarias para generarles un código QR.",
@@ -74,6 +123,7 @@
       "subtitle": "Configura los tipos de equipos y sus intervalos de revisión.",
       "newCategory": "Nueva Categoría",
       "createTitle": "Crear Categoría",
+      "editTitle": "Editar Categoría",
       "nameLabel": "Nombre de la Categoría *",
       "namePlaceholder": "Ej. Equipos de Cocción",
       "intervalLabel": "Días entre Revisiones *",
@@ -221,4 +271,4 @@
       "delete": "Eliminar"
     }
     }
-    }
+}

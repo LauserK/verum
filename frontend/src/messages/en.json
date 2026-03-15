@@ -28,6 +28,53 @@
     "reports": "Reports"
   },
   "inventory": {
+    "utensils": {
+      "title": "Utensil Catalog",
+      "listTab": "Utensil List",
+      "categoriesTab": "Utensil Categories",
+      "newItem": "New Item",
+      "newCategory": "New Category",
+      "createTitle": "Register New Item",
+      "editTitle": "Edit Item",
+      "nameLabel": "Item Name *",
+      "namePlaceholder": "E.g. Flat Plates 24cm",
+      "categoryLabel": "Category *",
+      "selectCategory": "Select category",
+      "unitLabel": "Unit of Measure *",
+      "unitPlaceholder": "E.g. Units, Dozens, Boxes",
+      "minStockLabel": "Minimum Stock (Alert)",
+      "statusLabel": "Active",
+      "cancel": "Cancel",
+      "saving": "Saving...",
+      "save": "Save Changes",
+      "create": "Save Item",
+      "noItemsTitle": "No utensils registered",
+      "noItemsDesc": "Register the catalog of tableware, glassware and other supplies to perform counts.",
+      "createFirst": "Register my first item",
+      "table": {
+        "name": "Name",
+        "category": "Category",
+        "unit": "Unit",
+        "minStock": "Min. Stock",
+        "status": "Status",
+        "actions": "Actions"
+      },
+      "status": {
+        "active": "Active",
+        "inactive": "Inactive"
+      },
+      "categories": {
+        "title": "Utensil Categories",
+        "newCategory": "New Category",
+        "createTitle": "Create Category",
+        "editTitle": "Edit Category",
+        "noCategories": "No utensil categories registered.",
+        "errors": {
+          "required": "Category name is required.",
+          "generic": "Error creating category"
+        }
+      }
+    },
     "assets": {
       "title": "Fixed Assets",
       "listTab": "Asset List",
@@ -35,6 +82,7 @@
       "newAsset": "New Asset",
       "cancel": "Cancel",
       "createTitle": "Register New Asset",
+      "editTitle": "Edit Asset",
       "nameLabel": "Name *",
       "namePlaceholder": "E.g. Main Refrigerator",
       "categoryLabel": "Category *",
@@ -48,6 +96,7 @@
       "modelLabel": "Model (Optional)",
       "modelPlaceholder": "E.g. RF28R7201",
       "saving": "Saving...",
+      "save": "Save Changes",
       "saveAndQR": "Save and Generate QR",
       "noAssetsTitle": "No assets registered",
       "noAssetsDesc": "Start by registering your equipment and machinery to generate a QR code for them.",
@@ -74,6 +123,7 @@
       "subtitle": "Configure equipment types and their review intervals.",
       "newCategory": "New Category",
       "createTitle": "Create Category",
+      "editTitle": "Edit Category",
       "nameLabel": "Category Name *",
       "namePlaceholder": "E.g. Cooking Equipment",
       "intervalLabel": "Days between Reviews *",
@@ -221,4 +271,4 @@
       "delete": "Delete"
     }
     }
-    }
+}

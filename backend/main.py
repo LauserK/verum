@@ -1551,6 +1551,79 @@ async def review_asset(asset_id: str, body: AssetReviewRequest, current_user=Dep
     return {"ok": True, "asset": res.data[0] if res.data else None}
 
 
+# ── Inventory: Utensils Models (M10) ──────────────────────
+
+class CreateUtensilCategoryRequest(BaseModel):
+    org_id: str
+    name: str
+    description: Optional[str] = None
+
+class UpdateUtensilCategoryRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+
+class CreateUtensilRequest(BaseModel):
+    org_id: str
+    category_id: Optional[str] = None
+    name: str
+    unit: str = 'unidades'
+    min_stock: int = 0
+    is_active: bool = True
+
+class UpdateUtensilRequest(BaseModel):
+    category_id: Optional[str] = None
+    name: Optional[str] = None
+    unit: Optional[str] = None
+    min_stock: Optional[int] = None
+    is_active: Optional[bool] = None
+
+# ── Inventory: Utensils Endpoints (M10) ───────────────────
+
+@app.get("/utensil-categories")
+async def list_utensil_categories(org_id: str, db=Depends(get_db)):
+    res = db.table("utensil_categories").select("*").eq("org_id", org_id).execute()
+    return res.data or []
+
+@app.post("/utensil-categories")
+async def create_utensil_category(body: CreateUtensilCategoryRequest, db=Depends(get_db), _=Depends(require_permission("inventory_utensils.manage_items" if False else "inventory_utensils.create"))): # Using create as generic admin fallback for now
+    res = db.table("utensil_categories").insert(body.dict(exclude_none=True)).execute()
+    return res.data[0]
+
+@app.patch("/utensil-categories/{category_id}")
+async def update_utensil_category(category_id: str, body: UpdateUtensilCategoryRequest, db=Depends(get_db), _=Depends(require_permission("inventory_utensils.manage_items" if False else "inventory_utensils.edit"))):
+    payload = body.dict(exclude_none=True)
+    if not payload:
+        raise HTTPException(400, "No fields to update")
+    res = db.table("utensil_categories").update(payload).eq("id", category_id).execute()
+    return res.data[0] if res.data else {}
+
+@app.get("/utensils")
+async def list_utensils(org_id: Optional[str] = None, category_id: Optional[str] = None, include_archived: bool = False, db=Depends(get_db)):
+    query = db.table("utensils").select("*, utensil_categories(name)")
+    if org_id:
+        query = query.eq("org_id", org_id)
+    if not include_archived:
+        query = query.eq("is_active", True)
+    if category_id:
+        query = query.eq("category_id", category_id)
+        
+    res = query.execute()
+    return res.data or []
+
+@app.post("/utensils")
+async def create_utensil(body: CreateUtensilRequest, db=Depends(get_db), _=Depends(require_permission("inventory_utensils.manage_items" if False else "inventory_utensils.create"))):
+    payload = body.dict(exclude_none=True)
+    res = db.table("utensils").insert(payload).execute()
+    return res.data[0]
+
+@app.patch("/utensils/{utensil_id}")
+async def update_utensil(utensil_id: str, body: UpdateUtensilRequest, db=Depends(get_db), _=Depends(require_permission("inventory_utensils.manage_items" if False else "inventory_utensils.edit"))):
+    payload = body.dict(exclude_none=True)
+    if not payload:
+        raise HTTPException(400, "No fields to update")
+    res = db.table("utensils").update(payload).eq("id", utensil_id).execute()
+    return res.data[0] if res.data else {}
+
 # ── Inventory: Repair Tickets Models (M9) ─────────────────
 
 class CreateTicketRequest(BaseModel):

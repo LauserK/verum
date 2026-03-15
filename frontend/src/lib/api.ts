@@ -293,6 +293,37 @@ export const adminApi = {
 
     deleteShift: (id: string): Promise<{ ok: boolean }> =>
         fetchWithAuth(`/admin/shifts/${id}`, { method: 'DELETE' }),
+
+    createAsset: (data: { org_id: string; venue_id: string; category_id: string; name: string; serial?: string; brand?: string; model?: string }): Promise<Asset> =>
+        fetchWithAuth('/assets', { method: 'POST', body: JSON.stringify(data) }),
+
+    updateAsset: (id: string, data: Partial<Asset>): Promise<Asset> =>
+        fetchWithAuth(`/assets/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+
+    // Utensils
+    getUtensilCategories: (orgId: string): Promise<UtensilCategory[]> =>
+        fetchWithAuth(`/utensil-categories?org_id=${orgId}`),
+
+    createUtensilCategory: (data: { org_id: string; name: string; description?: string }): Promise<UtensilCategory> =>
+        fetchWithAuth('/utensil-categories', { method: 'POST', body: JSON.stringify(data) }),
+
+    updateUtensilCategory: (id: string, data: Partial<UtensilCategory>): Promise<UtensilCategory> =>
+        fetchWithAuth(`/utensil-categories/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+
+    getUtensils: (filters?: { org_id?: string; category_id?: string; include_archived?: boolean }): Promise<Utensil[]> => {
+        const params = new URLSearchParams()
+        if (filters?.org_id) params.set('org_id', filters.org_id)
+        if (filters?.category_id) params.set('category_id', filters.category_id)
+        if (filters?.include_archived) params.set('include_archived', 'true')
+        const qs = params.toString()
+        return fetchWithAuth(`/utensils${qs ? `?${qs}` : ''}`)
+    },
+
+    createUtensil: (data: { org_id: string; category_id: string; name: string; unit?: string; min_stock?: number }): Promise<Utensil> =>
+        fetchWithAuth('/utensils', { method: 'POST', body: JSON.stringify(data) }),
+
+    updateUtensil: (id: string, data: Partial<Utensil>): Promise<Utensil> =>
+        fetchWithAuth(`/utensils/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
 }
 
 // Public venue shifts (for staff)
@@ -317,4 +348,23 @@ export interface Shift {
     start_time: string
     end_time: string
     sort_order: number
+}
+
+export interface UtensilCategory {
+    id: string
+    org_id: string
+    name: string
+    description?: string | null
+}
+
+export interface Utensil {
+    id: string
+    org_id: string
+    category_id: string | null
+    name: string
+    unit: string
+    min_stock: number
+    is_active: boolean
+    created_at: string
+    utensil_categories?: { name: string }
 }
