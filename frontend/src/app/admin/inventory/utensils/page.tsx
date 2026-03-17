@@ -204,19 +204,22 @@ export default function UtensilsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-text-primary mb-1">{t('inventory.utensils.title')}</h1>
-          <div className="flex items-center gap-6 mt-2">
-            <Link href="/admin/inventory/assets" className="text-sm font-medium text-text-secondary hover:text-text-primary pb-1 border-b-2 border-transparent hover:border-border transition-colors">
+          <div className="flex items-center gap-6 mt-2 overflow-x-auto">
+            <Link href="/admin/inventory/assets" className="text-sm font-medium text-text-secondary hover:text-text-primary pb-1 border-b-2 border-transparent hover:border-border transition-colors whitespace-nowrap">
               {t('inventory.assets.listTab')}
             </Link>
-            <Link href="/admin/inventory/categories" className="text-sm font-medium text-text-secondary hover:text-text-primary pb-1 border-b-2 border-transparent hover:border-border transition-colors">
+            <Link href="/admin/inventory/categories" className="text-sm font-medium text-text-secondary hover:text-text-primary pb-1 border-b-2 border-transparent hover:border-border transition-colors whitespace-nowrap">
               {t('inventory.assets.categoriesTab')}
             </Link>
-            <span className="text-sm font-semibold text-primary border-b-2 border-primary pb-1">{t('inventory.utensils.listTab')}</span>
-            <Link href="/admin/inventory/utensils/categories" className="text-sm font-medium text-text-secondary hover:text-text-primary pb-1 border-b-2 border-transparent hover:border-border transition-colors">
+            <span className="text-sm font-semibold text-primary border-b-2 border-primary pb-1 whitespace-nowrap">{t('inventory.utensils.listTab')}</span>
+            <Link href="/admin/inventory/utensils/categories" className="text-sm font-medium text-text-secondary hover:text-text-primary pb-1 border-b-2 border-transparent hover:border-border transition-colors whitespace-nowrap">
               {t('inventory.utensils.categoriesTab')}
             </Link>
-            <Link href="/admin/inventory/utensils/counts" className="text-sm font-medium text-text-secondary hover:text-text-primary pb-1 border-b-2 border-transparent hover:border-border transition-colors">
+            <Link href="/admin/inventory/utensils/counts" className="text-sm font-medium text-text-secondary hover:text-text-primary pb-1 border-b-2 border-transparent hover:border-border transition-colors whitespace-nowrap">
               Historial
+            </Link>
+            <Link href="/admin/inventory/utensils/schedules" className="text-sm font-medium text-text-secondary hover:text-text-primary pb-1 border-b-2 border-transparent hover:border-border transition-colors whitespace-nowrap">
+              Programación
             </Link>
           </div>
         </div>

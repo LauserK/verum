@@ -201,8 +201,25 @@ export interface AdminSubmission {
     checklist_templates: { title: string } | null
 }
 
+export interface CountSchedule {
+    id: string
+    org_id: string
+    venue_id: string
+    assigned_to: string | null
+    name: string
+    frequency: string
+    scope: string
+    category_id: string | null
+    next_due: string
+    last_completed_at: string | null
+    is_active: boolean
+    created_at: string
+    item_ids?: string[]
+}
+
 // Admin CRUD
 export const adminApi = {
+
     getOrganizations: (): Promise<Organization[]> =>
         fetchWithAuth('/admin/organizations'),
 
@@ -337,7 +354,8 @@ export const adminApi = {
 
     createUtensilCount: (data: {
         venue_id: string;
-        items: Array<{ utensil_id: string; count: number }>
+        items: Array<{ utensil_id: string; count: number }>;
+        schedule_id?: string;
     }): Promise<{ id: string; status: string }> =>
         fetchWithAuth('/utensil-counts', { method: 'POST', body: JSON.stringify(data) }),
 
@@ -349,6 +367,20 @@ export const adminApi = {
 
     confirmUtensilCount: (countId: string, items: Array<{ utensil_id: string; confirmed_count: number }>): Promise<any> =>
         fetchWithAuth(`/utensil-counts/${countId}/confirm`, { method: 'PATCH', body: JSON.stringify({ items }) }),
+
+    // Count Schedules
+    getSchedules: (venueId?: string): Promise<CountSchedule[]> =>
+        fetchWithAuth(`/count-schedules${venueId ? `?venue_id=${venueId}` : ''}`),
+
+    createSchedule: (data: any): Promise<CountSchedule> =>
+        fetchWithAuth('/count-schedules', { method: 'POST', body: JSON.stringify(data) }),
+
+    updateSchedule: (id: string, data: any): Promise<any> =>
+        fetchWithAuth(`/count-schedules/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+}
+
+export function getDueSchedules(venueId: string): Promise<CountSchedule[]> {
+    return fetchWithAuth(`/count-schedules/due?venue_id=${venueId}`)
 }
 
 // Public venue shifts (for staff)

@@ -137,6 +137,18 @@ export default function UtensilAuditDetailPage({ params }: { params: Promise<{ i
         </div>
       </div>
 
+      {isConfirmed && (
+        <div className="p-4 bg-success/10 border border-success/20 rounded-2xl flex items-center gap-3 text-success">
+          <Check className="w-5 h-5 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-bold">Este inventario ya ha sido auditado y cerrado.</p>
+            <p className="text-xs mt-0.5 opacity-90">
+              Confirmado por <strong>{countData.confirmed_by_user || 'Supervisor'}</strong> el {format(new Date(countData.confirmed_at), "dd MMM, HH:mm'h'", { locale: es })}.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Audit Table */}
       <div className="bg-surface border border-border rounded-2xl overflow-hidden shadow-sm">
         <table className="w-full text-left text-sm">
@@ -210,13 +222,7 @@ export default function UtensilAuditDetailPage({ params }: { params: Promise<{ i
           </div>
         </div>
       )}
-
-      {isConfirmed && (
-        <div className="p-4 bg-success/10 border border-success/20 rounded-2xl flex items-center gap-3 text-success">
-          <Check className="w-5 h-5" />
-          <p className="text-sm font-bold">Este inventario ya ha sido auditado y cerrado.</p>
-        </div>
-      )}
     </div>
   )
 }
+

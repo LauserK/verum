@@ -12,7 +12,7 @@ export default function BottomNav() {
     const tabs = [
         { label: t('audits'), href: '/dashboard', icon: ClipboardCheck },
         { label: t('history'), href: '/history', icon: History },
-        { label: t('inventory'), href: '/inventory/utensils/count', icon: Box },
+        { label: t('inventory'), href: '/inventory/utensils', icon: Box },
         { label: t('settings'), href: '/settings', icon: Settings },
     ]
 

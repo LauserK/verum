@@ -46,7 +46,13 @@ export default function UtensilCountsPage() {
             <Link href="/admin/inventory/utensils" className="text-sm font-medium text-text-secondary hover:text-text-primary pb-1 border-b-2 border-transparent hover:border-border transition-colors">
               {t('inventory.utensils.listTab')}
             </Link>
+            <Link href="/admin/inventory/utensils/categories" className="text-sm font-medium text-text-secondary hover:text-text-primary pb-1 border-b-2 border-transparent hover:border-border transition-colors">
+              {t('inventory.utensils.categoriesTab')}
+            </Link>
             <span className="text-sm font-semibold text-primary border-b-2 border-primary pb-1">Historial</span>
+            <Link href="/admin/inventory/utensils/schedules" className="text-sm font-medium text-text-secondary hover:text-text-primary pb-1 border-b-2 border-transparent hover:border-border transition-colors">
+              Programación
+            </Link>
           </div>
         </div>
       </div>

@@ -112,8 +112,14 @@ export default function UtensilCategoriesPage() {
             <Link href="/admin/inventory/utensils" className="text-sm font-medium text-text-secondary hover:text-text-primary pb-1 border-b-2 border-transparent hover:border-border transition-colors">
               {t('inventory.utensils.listTab')}
             </Link>
-            <span className="text-sm font-semibold text-primary border-b-2 border-primary pb-1">{t('inventory.utensils.categoriesTab')}</span>
-          </div>
+            <span className="text-sm font-semibold text-primary border-b-2 border-primary pb-1 whitespace-nowrap">{t('inventory.utensils.categoriesTab')}</span>
+            <Link href="/admin/inventory/utensils/counts" className="text-sm font-medium text-text-secondary hover:text-text-primary pb-1 border-b-2 border-transparent hover:border-border transition-colors whitespace-nowrap">
+              Historial
+            </Link>
+            <Link href="/admin/inventory/utensils/schedules" className="text-sm font-medium text-text-secondary hover:text-text-primary pb-1 border-b-2 border-transparent hover:border-border transition-colors whitespace-nowrap">
+              Programación
+            </Link>
+            </div>
         </div>
         <button 
           onClick={() => { resetForm(); setShowCreate(true); }}

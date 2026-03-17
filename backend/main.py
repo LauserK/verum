@@ -2108,10 +2108,16 @@ async def get_utensil_count_detail(
     if not count_res.data:
         raise HTTPException(404, "Count not found")
     
+    result = count_res.data
+
+    if result.get("confirmed_by"):
+        conf_res = db.table("profiles").select("full_name").eq("id", result["confirmed_by"]).single().execute()
+        if conf_res.data:
+            result["confirmed_by_user"] = conf_res.data["full_name"]
+
     # Items
     items_res = db.table("utensil_count_items").select("*, utensils(name, unit)").eq("count_id", count_id).execute()
     
-    result = count_res.data
     result["items"] = items_res.data
     return result
 
@@ -2156,6 +2162,17 @@ class CreateCountScheduleRequest(BaseModel):
     scope: str
     category_id: Optional[str] = None
     next_due: str  # YYYY-MM-DD
+    item_ids: Optional[list[str]] = None
+
+class UpdateCountScheduleRequest(BaseModel):
+    venue_id: Optional[str] = None
+    assigned_to: Optional[str] = None
+    name: Optional[str] = None
+    frequency: Optional[str] = None
+    scope: Optional[str] = None
+    category_id: Optional[str] = None
+    next_due: Optional[str] = None
+    is_active: Optional[bool] = None
     item_ids: Optional[list[str]] = None
 
 
@@ -2208,7 +2225,47 @@ async def list_count_schedules(
         query = query.eq("venue_id", venue_id)
     
     res = query.execute()
-    return res.data
+    schedules = res.data or []
+    
+    # Attach items if it's a custom scope
+    for s in schedules:
+        if s["scope"] == "custom":
+            items_res = db.table("count_schedule_items").select("item_id").eq("schedule_id", s["id"]).execute()
+            s["item_ids"] = [i["item_id"] for i in (items_res.data or [])]
+            
+    return schedules
+
+@app.patch("/count-schedules/{schedule_id}")
+async def update_count_schedule(
+    schedule_id: str,
+    body: UpdateCountScheduleRequest,
+    db=Depends(get_db),
+    _=Depends(require_permission("inventory_utensils.manage_items"))
+):
+    try:
+        payload = body.dict(exclude_none=True, exclude={"item_ids"})
+        
+        if payload:
+            res = db.table("count_schedules").update(payload).eq("id", schedule_id).execute()
+            if not res.data:
+                raise HTTPException(404, "Schedule not found")
+
+        # Update specific items if scope changed to custom or custom items changed
+        if body.scope == "custom" and body.item_ids is not None:
+            # Delete old items
+            db.table("count_schedule_items").delete().eq("schedule_id", schedule_id).execute()
+            # Insert new items
+            if body.item_ids:
+                items_data = [{"schedule_id": schedule_id, "item_id": item_id} for item_id in body.item_ids]
+                db.table("count_schedule_items").insert(items_data).execute()
+        elif body.scope in ["all", "category"]:
+             # Ensure no items exist if scope is no longer custom
+             db.table("count_schedule_items").delete().eq("schedule_id", schedule_id).execute()
+
+        return {"ok": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 
 @app.get("/count-schedules/due")
