@@ -83,6 +83,7 @@
         "success": "Count submitted successfully",
         "error": "Error submitting count",
         "empty": "No active utensils to count.",
+        "confirmSubmit": "Are you sure you want to submit this count? You will not be able to modify it later.",
         "confirmExit": "Are you sure you want to exit? Unsubmitted data will be lost."
       }
     },

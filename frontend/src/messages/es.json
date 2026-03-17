@@ -83,6 +83,7 @@
         "success": "Conteo enviado exitosamente",
         "error": "Error al enviar el conteo",
         "empty": "No hay utensilios activos para contar.",
+        "confirmSubmit": "¿Estás seguro de enviar este conteo? No podrás modificarlo después.",
         "confirmExit": "¿Estás seguro de que quieres salir? Se perderán los datos no enviados."
       }
     },

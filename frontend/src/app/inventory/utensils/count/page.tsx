@@ -1,19 +1,22 @@
 // frontend/src/app/inventory/utensils/count/page.tsx
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
-import { adminApi, getProfile, type Utensil, type UtensilCategory } from '@/lib/api'
+import { useEffect, useState, useCallback, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { adminApi, getProfile, getDueSchedules, type Utensil, type UtensilCategory } from '@/lib/api'
 import { ArrowLeft, Save, Loader2, Minus, Plus, ClipboardList, Info } from 'lucide-react'
 import { useTranslations } from '@/components/I18nProvider'
 
-export default function UtensilCountPage() {
+function CountContent() {
   const { t } = useTranslations()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const scheduleId = searchParams.get('schedule_id')
   
   const [utensils, setUtensils] = useState<Utensil[]>([])
   const [categories, setCategories] = useState<UtensilCategory[]>([])
   const [counts, setCounts] = useState<Record<string, number>>({})
+  const [scheduleName, setScheduleName] = useState<string | null>(null)
   
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -31,8 +34,22 @@ export default function UtensilCountPage() {
           adminApi.getUtensilCategories(profile.organization_id)
         ])
         
-        // Only active utensils
-        const activeUtensils = utRes.filter(u => u.is_active)
+        let activeUtensils = utRes.filter(u => u.is_active)
+        
+        if (scheduleId) {
+          // Fetch schedule details to filter items
+          const schedules = await getDueSchedules(profile.venue_id || '')
+          const sched = schedules.find(s => s.id === scheduleId)
+          if (sched) {
+            setScheduleName(sched.name)
+            if (sched.scope === 'category' && sched.category_id) {
+              activeUtensils = activeUtensils.filter(u => u.category_id === sched.category_id)
+            } else if (sched.scope === 'custom' && sched.item_ids) {
+              activeUtensils = activeUtensils.filter(u => sched.item_ids?.includes(u.id))
+            }
+          }
+        }
+
         setUtensils(activeUtensils)
         setCategories(catRes)
         
@@ -49,7 +66,7 @@ export default function UtensilCountPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [scheduleId])
 
   useEffect(() => {
     fetchData()
@@ -83,7 +100,7 @@ export default function UtensilCountPage() {
       return
     }
 
-    if (!confirm(t('inventory.utensils.countFlow.confirmExit'))) return
+    if (!confirm(t('inventory.utensils.countFlow.confirmSubmit'))) return
 
     setSubmitting(true)
     try {
@@ -94,7 +111,8 @@ export default function UtensilCountPage() {
 
       await adminApi.createUtensilCount({
         venue_id: venueId,
-        items
+        items,
+        schedule_id: scheduleId || undefined
       })
 
       alert(t('inventory.utensils.countFlow.success'))
@@ -141,7 +159,7 @@ export default function UtensilCountPage() {
         <button onClick={() => router.back()} className="p-2 -ml-2 text-text-secondary hover:text-text-primary transition-colors">
           <ArrowLeft className="w-5 h-5" />
         </button>
-        <h1 className="font-bold text-text-primary">{t('inventory.utensils.countFlow.title')}</h1>
+        <h1 className="font-bold text-text-primary">{scheduleName || t('inventory.utensils.countFlow.title')}</h1>
       </header>
 
       <main className="p-4 space-y-6 max-w-lg mx-auto">
@@ -213,5 +231,13 @@ export default function UtensilCountPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function UtensilCountPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 text-primary animate-spin" /></div>}>
+      <CountContent />
+    </Suspense>
   )
 }
