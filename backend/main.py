@@ -1958,6 +1958,7 @@ class UtensilCountItemSchema(BaseModel):
 class CreateUtensilCountRequest(BaseModel):
     venue_id: str
     items: list[UtensilCountItemSchema]
+    schedule_id: Optional[str] = None
 
 
 class ConfirmCountItemSchema(BaseModel):
@@ -2020,6 +2021,7 @@ async def create_utensil_count(
             "venue_id": body.venue_id,
             "created_by": current_user.id,
             "status": "pending",
+            "schedule_id": body.schedule_id,
         }
         count_res = db.table("utensil_counts").insert(count_data).execute()
         count_id = count_res.data[0]["id"]
@@ -2034,6 +2036,38 @@ async def create_utensil_count(
             for item in body.items
         ]
         db.table("utensil_count_items").insert(items_data).execute()
+
+        # 3. Update schedule if exists
+        if body.schedule_id:
+            now_iso = datetime.now(timezone.utc).isoformat()
+            
+            # Fetch schedule to get frequency
+            sched_res = db.table("count_schedules").select("frequency, next_due").eq("id", body.schedule_id).single().execute()
+            if sched_res.data:
+                freq = sched_res.data["frequency"]
+                
+                updates = {"last_completed_at": now_iso}
+                
+                if freq == "one_time":
+                    updates["is_active"] = False
+                else:
+                    from datetime import timedelta
+                    current_due = datetime.fromisoformat(sched_res.data["next_due"]) if "T" in sched_res.data["next_due"] else datetime.strptime(sched_res.data["next_due"], "%Y-%m-%d")
+                    # simple calculation, could be more complex depending on timezone
+                    if freq == "daily":
+                        next_due = current_due + timedelta(days=1)
+                    elif freq == "weekly":
+                        next_due = current_due + timedelta(days=7)
+                    elif freq == "biweekly":
+                        next_due = current_due + timedelta(days=14)
+                    elif freq == "monthly":
+                        next_due = current_due + timedelta(days=30) # approx
+                    else:
+                        next_due = current_due
+                        
+                    updates["next_due"] = next_due.strftime("%Y-%m-%d")
+
+                db.table("count_schedules").update(updates).eq("id", body.schedule_id).execute()
 
         return {"id": count_id, "status": "pending"}
     except Exception as e:
@@ -2109,5 +2143,106 @@ async def confirm_utensil_count(
         }).eq("id", count_id).execute()
 
         return {"ok": True, "confirmed_at": now_iso}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ── Inventory: Count Schedules Models & Endpoints (M11.2) ──
+
+class CreateCountScheduleRequest(BaseModel):
+    venue_id: str
+    assigned_to: Optional[str] = None
+    name: str
+    frequency: str
+    scope: str
+    category_id: Optional[str] = None
+    next_due: str  # YYYY-MM-DD
+    item_ids: Optional[list[str]] = None
+
+
+@app.post("/count-schedules")
+async def create_count_schedule(
+    body: CreateCountScheduleRequest,
+    current_user=Depends(get_current_user),
+    db=Depends(get_db),
+    _=Depends(require_permission("inventory_utensils.manage_items"))
+):
+    try:
+        # Get org_id from venue
+        venue_res = db.table("venues").select("org_id").eq("id", body.venue_id).single().execute()
+        if not venue_res.data:
+            raise HTTPException(404, "Venue not found")
+            
+        schedule_data = {
+            "org_id": venue_res.data["org_id"],
+            "venue_id": body.venue_id,
+            "assigned_to": body.assigned_to,
+            "name": body.name,
+            "frequency": body.frequency,
+            "scope": body.scope,
+            "category_id": body.category_id,
+            "next_due": body.next_due,
+            "created_by": current_user.id
+        }
+        
+        res = db.table("count_schedules").insert(schedule_data).execute()
+        schedule_id = res.data[0]["id"]
+        
+        # Insert specific items if scope is custom
+        if body.scope == "custom" and body.item_ids:
+            items_data = [{"schedule_id": schedule_id, "item_id": item_id} for item_id in body.item_ids]
+            db.table("count_schedule_items").insert(items_data).execute()
+            
+        return res.data[0]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/count-schedules")
+async def list_count_schedules(
+    venue_id: Optional[str] = None,
+    db=Depends(get_db),
+    _=Depends(require_permission("inventory_utensils.view"))
+):
+    query = db.table("count_schedules").select("*, profiles!count_schedules_assigned_to_fkey(full_name), venues(name)").order("created_at", desc=True)
+    if venue_id:
+        query = query.eq("venue_id", venue_id)
+    
+    res = query.execute()
+    return res.data
+
+
+@app.get("/count-schedules/due")
+async def get_due_schedules(
+    venue_id: str,
+    db=Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    """
+    Returns schedules that are due for the current user's venue.
+    Filters by next_due <= today and is_active = true.
+    """
+    try:
+        today = datetime.now(CARACAS_TZ).strftime("%Y-%m-%d")
+        
+        # We need to find schedules that are active, due on or before today, 
+        # for the specific venue, and either unassigned or assigned to this user.
+        res = db.table("count_schedules").select("*") \
+            .eq("venue_id", venue_id) \
+            .eq("is_active", True) \
+            .lte("next_due", today) \
+            .execute()
+            
+        schedules = res.data or []
+        
+        # Filter assigned_to in python (easier than complex OR in postgrest sometimes)
+        valid_schedules = [s for s in schedules if not s.get("assigned_to") or s.get("assigned_to") == current_user.id]
+        
+        # Attach items if it's a custom scope
+        for s in valid_schedules:
+            if s["scope"] == "custom":
+                items_res = db.table("count_schedule_items").select("item_id").eq("schedule_id", s["id"]).execute()
+                s["item_ids"] = [i["item_id"] for i in (items_res.data or [])]
+                
+        return valid_schedules
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
