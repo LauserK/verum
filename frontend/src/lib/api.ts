@@ -229,6 +229,13 @@ export interface InventoryDashboardSummary {
     due_schedules: Array<Record<string, unknown>>;
 }
 
+// Attendance API
+export const attendanceApi = {
+    getStatus: (): Promise<any> => fetchWithAuth('/attendance/today/status'),
+    mark: (event_type: string, data: any = {}): Promise<any> => fetchWithAuth('/attendance/mark', { method: 'POST', body: JSON.stringify({ event_type, ...data }) }),
+    getLive: (venueId: string): Promise<any> => fetchWithAuth(`/attendance/live?venue_id=${venueId}`),
+};
+
 // Admin CRUD
 export const adminApi = {
 

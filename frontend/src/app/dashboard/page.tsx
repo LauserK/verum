@@ -154,12 +154,23 @@ export default function DashboardPage() {
             {/* ── Content ────────────────────────────────── */}
             <main className="max-w-lg mx-auto px-4 pt-5">
                 {/* Shift & Date */}
-                <div className="mb-6">
-                    <div className="flex items-center gap-2 mb-1">
-                        <ShiftIcon className="w-5 h-5 text-primary" />
-                        <span className="text-sm font-semibold text-primary">{shiftInfo.label}</span>
+                <div className="mb-6 flex justify-between items-center">
+                    <div>
+                        <div className="flex items-center gap-2 mb-1">
+                            <ShiftIcon className="w-5 h-5 text-primary" />
+                            <span className="text-sm font-semibold text-primary">{shiftInfo.label}</span>
+                        </div>
+                        <p className="text-xs text-text-secondary">{formatDate(language)}</p>
                     </div>
-                    <p className="text-xs text-text-secondary">{formatDate(language)}</p>
+                    
+                    {/* Attendance Quick Link */}
+                    <button 
+                        onClick={() => router.push('/attendance')}
+                        className="bg-primary/10 text-primary px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-primary/20 transition-colors"
+                    >
+                        <Clock className="w-4 h-4" />
+                        {t('attendance.title', { defaultValue: 'Asistencia' })}
+                    </button>
                 </div>
 
                 {/* Section Title */}
