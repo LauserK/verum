@@ -2303,3 +2303,62 @@ async def get_due_schedules(
         return valid_schedules
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# ── Inventory: Dashboard (M10 & M12) ──
+
+@app.get("/inventory/dashboard/summary")
+async def get_inventory_dashboard_summary(
+    venue_id: Optional[str] = None,
+    db=Depends(get_db),
+    current_user=Depends(get_current_user),
+    _=Depends(require_permission("inventory_assets.view"))
+):
+    try:
+        # We need the org_id to filter correctly if venue_id is not provided
+        profile_res = db.table("profiles").select("organization_id").eq("id", current_user.id).single().execute()
+        if not profile_res.data:
+            raise HTTPException(404, "Profile not found")
+            
+        org_id = profile_res.data["organization_id"]
+
+        # 1. Asset Status Scorecards
+        assets_query = db.table("assets").select("id, status").eq("org_id", org_id)
+        if venue_id:
+            assets_query = assets_query.eq("venue_id", venue_id)
+        assets_res = assets_query.execute()
+        assets = assets_res.data or []
+        
+        asset_stats = {
+            "total": len(assets),
+            "operativo": sum(1 for a in assets if a["status"] == "operativo"),
+            "en_reparacion": sum(1 for a in assets if a["status"] == "en_reparacion"),
+            "baja": sum(1 for a in assets if a["status"] == "baja")
+        }
+
+        # 2. Active Tickets
+        tickets_query = db.table("repair_tickets").select("*, assets(name)").eq("org_id", org_id).neq("status", "cerrado").order("created_at", desc=True).limit(5)
+        if venue_id:
+            tickets_query = tickets_query.eq("venue_id", venue_id)
+        active_tickets = tickets_query.execute().data or []
+
+        # 3. Pending Utensil Counts
+        counts_query = db.table("utensil_counts").select("*, profiles!utensil_counts_created_by_fkey(full_name), venues(name)").eq("status", "pending").order("created_at", desc=True).limit(5)
+        if venue_id:
+            counts_query = counts_query.eq("venue_id", venue_id)
+        pending_counts = counts_query.execute().data or []
+
+        # 4. Due Schedules (Utensils)
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        sched_query = db.table("count_schedules").select("*, venues(name)").eq("org_id", org_id).eq("is_active", True).lte("next_due", today)
+        if venue_id:
+            sched_query = sched_query.eq("venue_id", venue_id)
+        due_schedules = sched_query.execute().data or []
+
+        return {
+            "asset_stats": asset_stats,
+            "active_tickets": active_tickets,
+            "pending_counts": pending_counts,
+            "due_schedules": due_schedules
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
