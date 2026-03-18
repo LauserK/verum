@@ -2337,7 +2337,7 @@ async def get_inventory_dashboard_summary(
 
         # 2. Active Tickets
         # Repair tickets belong to assets, so we filter by the asset's org_id
-        tickets_query = db.table("repair_tickets").select("*, assets!inner(name, org_id)").eq("assets.org_id", org_id).neq("status", "cerrado").order("created_at", desc=True).limit(5)
+        tickets_query = db.table("repair_tickets").select("*, assets!inner(name, org_id)").eq("assets.org_id", org_id).neq("status", "cerrado").order("opened_at", desc=True).limit(5)
         if venue_id:
             # We don't have venue_id on repair_tickets, it's on assets
             tickets_query = tickets_query.eq("assets.venue_id", venue_id)
