@@ -377,6 +377,10 @@ export const adminApi = {
 
     updateSchedule: (id: string, data: any): Promise<any> =>
         fetchWithAuth(`/count-schedules/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+
+    // Inventory Dashboard
+    getInventoryDashboard: (venueId?: string): Promise<any> =>
+        fetchWithAuth(`/inventory/dashboard/summary${venueId ? `?venue_id=${venueId}` : ''}`),
 }
 
 export function getDueSchedules(venueId: string): Promise<CountSchedule[]> {

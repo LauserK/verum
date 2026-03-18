@@ -20,7 +20,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         { href: '/admin/submissions', label: t('nav.submissions'), icon: FileText },
         { href: '/admin/team', label: t('nav.team'), icon: Users },
         { href: '/admin/venues', label: t('nav.venues'), icon: Building2 },
-        { href: '/admin/inventory/assets', label: t('nav.inventory'), icon: Box },
+        { href: '/admin/inventory', label: t('nav.inventory'), icon: Box },
         { href: '/admin/inventory/tickets', label: t('nav.tickets'), icon: Wrench },
         { href: '/admin/settings/roles', label: t('nav.settings'), icon: Settings },
     ]
