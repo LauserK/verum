@@ -217,6 +217,18 @@ export interface CountSchedule {
     item_ids?: string[]
 }
 
+export interface InventoryDashboardSummary {
+    asset_stats: {
+        total: number;
+        operativo: number;
+        en_reparacion: number;
+        baja: number;
+    };
+    active_tickets: Array<Record<string, unknown>>;
+    pending_counts: Array<Record<string, unknown>>;
+    due_schedules: Array<Record<string, unknown>>;
+}
+
 // Admin CRUD
 export const adminApi = {
 
@@ -379,7 +391,7 @@ export const adminApi = {
         fetchWithAuth(`/count-schedules/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
 
     // Inventory Dashboard
-    getInventoryDashboard: (venueId?: string): Promise<any> =>
+    getInventoryDashboard: (venueId?: string): Promise<InventoryDashboardSummary> =>
         fetchWithAuth(`/inventory/dashboard/summary${venueId ? `?venue_id=${venueId}` : ''}`),
 }
 
