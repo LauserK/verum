@@ -2364,3 +2364,164 @@ async def get_inventory_dashboard_summary(
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# ── Attendance: Shifts Models & Endpoints (M13) ──
+
+class EmployeeShiftRequest(BaseModel):
+    profile_id: str
+    venue_id: str
+    modality: str
+    weekdays: Optional[list[int]] = None
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    is_active: bool = True
+
+class ShiftDayRequest(BaseModel):
+    weekday: int
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    day_off: bool = False
+
+@app.get("/employee-shifts")
+async def list_employee_shifts(profile_id: Optional[str] = None, venue_id: Optional[str] = None, db=Depends(get_db), _=Depends(require_permission("attendance.manage"))):
+    query = db.table("employee_shifts").select("*, shift_days(*)")
+    if profile_id:
+        query = query.eq("profile_id", profile_id)
+    if venue_id:
+        query = query.eq("venue_id", venue_id)
+    res = query.execute()
+    return res.data
+
+@app.post("/employee-shifts")
+async def create_employee_shift(body: EmployeeShiftRequest, db=Depends(get_db), _=Depends(require_permission("attendance.manage"))):
+    res = db.table("employee_shifts").insert(body.dict(exclude_none=True)).execute()
+    return res.data[0]
+
+@app.patch("/employee-shifts/{shift_id}")
+async def update_employee_shift(shift_id: str, body: EmployeeShiftRequest, db=Depends(get_db), _=Depends(require_permission("attendance.manage"))):
+    res = db.table("employee_shifts").update(body.dict(exclude_none=True)).eq("id", shift_id).execute()
+    return res.data[0]
+
+@app.post("/employee-shifts/{shift_id}/days")
+async def update_shift_day(shift_id: str, body: ShiftDayRequest, db=Depends(get_db), _=Depends(require_permission("attendance.manage"))):
+    data = body.dict()
+    data["employee_shift_id"] = shift_id
+    res = db.table("shift_days").upsert(data, on_conflict="employee_shift_id,weekday").execute()
+    return res.data[0]
+
+# ── Attendance: Marking Models & Endpoints (M13) ──
+
+class MarkAttendanceRequest(BaseModel):
+    event_type: str # clock_in, clock_out, break_start, break_end
+    gps_lat: Optional[float] = None
+    gps_lng: Optional[float] = None
+    gps_accuracy_m: Optional[int] = None
+
+def get_active_shift_for_today(profile_id: str, venue_id: str, db) -> dict:
+    today_dt = datetime.now(CARACAS_TZ)
+    iso_weekday = today_dt.isoweekday() # 1=Mon, 7=Sun
+    
+    # Get active shift
+    shift_res = db.table("employee_shifts").select("*").eq("profile_id", profile_id).eq("venue_id", venue_id).eq("is_active", True).execute()
+    if not shift_res.data:
+        return None
+    
+    shift = shift_res.data[0]
+    
+    if shift["modality"] == "flexible":
+        return {"id": shift["id"], "expected_start": None, "expected_end": None}
+        
+    elif shift["modality"] == "fixed":
+        if shift["weekdays"] and iso_weekday in shift["weekdays"]:
+            return {"id": shift["id"], "expected_start": shift.get("start_time"), "expected_end": shift.get("end_time")}
+        return None
+        
+    elif shift["modality"] == "rotating":
+        days_res = db.table("shift_days").select("*").eq("employee_shift_id", shift["id"]).eq("weekday", iso_weekday).execute()
+        if days_res.data and not days_res.data[0].get("day_off"):
+            return {"id": shift["id"], "expected_start": days_res.data[0].get("start_time"), "expected_end": days_res.data[0].get("end_time")}
+        return None
+        
+    return None
+
+def calculate_late_minutes(real_time_str: str, expected_time_str: str) -> int:
+    if not expected_time_str: return 0
+    rt = datetime.strptime(real_time_str, "%H:%M:%S").time()
+    et = datetime.strptime(expected_time_str, "%H:%M:%S").time()
+    diff = (rt.hour * 60 + rt.minute) - (et.hour * 60 + et.minute)
+    return max(0, diff)
+
+def calculate_overtime(real_time_str: str, expected_time_str: str, is_entry: bool) -> int:
+    if not expected_time_str: return 0
+    rt = datetime.strptime(real_time_str, "%H:%M:%S").time()
+    et = datetime.strptime(expected_time_str, "%H:%M:%S").time()
+    rm = rt.hour * 60 + rt.minute
+    em = et.hour * 60 + et.minute
+    
+    diff = (em - rm) if is_entry else (rm - em)
+    if diff <= 0: return 0
+    return diff // 60 # Floor hours
+
+@app.get("/attendance/today/status")
+async def get_attendance_status(current_user=Depends(get_current_user), db=Depends(get_db)):
+    profile_res = db.table("profiles").select("venue_id").eq("id", current_user.id).single().execute()
+    venue_id = profile_res.data.get("venue_id")
+    if not venue_id:
+        raise HTTPException(400, "No venue assigned")
+
+    today_str = datetime.now(CARACAS_TZ).strftime("%Y-%m-%d")
+    logs_res = db.table("attendance_logs").select("*").eq("profile_id", current_user.id).eq("venue_id", venue_id).gte("marked_at", f"{today_str}T00:00:00-04:00").order("marked_at", desc=True).limit(1).execute()
+    
+    last_event = logs_res.data[0]["event_type"] if logs_res.data else None
+    
+    # State Machine
+    available_actions = []
+    if not last_event: available_actions = ["clock_in"]
+    elif last_event == "clock_in": available_actions = ["break_start", "clock_out"]
+    elif last_event == "break_start": available_actions = ["break_end"]
+    elif last_event == "break_end": available_actions = ["clock_out"]
+    
+    return {
+        "last_event": last_event,
+        "last_marked_at": logs_res.data[0]["marked_at"] if logs_res.data else None,
+        "available_actions": available_actions
+    }
+
+@app.post("/attendance/mark")
+async def mark_attendance(body: MarkAttendanceRequest, current_user=Depends(get_current_user), db=Depends(get_db), _=Depends(require_permission("attendance.mark"))):
+    profile_res = db.table("profiles").select("venue_id").eq("id", current_user.id).single().execute()
+    venue_id = profile_res.data.get("venue_id")
+    if not venue_id:
+        raise HTTPException(400, "No venue assigned")
+        
+    status_res = await get_attendance_status(current_user, db)
+    if body.event_type not in status_res["available_actions"]:
+        raise HTTPException(400, f"Invalid state. Allowed: {status_res['available_actions']}")
+        
+    now_dt = datetime.now(CARACAS_TZ)
+    now_time_str = now_dt.strftime("%H:%M:%S")
+    
+    active_shift = get_active_shift_for_today(current_user.id, venue_id, db)
+    
+    log_data = {
+        "profile_id": current_user.id,
+        "venue_id": venue_id,
+        "event_type": body.event_type,
+        "gps_lat": body.gps_lat,
+        "gps_lng": body.gps_lng,
+        "gps_accuracy_m": body.gps_accuracy_m,
+    }
+    
+    if active_shift:
+        log_data["employee_shift_id"] = active_shift["id"]
+        log_data["expected_start"] = active_shift["expected_start"]
+        log_data["expected_end"] = active_shift["expected_end"]
+        
+        if body.event_type == "clock_in":
+            log_data["minutes_late"] = calculate_late_minutes(now_time_str, active_shift["expected_start"])
+            log_data["overtime_hours"] = calculate_overtime(now_time_str, active_shift["expected_start"], is_entry=True)
+        elif body.event_type == "clock_out":
+            log_data["overtime_hours"] = calculate_overtime(now_time_str, active_shift["expected_end"], is_entry=False)
+            
+    res = db.table("attendance_logs").insert(log_data).execute()
+    return res.data[0]
