@@ -2525,3 +2525,72 @@ async def mark_attendance(body: MarkAttendanceRequest, current_user=Depends(get_
             
     res = db.table("attendance_logs").insert(log_data).execute()
     return res.data[0]
+
+# ── Attendance: Absences & Admin Views (M13) ──
+
+@app.get("/attendance/live")
+async def get_live_attendance(venue_id: str, db=Depends(get_db), _=Depends(require_permission("attendance.view_team"))):
+    today_str = datetime.now(CARACAS_TZ).strftime("%Y-%m-%d")
+    # Fetch all logs for today in this venue
+    logs_res = db.table("attendance_logs").select("*, profiles(full_name)").eq("venue_id", venue_id).gte("marked_at", f"{today_str}T00:00:00-04:00").order("marked_at", desc=True).execute()
+    
+    # Group by profile to find latest state
+    staff_status = {}
+    for log in logs_res.data or []:
+        pid = log["profile_id"]
+        if pid not in staff_status:
+            staff_status[pid] = log
+            
+    return list(staff_status.values())
+
+class AbsenceRequest(BaseModel):
+    profile_id: str
+    venue_id: str
+    date: str
+    type: str
+    reason: Optional[str] = None
+
+@app.post("/attendance/absences")
+async def create_absence(body: AbsenceRequest, current_user=Depends(get_current_user), db=Depends(get_db), _=Depends(require_permission("attendance.manage"))):
+    data = body.dict()
+    data["approved_by"] = current_user.id
+    res = db.table("absences").upsert(data, on_conflict="profile_id,date").execute()
+    return res.data[0] if res.data else {"ok": True}
+
+@app.post("/internal/attendance/check-absences")
+async def cron_check_absences(db=Depends(get_db)):
+    """Called daily at 11:50 PM"""
+    today_dt = datetime.now(CARACAS_TZ)
+    today_str = today_dt.strftime("%Y-%m-%d")
+    iso_weekday = today_dt.isoweekday()
+    
+    # Find all users who were SUPPOSED to work today
+    shifts_res = db.table("employee_shifts").select("*").eq("is_active", True).execute()
+    expected_profiles = []
+    
+    for shift in shifts_res.data or []:
+        if shift["modality"] == "fixed" and shift["weekdays"] and iso_weekday in shift["weekdays"]:
+            expected_profiles.append(shift)
+        elif shift["modality"] == "rotating":
+            d_res = db.table("shift_days").select("day_off").eq("employee_shift_id", shift["id"]).eq("weekday", iso_weekday).execute()
+            if d_res.data and not d_res.data[0].get("day_off"):
+                expected_profiles.append(shift)
+                
+    # Check if they have ANY log today
+    for s in expected_profiles:
+        pid = s["profile_id"]
+        log_check = db.table("attendance_logs").select("id").eq("profile_id", pid).gte("marked_at", f"{today_str}T00:00:00-04:00").limit(1).execute()
+        
+        if not log_check.data:
+            # Check if they already have an absence (e.g., leave/sick)
+            abs_check = db.table("absences").select("id").eq("profile_id", pid).eq("date", today_str).execute()
+            if not abs_check.data:
+                db.table("absences").insert({
+                    "profile_id": pid,
+                    "venue_id": s["venue_id"],
+                    "date": today_str,
+                    "type": "unexcused"
+                }).execute()
+                
+    return {"ok": True, "checked": len(expected_profiles)}
+
