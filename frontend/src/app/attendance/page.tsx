@@ -5,7 +5,6 @@ import { attendanceApi } from '@/lib/api'
 import { Clock, Loader2, ArrowLeft } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
-import { es } from 'date-fns/locale'
 import { useTranslations } from '@/components/I18nProvider'
 
 interface AttendanceStatus {
@@ -19,7 +18,7 @@ export default function AttendancePage() {
     const [status, setStatus] = useState<AttendanceStatus | null>(null)
     const [loading, setLoading] = useState(true)
     const [marking, setMarking] = useState<string | null>(null)
-    const [result, setResult] = useState<any>(null)
+    const [result, setResult] = useState<Record<string, any> | null>(null)
     const router = useRouter()
 
     useEffect(() => {
@@ -40,8 +39,8 @@ export default function AttendancePage() {
             setTimeout(() => {
                 router.push('/dashboard')
             }, 3000)
-        } catch (e: any) {
-            alert(e.message || 'Error al registrar marca')
+        } catch (e: unknown) {
+            alert((e as Error).message || 'Error al registrar marca')
             setMarking(null)
         }
     }

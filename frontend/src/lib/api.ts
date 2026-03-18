@@ -231,9 +231,9 @@ export interface InventoryDashboardSummary {
 
 // Attendance API
 export const attendanceApi = {
-    getStatus: (): Promise<any> => fetchWithAuth('/attendance/today/status'),
-    mark: (event_type: string, data: any = {}): Promise<any> => fetchWithAuth('/attendance/mark', { method: 'POST', body: JSON.stringify({ event_type, ...data }) }),
-    getLive: (venueId: string): Promise<any> => fetchWithAuth(`/attendance/live?venue_id=${venueId}`),
+    getStatus: (): Promise<Record<string, unknown>> => fetchWithAuth('/attendance/today/status'),
+    mark: (event_type: string, data: Record<string, unknown> = {}): Promise<Record<string, unknown>> => fetchWithAuth('/attendance/mark', { method: 'POST', body: JSON.stringify({ event_type, ...data }) }),
+    getLive: (venueId: string): Promise<Record<string, unknown>[]> => fetchWithAuth(`/attendance/live?venue_id=${venueId}`),
 };
 
 // Admin CRUD
