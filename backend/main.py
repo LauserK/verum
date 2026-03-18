@@ -2336,9 +2336,11 @@ async def get_inventory_dashboard_summary(
         }
 
         # 2. Active Tickets
-        tickets_query = db.table("repair_tickets").select("*, assets(name)").eq("org_id", org_id).neq("status", "cerrado").order("created_at", desc=True).limit(5)
+        # Repair tickets belong to assets, so we filter by the asset's org_id
+        tickets_query = db.table("repair_tickets").select("*, assets!inner(name, org_id)").eq("assets.org_id", org_id).neq("status", "cerrado").order("created_at", desc=True).limit(5)
         if venue_id:
-            tickets_query = tickets_query.eq("venue_id", venue_id)
+            # We don't have venue_id on repair_tickets, it's on assets
+            tickets_query = tickets_query.eq("assets.venue_id", venue_id)
         active_tickets = tickets_query.execute().data or []
 
         # 3. Pending Utensil Counts
