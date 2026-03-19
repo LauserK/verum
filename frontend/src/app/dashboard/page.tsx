@@ -5,7 +5,7 @@ import { logout } from '@/app/login/actions'
 import { getProfile, getChecklists, type Profile, type ChecklistItem } from '@/lib/api'
 import ChecklistCard from '@/components/ChecklistCard'
 import BottomNav from '@/components/BottomNav'
-import { LogOut, Sun, Moon, Sunrise, CloudSun, Sunset, Shield } from 'lucide-react'
+import { LogOut, Sun, Moon, Sunrise, CloudSun, Sunset, Shield, Clock } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from '@/components/I18nProvider'
 
