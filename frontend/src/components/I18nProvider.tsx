@@ -78,7 +78,8 @@ export function useTranslations(namespace?: keyof Translations) {
   const { t, language, setLanguage } = context;
 
   const scopedT = (key: string, params?: Record<string, string | number>) => {
-    const fullKey = namespace ? `${namespace}.${key}` : key;
+    // If namespace is provided AND it's not an empty string, use it. Otherwise use the key as is.
+    const fullKey = namespace && namespace !== '' ? `${namespace}.${key}` : key;
     return t(fullKey, params);
   };
 
