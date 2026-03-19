@@ -14,6 +14,7 @@ export default function TeamPage() {
     const router = useRouter()
     const [profile, setProfile] = useState<Profile | null>(null)
     const [users, setUsers] = useState<AdminUser[]>([])
+    const [roles, setRoles] = useState<{id: string, name: string}[]>([])
     const [loading, setLoading] = useState(true)
     const [allShifts, setAllShifts] = useState<Shift[]>([])
 
@@ -23,7 +24,7 @@ export default function TeamPage() {
     const [newPass, setNewPass] = useState('')
     const [newFirstName, setNewFirstName] = useState('')
     const [newLastName, setNewLastName] = useState('')
-    const [newRole, setNewRole] = useState<'staff' | 'admin'>('staff')
+    const [newRole, setNewRole] = useState('staff')
     const [newVenue, setNewVenue] = useState('')
     const [newShift, setNewShift] = useState('')
     const [newVenueShifts, setNewVenueShifts] = useState<Shift[]>([])
@@ -53,6 +54,10 @@ export default function TeamPage() {
                 setProfile(p)
                 const u = await adminApi.getUsers()
                 setUsers(u)
+                if (p.organization_id) {
+                    const r = await adminApi.getRoles(p.organization_id)
+                    setRoles(r)
+                }
                 // Load all shifts for all venues
                 const allS: Shift[] = []
                 for (const v of p.venues) {
@@ -222,11 +227,14 @@ export default function TeamPage() {
                         />
                         <select
                             value={newRole}
-                            onChange={(e) => setNewRole(e.target.value as 'staff' | 'admin')}
+                            onChange={(e) => setNewRole(e.target.value)}
                             className="bg-surface border border-border rounded-xl px-3 h-10 text-sm text-text-primary focus:border-primary outline-none"
                         >
                             <option value="staff">Staff</option>
                             <option value="admin">Admin</option>
+                            {roles.map((r) => (
+                                <option key={r.id} value={r.name}>{r.name}</option>
+                            ))}
                         </select>
                         <select
                             value={newVenue}
@@ -313,6 +321,9 @@ export default function TeamPage() {
                                         >
                                             <option value="staff">Staff</option>
                                             <option value="admin">Admin</option>
+                                            {roles.map((r) => (
+                                                <option key={r.id} value={r.name}>{r.name}</option>
+                                            ))}
                                         </select>
                                         <select
                                             value={editVenue}

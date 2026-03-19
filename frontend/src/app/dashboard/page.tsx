@@ -44,7 +44,7 @@ function ChecklistSkeleton() {
 // ── Main ────────────────────────────────────────────
 export default function DashboardPage() {
     const { t, language } = useTranslations('dashboard')
-    const { t: rootT } = useTranslations('') // root namespace for top-level keys
+    const { t: attendanceT } = useTranslations('attendance')
     const router = useRouter()
     const [profile, setProfile] = useState<Profile | null>(null)
     const [checklists, setChecklists] = useState<ChecklistItem[]>([])
@@ -170,7 +170,7 @@ export default function DashboardPage() {
                         className="bg-primary/10 text-primary px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-primary/20 transition-colors"
                     >
                         <Clock className="w-4 h-4" />
-                        {rootT('attendance.title', { defaultValue: 'Asistencia' })}
+                        {attendanceT('title')}
                     </button>
                 </div>
 

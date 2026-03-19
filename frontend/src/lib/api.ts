@@ -310,6 +310,9 @@ export const adminApi = {
     changePassword: (id: string, password: string): Promise<{ ok: boolean }> =>
         fetchWithAuth(`/admin/users/${id}/password`, { method: 'PATCH', body: JSON.stringify({ password }) }),
 
+    getRoles: (orgId: string): Promise<{ id: string; name: string }[]> =>
+        fetchWithAuth(`/roles?org_id=${orgId}`),
+
     // Venues
     updateVenue: (id: string, data: { name?: string; address?: string }): Promise<Venue> =>
         fetchWithAuth(`/admin/venues/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
