@@ -868,6 +868,17 @@ async def create_user(body: CreateUserRequest, user=Depends(require_permission("
             profile_data["shift_id"] = body.shift_id
         db.table("profiles").upsert(profile_data).execute()
 
+        # Handle custom role assignment
+        if body.role not in ["staff", "admin"]:
+            # Find the role by name in custom_roles
+            role_res = db.table("custom_roles").select("id").eq("name", body.role).eq("org_id", body.organization_id).execute()
+            if role_res.data:
+                role_id = role_res.data[0]["id"]
+                db.table("profile_roles").upsert({
+                    "profile_id": new_user.id,
+                    "role_id": role_id
+                }).execute()
+
         return {"id": new_user.id, "email": body.email, "full_name": body.full_name, "role": body.role, "venue_id": body.venue_id, "shift_id": body.shift_id, "organization_id": body.organization_id}
     except HTTPException:
         raise
