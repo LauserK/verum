@@ -88,15 +88,6 @@
         "confirmExit": "Are you sure you want to exit? Unsubmitted data will be lost."
       }
     },
-    "attendance": {
-      "title": "Attendance",
-      "actions": {
-        "clock_in": "Clock In",
-        "clock_out": "Clock Out",
-        "break_start": "Start Break",
-        "break_end": "End Break"
-      }
-    },
     "assets": {
       "title": "Fixed Assets",
       "listTab": "Asset List",
@@ -292,5 +283,14 @@
       "edit": "Edit",
       "delete": "Delete"
     }
+  },
+  "attendance": {
+    "title": "Attendance",
+    "actions": {
+      "clock_in": "Clock In",
+      "clock_out": "Clock Out",
+      "break_start": "Start Break",
+      "break_end": "End Break"
     }
+  }
 }

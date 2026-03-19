@@ -88,15 +88,6 @@
         "confirmExit": "¿Estás seguro de que quieres salir? Se perderán los datos no enviados."
       }
     },
-    "attendance": {
-      "title": "Asistencia",
-      "actions": {
-        "clock_in": "Entrada",
-        "clock_out": "Salida",
-        "break_start": "Iniciar Pausa",
-        "break_end": "Fin de Pausa"
-      }
-    },
     "assets": {
       "title": "Activos Fijos",
       "listTab": "Lista de Activos",
@@ -292,5 +283,14 @@
       "edit": "Editar",
       "delete": "Eliminar"
     }
+  },
+  "attendance": {
+    "title": "Asistencia",
+    "actions": {
+      "clock_in": "Entrada",
+      "clock_out": "Salida",
+      "break_start": "Iniciar Pausa",
+      "break_end": "Fin de Pausa"
     }
+  }
 }
