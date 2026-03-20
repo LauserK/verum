@@ -53,7 +53,7 @@ export default function AdminAttendancePage() {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-text-primary">Asistencia en Vivo</h1>
-                    <div className="flex items-center gap-2 mt-2">
+                    <div className="flex items-center gap-4 mt-2">
                         <select 
                             value={selectedVenue} 
                             onChange={e => setSelectedVenue(e.target.value)}
@@ -62,6 +62,9 @@ export default function AdminAttendancePage() {
                             <option value="" disabled>Selecciona una sede...</option>
                             {venues.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
                         </select>
+                        <a href="/admin/attendance/reports" className="text-sm font-bold text-primary hover:underline flex items-center gap-1">
+                            Ver Reportes →
+                        </a>
                     </div>
                 </div>
                 <div className="flex items-center gap-2 text-xs font-semibold text-text-secondary">
