@@ -240,6 +240,17 @@ export const attendanceApi = {
 // Admin CRUD
 export const adminApi = {
 
+    getAttendanceReport: (venueId: string, from: string, to: string, profileId?: string): Promise<any[]> => {
+        let url = `/attendance/report?venue_id=${venueId}&date_from=${from}&date_to=${to}`;
+        if (profileId) url += `&profile_id=${profileId}`;
+        return fetchWithAuth(url);
+    },
+    exportAttendanceCSV: (venueId: string, type: string, from: string, to: string, profileId?: string) => {
+        let url = `${API_URL}/attendance/export?venue_id=${venueId}&report_type=${type}&date_from=${from}&date_to=${to}`;
+        if (profileId) url += `&profile_id=${profileId}`;
+        return url;
+    },
+
     getOrganizations: (): Promise<Organization[]> =>
         fetchWithAuth('/admin/organizations'),
 
