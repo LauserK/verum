@@ -27,6 +27,7 @@ const QUESTION_TYPES = [
 
 
 export default function TemplatesPage() {
+    const { t } = useTranslations()
     const [profile, setProfile] = useState<Profile | null>(null)
     const [venueId, setVenueId] = useState('')
     const [templates, setTemplates] = useState<TemplateDetail[]>([])

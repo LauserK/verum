@@ -17,6 +17,8 @@
   "nav": {
     "dashboard": "Dashboard",
     "checklists": "Checklists",
+    "templates": "Plantillas",
+    "submissions": "Envíos",
     "inventory": "Inventario",
     "attendance": "Asistencia",
     "company": "Empresa",
