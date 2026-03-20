@@ -8,6 +8,7 @@ import {
 } from '@/lib/api'
 import { Plus, Trash2, Edit3, Save, X, Loader2, UserPlus, Shield, User, KeyRound, Fingerprint } from 'lucide-react'
 import { useTranslations } from '@/components/I18nProvider'
+import Link from 'next/link'
 
 export default function TeamPage() {
     const { t } = useTranslations('admin.team')
@@ -179,15 +180,22 @@ export default function TeamPage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
-                <h2 className="text-sm font-bold text-text-secondary uppercase tracking-wider">
-                    {t('title', { count: users.length })}
-                </h2>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold text-text-primary mb-1">{t('title', { count: users.length })}</h1>
+                    <div className="flex items-center gap-6 mt-2 overflow-x-auto">
+                        <span className="text-sm font-semibold text-primary border-b-2 border-primary pb-1 whitespace-nowrap">Usuarios</span>
+                        <Link href="/admin/settings/roles" className="text-sm font-medium text-text-secondary hover:text-text-primary pb-1 border-b-2 border-transparent hover:border-border transition-colors whitespace-nowrap">
+                            Roles y Permisos
+                        </Link>
+                    </div>
+                </div>
                 <button
                     onClick={() => setShowCreate(true)}
-                    className="flex items-center gap-1.5 bg-primary text-text-inverse px-4 h-10 rounded-xl text-sm font-medium hover:bg-primary-hover transition-colors"
+                    className="flex items-center gap-2 bg-primary text-text-inverse px-4 h-10 rounded-xl text-sm font-medium hover:bg-primary-hover transition-colors"
                 >
-                    <UserPlus className="w-4 h-4" /> {t('addUser')}
+                    <Plus className="w-4 h-4" />
+                    {t('addUser')}
                 </button>
             </div>
 

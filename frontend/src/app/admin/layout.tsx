@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { getProfile, type Profile } from '@/lib/api'
 import { logout } from '@/app/login/actions'
-import { LayoutDashboard, ClipboardList, FileText, LogOut, ChevronLeft, Users, Building2, Settings, Box, Wrench, Clock } from 'lucide-react'
+import { LayoutDashboard, ClipboardCheck, Users, Building2, Box, Clock, LogOut, ChevronLeft } from 'lucide-react'
 import { useTranslations } from '@/components/I18nProvider'
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -16,14 +16,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
     const NAV_ITEMS = [
         { href: '/admin/dashboard', label: t('nav.dashboard'), icon: LayoutDashboard },
-        { href: '/admin/templates', label: t('nav.templates'), icon: ClipboardList },
-        { href: '/admin/submissions', label: t('nav.submissions'), icon: FileText },
-        { href: '/admin/team', label: t('nav.team'), icon: Users },
-        { href: '/admin/venues', label: t('nav.venues'), icon: Building2 },
-        { href: '/admin/attendance', label: t('nav.attendance'), icon: Clock },
+        { href: '/admin/checklists/dashboard', label: t('nav.checklists'), icon: ClipboardCheck },
         { href: '/admin/inventory', label: t('nav.inventory'), icon: Box },
-        { href: '/admin/inventory/tickets', label: t('nav.tickets'), icon: Wrench },
-        { href: '/admin/settings/roles', label: t('nav.settings'), icon: Settings },
+        { href: '/admin/attendance', label: t('nav.attendance'), icon: Clock },
+        { href: '/admin/venues', label: t('nav.company'), icon: Building2 },
+        { href: '/admin/team', label: t('nav.team'), icon: Users },
     ]
 
     useEffect(() => {

@@ -16,17 +16,11 @@
   },
   "nav": {
     "dashboard": "Dashboard",
-    "templates": "Templates",
-    "submissions": "Submissions",
-    "team": "Team",
-    "venues": "Venues",
-    "attendance": "Attendance",
+    "checklists": "Checklists",
     "inventory": "Inventory",
-    "settings": "Settings",
-    "audits": "Audits",
-    "history": "History",
-    "tickets": "Tickets",
-    "reports": "Reports"
+    "attendance": "Attendance",
+    "company": "Company",
+    "team": "Team"
   },
   "inventory": {
     "utensils": {

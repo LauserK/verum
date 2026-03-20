@@ -177,16 +177,19 @@ export default function VenuesPage() {
 
     return (
         <div className="space-y-6">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-                <h2 className="text-sm font-bold text-text-secondary uppercase tracking-wider">
-                    Venues ({venues.length})
-                </h2>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold text-text-primary mb-1">Estructura de la Empresa</h1>
+                    <div className="flex items-center gap-6 mt-2 overflow-x-auto">
+                        <span className="text-sm font-semibold text-primary border-b-2 border-primary pb-1 whitespace-nowrap">Sedes y Bloques</span>
+                    </div>
+                </div>
                 <button
                     onClick={() => setShowNewVenue(true)}
-                    className="flex items-center gap-1.5 bg-primary text-text-inverse px-4 h-10 rounded-xl text-sm font-medium hover:bg-primary-hover transition-colors"
+                    className="flex items-center gap-2 bg-primary text-text-inverse px-4 h-10 rounded-xl text-sm font-medium hover:bg-primary-hover transition-colors"
                 >
-                    <Plus className="w-4 h-4" /> New Venue
+                    <Plus className="w-4 h-4" />
+                    Nueva Sede
                 </button>
             </div>
 

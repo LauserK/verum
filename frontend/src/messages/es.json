@@ -16,17 +16,11 @@
   },
   "nav": {
     "dashboard": "Dashboard",
-    "templates": "Plantillas",
-    "submissions": "Envíos",
-    "team": "Equipo",
-    "venues": "Sedes",
-    "attendance": "Asistencia",
+    "checklists": "Checklists",
     "inventory": "Inventario",
-    "settings": "Ajustes",
-    "audits": "Auditorías",
-    "history": "Historial",
-    "tickets": "Tickets",
-    "reports": "Reportes"
+    "attendance": "Asistencia",
+    "company": "Empresa",
+    "team": "Equipo"
   },
   "inventory": {
     "utensils": {
