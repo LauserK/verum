@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { attendanceApi } from '@/lib/api'
 import { Clock, Loader2, ArrowLeft, X } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { format } from 'date-fns'
 import { useTranslations } from '@/components/I18nProvider'
 
@@ -138,6 +139,12 @@ export default function AttendancePage() {
                             </div>
                         )}
                     </div>
+                </div>
+
+                <div className="text-center">
+                    <Link href="/attendance/history" className="text-primary text-sm font-bold mt-4 inline-block hover:underline">
+                        Ver mi historial completo
+                    </Link>
                 </div>
             </main>
 

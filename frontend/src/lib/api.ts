@@ -234,6 +234,7 @@ export const attendanceApi = {
     getStatus: (): Promise<Record<string, unknown>> => fetchWithAuth('/attendance/today/status'),
     mark: (event_type: string, data: Record<string, unknown> = {}): Promise<Record<string, unknown>> => fetchWithAuth('/attendance/mark', { method: 'POST', body: JSON.stringify({ event_type, ...data }) }),
     getLive: (venueId: string): Promise<Record<string, unknown>[]> => fetchWithAuth(`/attendance/live?venue_id=${venueId}`),
+    getHistory: (): Promise<any[]> => fetchWithAuth('/attendance/me'),
 };
 
 // Admin CRUD
