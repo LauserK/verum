@@ -115,7 +115,7 @@ export default function GeneralAdminDashboard() {
                         </div>
                         <div className="text-right">
                             <span className="text-2xl font-black text-error">
-                                {summary?.pending_tickets + summary?.critical_failures}
+                                {(summary?.pending_tickets || 0) + (summary?.critical_failures || 0)}
                             </span>
                             <p className="text-[10px] font-bold text-text-secondary uppercase tracking-widest mt-1 text-nowrap">Alertas Críticas</p>
                         </div>

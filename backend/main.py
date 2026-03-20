@@ -2353,11 +2353,10 @@ async def get_admin_summary(
         active_staff = sum(1 for status in staff_status.values() if status != 'clock_out')
 
         # 3. Pending Repair Tickets
-        tickets_query = db.table("repair_tickets").select("id", count="exact").neq("status", "cerrado").eq("org_id", org_id)
+        # Repair tickets don't have org_id directly, we join with assets
+        tickets_query = db.table("repair_tickets").select("id, assets!inner(org_id)", count="exact").neq("status", "cerrado").eq("assets.org_id", org_id)
         if venue_id:
-            # tickets don't have venue_id directly, they have asset_id
-            # This is complex without a join, let's keep it simple for now or skip venue filter if too hard
-            pass
+            tickets_query = tickets_query.eq("assets.venue_id", venue_id)
         tickets_res = tickets_query.execute()
         pending_tickets = tickets_res.count if tickets_res.count is not None else 0
 
