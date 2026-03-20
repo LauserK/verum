@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { attendanceApi } from '@/lib/api'
-import { Clock, Loader2, ArrowLeft } from 'lucide-react'
+import { Clock, Loader2, ArrowLeft, X } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { useTranslations } from '@/components/I18nProvider'
@@ -19,6 +19,8 @@ export default function AttendancePage() {
     const [loading, setLoading] = useState(true)
     const [marking, setMarking] = useState<string | null>(null)
     const [result, setResult] = useState<Record<string, any> | null>(null)
+    const [confirmModal, setConfirmModal] = useState<string | null>(null)
+    const [errorModal, setErrorModal] = useState<string | null>(null)
     const router = useRouter()
 
     useEffect(() => {
@@ -28,10 +30,8 @@ export default function AttendancePage() {
             .finally(() => setLoading(false))
     }, [])
 
-    const handleMark = async (type: string) => {
-        const actionLabel = t(`attendance.actions.${type}`)
-        if (!confirm(`¿Confirmas marcar: ${actionLabel}?`)) return
-        
+    const executeMark = async (type: string) => {
+        setConfirmModal(null)
         setMarking(type)
         try {
             const res = await attendanceApi.mark(type)
@@ -40,9 +40,13 @@ export default function AttendancePage() {
                 router.push('/dashboard')
             }, 3000)
         } catch (e: unknown) {
-            alert((e as Error).message || 'Error al registrar marca')
+            setErrorModal((e as Error).message || 'Error al registrar marca')
             setMarking(null)
         }
+    }
+
+    const handleMark = (type: string) => {
+        setConfirmModal(type)
     }
 
     if (loading) {
@@ -136,6 +140,56 @@ export default function AttendancePage() {
                     </div>
                 </div>
             </main>
+
+            {/* Confirm Modal */}
+            {confirmModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setConfirmModal(null)} />
+                    <div className="relative bg-surface border border-border rounded-3xl p-6 w-full max-w-sm shadow-2xl animate-in zoom-in-95 text-center">
+                        <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center text-primary mb-4 mx-auto">
+                            <Clock className="w-8 h-8" />
+                        </div>
+                        <h3 className="text-xl font-bold text-text-primary mb-2">Confirmar Marcación</h3>
+                        <p className="text-text-secondary mb-6">
+                            ¿Estás seguro de registrar: <strong className="text-text-primary">{t(`attendance.actions.${confirmModal}`)}</strong>?
+                        </p>
+                        <div className="flex gap-3">
+                            <button 
+                                onClick={() => setConfirmModal(null)}
+                                className="flex-1 h-12 rounded-xl font-bold text-text-primary bg-surface-raised hover:bg-surface-raised/80 transition-colors"
+                            >
+                                Cancelar
+                            </button>
+                            <button 
+                                onClick={() => executeMark(confirmModal)}
+                                className="flex-1 h-12 rounded-xl font-bold text-text-inverse bg-primary hover:bg-primary-hover transition-colors shadow-lg shadow-primary/20"
+                            >
+                                Confirmar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Error Modal */}
+            {errorModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setErrorModal(null)} />
+                    <div className="relative bg-surface border border-border rounded-3xl p-6 w-full max-w-sm shadow-2xl animate-in zoom-in-95 text-center">
+                        <div className="w-16 h-16 bg-error/10 rounded-full flex items-center justify-center text-error mb-4 mx-auto">
+                            <X className="w-8 h-8" />
+                        </div>
+                        <h3 className="text-xl font-bold text-text-primary mb-2">Error</h3>
+                        <p className="text-text-secondary mb-6">{errorModal}</p>
+                        <button 
+                            onClick={() => setErrorModal(null)}
+                            className="w-full h-12 rounded-xl font-bold text-text-inverse bg-error hover:bg-error/90 transition-colors shadow-lg shadow-error/20"
+                        >
+                            Entendido
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }
