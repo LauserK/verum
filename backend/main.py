@@ -1,8 +1,11 @@
 from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 import pytz
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+import io
+import csv
 from pydantic import BaseModel
 from typing import Optional, List
 
@@ -2604,4 +2607,117 @@ async def cron_check_absences(db=Depends(get_db)):
                 }).execute()
                 
     return {"ok": True, "checked": len(expected_profiles)}
+
+# ── Attendance: History & Reports (M14) ──
+
+@app.get("/attendance/me")
+async def get_my_attendance_history(days: int = 30, current_user=Depends(get_current_user), db=Depends(get_db), _=Depends(require_permission("attendance.view_own"))):
+    """Returns the staff member's attendance history for the calendar view."""
+    today = datetime.now(CARACAS_TZ)
+    start_date = (today - timedelta(days=days)).strftime("%Y-%m-%d")
+    
+    res = db.table("v_daily_attendance").select("*").eq("profile_id", current_user.id).gte("work_date", start_date).order("work_date", desc=True).execute()
+    return res.data or []
+
+@app.get("/attendance/alerts")
+async def get_attendance_alerts(venue_id: str, db=Depends(get_db), _=Depends(require_permission("attendance.manage"))):
+    """Returns late arrivals and unexcused absences for the admin."""
+    today = datetime.now(CARACAS_TZ).strftime("%Y-%m-%d")
+    
+    # Absences
+    absences_res = db.table("absences").select("*, profiles(full_name)").eq("venue_id", venue_id).eq("date", today).eq("type", "unexcused").execute()
+    
+    # Lates today
+    lates_res = db.table("attendance_logs").select("*, profiles(full_name)").eq("venue_id", venue_id).gte("marked_at", f"{today}T00:00:00-04:00").gt("minutes_late", 0).order("marked_at", desc=True).execute()
+    
+    return {
+        "absences": absences_res.data or [],
+        "lates": lates_res.data or []
+    }
+
+@app.get("/attendance/report")
+async def get_attendance_report(venue_id: str, date_from: str, date_to: str, profile_id: Optional[str] = None, db=Depends(get_db), _=Depends(require_permission("attendance.view_reports"))):
+    """JSON endpoint for the frontend table preview."""
+    query = db.table("v_daily_attendance").select("*").eq("venue_id", venue_id).gte("work_date", date_from).lte("work_date", date_to)
+    if profile_id:
+        query = query.eq("profile_id", profile_id)
+        
+    res = query.order("work_date", desc=False).execute()
+    return res.data or []
+
+@app.get("/attendance/export")
+async def export_attendance_csv(venue_id: str, report_type: str, date_from: str, date_to: str, profile_id: Optional[str] = None, db=Depends(get_db), _=Depends(require_permission("attendance.view_reports"))):
+    """Exports attendance data as a CSV file."""
+    # Fetch base data
+    query = db.table("v_daily_attendance").select("*").eq("venue_id", venue_id).gte("work_date", date_from).lte("work_date", date_to)
+    if profile_id:
+        query = query.eq("profile_id", profile_id)
+    data = query.order("work_date", desc=False).execute().data or []
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    if report_type == "daily":
+        writer.writerow(["name", "date", "clock_in", "clock_out", "net_hours", "overtime_hours", "late_minutes", "absence"])
+        for row in data:
+            writer.writerow([
+                row.get("full_name"), row.get("work_date"), 
+                row.get("clock_in", "")[11:16] if row.get("clock_in") else "",
+                row.get("clock_out", "")[11:16] if row.get("clock_out") else "",
+                row.get("net_hours", 0), row.get("overtime_hours", 0),
+                row.get("minutes_late", 0), row.get("absence_type", "")
+            ])
+    
+    elif report_type in ["weekly", "custom"]:
+        # Group by employee
+        employees = {}
+        for row in data:
+            pid = row["profile_id"]
+            if pid not in employees:
+                employees[pid] = {"name": row["full_name"], "days": {}, "total_net": 0, "total_ot": 0}
+            
+            d_str = row["work_date"]
+            
+            date_col_key = d_str # Use actual date as key to support any length
+            employees[pid]["days"][date_col_key] = row
+            employees[pid]["total_net"] += float(row.get("net_hours") or 0)
+            employees[pid]["total_ot"] += int(row.get("overtime_hours") or 0)
+
+        # Generate headers based on date range
+        start_dt = datetime.strptime(date_from, "%Y-%m-%d")
+        end_dt = datetime.strptime(date_to, "%Y-%m-%d")
+        delta = (end_dt - start_dt).days
+        
+        headers = ["name"]
+        dates_in_range = []
+        for i in range(delta + 1):
+            curr = (start_dt + timedelta(days=i)).strftime("%Y-%m-%d")
+            dates_in_range.append(curr)
+            day_prefix = datetime.strptime(curr, "%Y-%m-%d").strftime("%a").lower()[:3]
+            headers.extend([f"{curr}_{day_prefix}_net", f"{curr}_{day_prefix}_ot", f"{curr}_{day_prefix}_late", f"{curr}_{day_prefix}_absence"])
+        
+        headers.extend(["total_net", "total_ot"])
+        writer.writerow(headers)
+
+        for pid, emp in employees.items():
+            row_data = [emp["name"]]
+            for d in dates_in_range:
+                day_data = emp["days"].get(d, {})
+                row_data.extend([
+                    day_data.get("net_hours", 0),
+                    day_data.get("overtime_hours", 0),
+                    day_data.get("minutes_late", 0),
+                    day_data.get("absence_type", "")
+                ])
+            row_data.extend([round(emp["total_net"], 2), emp["total_ot"]])
+            writer.writerow(row_data)
+
+    output.seek(0)
+    filename = f"attendance_{report_type}_{date_from}_to_{date_to}.csv"
+    return StreamingResponse(
+        iter([output.getvalue()]), 
+        media_type="text/csv", 
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
 
