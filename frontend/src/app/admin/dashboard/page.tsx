@@ -76,8 +76,8 @@ export default function GeneralAdminDashboard() {
                             <ClipboardCheck className="w-6 h-6" />
                         </div>
                         <div className="text-right">
-                            <span className={`text-2xl font-black ${compliance?.compliance_pct >= 90 ? 'text-success' : 'text-warning'}`}>
-                                {compliance?.compliance_pct}%
+                            <span className={`text-2xl font-black ${(compliance?.compliance_pct ?? 0) >= 90 ? 'text-success' : 'text-warning'}`}>
+                                {compliance?.compliance_pct ?? 0}%
                             </span>
                             <p className="text-[10px] font-bold text-text-secondary uppercase tracking-widest mt-1 text-nowrap">Cumplimiento Hoy</p>
                         </div>
