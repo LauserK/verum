@@ -11,9 +11,16 @@ import Link from 'next/link'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
+interface AdminSummary {
+    active_staff: number;
+    pending_tickets: number;
+    critical_failures: number;
+    today: string;
+}
+
 export default function GeneralAdminDashboard() {
     const [profile, setProfile] = useState<Profile | null>(null)
-    const [summary, setSummary] = useState<Record<string, any> | null>(null)
+    const [summary, setSummary] = useState<AdminSummary | null>(null)
     const [compliance, setCompliance] = useState<ComplianceReport | null>(null)
     const [loading, setLoading] = useState(true)
     const [venueId, setVenueId] = useState<string>('')
@@ -27,7 +34,9 @@ export default function GeneralAdminDashboard() {
 
     useEffect(() => {
         if (!venueId) return
-        setLoading(true)
+        
+        // Use a flag to avoid setting state on unmounted component
+        let mounted = true;
         
         const today = new Date().toISOString().split('T')[0]
         
@@ -35,9 +44,15 @@ export default function GeneralAdminDashboard() {
             adminApi.getAdminSummary(venueId),
             adminApi.getCompliance({ venue_id: venueId, date_from: today, date_to: today })
         ]).then(([s, c]) => {
-            setSummary(s)
-            setCompliance(c)
-        }).catch(console.error).finally(() => setLoading(false))
+            if (mounted) {
+                setSummary(s as AdminSummary)
+                setCompliance(c)
+            }
+        }).catch(console.error).finally(() => {
+            if (mounted) setLoading(false)
+        })
+
+        return () => { mounted = false; }
     }, [venueId])
 
     if (loading || !profile) {

@@ -40,6 +40,7 @@ export default function ChecklistDashboard() {
         if (!venueId) return
         if (dateRange === 'custom' && (!customFrom || !customTo)) return
 
+        let mounted = true;
         setLoading(true)
 
         const getLocalDateString = (d: Date) => {
@@ -67,9 +68,15 @@ export default function ChecklistDashboard() {
         }
 
         adminApi.getCompliance({ venue_id: venueId, date_from: dateFrom, date_to: dateTo })
-            .then(setReport)
+            .then(res => {
+                if (mounted) setReport(res)
+            })
             .catch(console.error)
-            .finally(() => setLoading(false))
+            .finally(() => {
+                if (mounted) setLoading(false)
+            })
+
+        return () => { mounted = false; }
     }, [venueId, dateRange, customFrom, customTo])
 
     const complianceColor = (pct: number) => {

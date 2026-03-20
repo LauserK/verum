@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { attendanceApi, getProfile, type VenueInfo } from '@/lib/api'
+import { attendanceApi, getProfile, type VenueInfo, type AttendanceLog } from '@/lib/api'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { useTranslations } from '@/components/I18nProvider'
@@ -9,7 +9,7 @@ import { RefreshCcw } from 'lucide-react'
 
 export default function AdminAttendancePage() {
     const { t } = useTranslations()
-    const [liveData, setLiveData] = useState<Record<string, any>[]>([])
+    const [liveData, setLiveData] = useState<AttendanceLog[]>([])
     const [loading, setLoading] = useState(true)
     const [venues, setVenues] = useState<VenueInfo[]>([])
     const [selectedVenue, setSelectedVenue] = useState<string>('')

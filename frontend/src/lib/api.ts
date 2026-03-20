@@ -250,12 +250,25 @@ export interface EmployeeShift {
     shift_days?: EmployeeShiftDay[];
 }
 
+export interface AttendanceLog {
+    id: string;
+    profile_id: string;
+    venue_id: string;
+    event_type: 'clock_in' | 'clock_out' | 'break_start' | 'break_end';
+    marked_at: string;
+    minutes_late?: number;
+    overtime_hours?: number;
+    profiles?: {
+        full_name: string;
+    };
+}
+
 // Attendance API
 export const attendanceApi = {
     getStatus: (): Promise<Record<string, unknown>> => fetchWithAuth('/attendance/today/status'),
-    mark: (event_type: string, data: Record<string, unknown> = {}): Promise<Record<string, unknown>> => fetchWithAuth('/attendance/mark', { method: 'POST', body: JSON.stringify({ event_type, ...data }) }),
-    getLive: (venueId: string): Promise<Record<string, unknown>[]> => fetchWithAuth(`/attendance/live?venue_id=${venueId}`),
-    getHistory: (): Promise<any[]> => fetchWithAuth('/attendance/me'),
+    mark: (event_type: string, data: Record<string, unknown> = {}): Promise<AttendanceLog> => fetchWithAuth('/attendance/mark', { method: 'POST', body: JSON.stringify({ event_type, ...data }) }),
+    getLive: (venueId: string): Promise<AttendanceLog[]> => fetchWithAuth(`/attendance/live?venue_id=${venueId}`),
+    getHistory: (): Promise<AttendanceLog[]> => fetchWithAuth('/attendance/me'),
 };
 
 // Admin CRUD
