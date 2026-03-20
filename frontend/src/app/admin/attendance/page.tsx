@@ -63,7 +63,11 @@ export default function AdminAttendancePage() {
                             {venues.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
                         </select>
                         <a href="/admin/attendance/reports" className="text-sm font-bold text-primary hover:underline flex items-center gap-1">
-                            Ver Reportes →
+                            Ver Reportes
+                        </a>
+                        <span className="text-border">|</span>
+                        <a href="/admin/attendance/shifts" className="text-sm font-bold text-primary hover:underline flex items-center gap-1">
+                            Horarios
                         </a>
                     </div>
                 </div>
