@@ -12,6 +12,7 @@ interface AttendanceStatus {
     last_event: string | null;
     last_marked_at: string | null;
     available_actions: string[];
+    has_active_shift?: boolean;
 }
 
 export default function AttendancePage() {
@@ -117,26 +118,35 @@ export default function AttendancePage() {
                     </p>
 
                     <div className="space-y-3">
-                        {status?.available_actions.map((action: string) => {
-                            const config = mapAction[action as keyof typeof mapAction]
-                            return (
-                                <button 
-                                    key={action} 
-                                    onClick={() => handleMark(action)}
-                                    disabled={marking !== null}
-                                    className={`w-full h-14 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${config.color} ${marking === action ? 'opacity-70 scale-95' : 'active:scale-[0.98]'}`}
-                                >
-                                    {marking === action && <Loader2 className="w-5 h-5 animate-spin" />}
-                                    {t(`attendance.actions.${action}`)}
-                                </button>
-                            )
-                        })}
-                        
-                        {status?.available_actions.length === 0 && (
-                            <div className="bg-success/10 border border-success/20 p-4 rounded-xl text-success font-bold flex flex-col items-center gap-2">
-                                <span>🎉</span>
-                                Jornada completada por hoy
+                        {status?.has_active_shift === false ? (
+                            <div className="bg-error/10 border border-error/20 p-4 rounded-xl text-error font-bold flex flex-col text-sm items-center gap-2">
+                                <span>⚠️</span>
+                                No tienes un horario asignado en esta sede. Por favor, contacta a tu administrador para que te asigne uno.
                             </div>
+                        ) : (
+                            <>
+                                {status?.available_actions.map((action: string) => {
+                                    const config = mapAction[action as keyof typeof mapAction]
+                                    return (
+                                        <button 
+                                            key={action} 
+                                            onClick={() => handleMark(action)}
+                                            disabled={marking !== null}
+                                            className={`w-full h-14 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${config.color} ${marking === action ? 'opacity-70 scale-95' : 'active:scale-[0.98]'}`}
+                                        >
+                                            {marking === action && <Loader2 className="w-5 h-5 animate-spin" />}
+                                            {t(`attendance.actions.${action}`)}
+                                        </button>
+                                    )
+                                })}
+                                
+                                {status?.available_actions.length === 0 && (
+                                    <div className="bg-success/10 border border-success/20 p-4 rounded-xl text-success font-bold flex flex-col items-center gap-2">
+                                        <span>🎉</span>
+                                        Jornada completada por hoy
+                                    </div>
+                                )}
+                            </>
                         )}
                     </div>
                 </div>

@@ -2495,10 +2495,15 @@ async def get_attendance_status(current_user=Depends(get_current_user), db=Depen
     elif last_event == "break_start": available_actions = ["break_end"]
     elif last_event == "break_end": available_actions = ["clock_out"]
     
+    # Check if user has an assigned active shift
+    shift_check = db.table("employee_shifts").select("id").eq("profile_id", current_user.id).eq("venue_id", venue_id).eq("is_active", True).limit(1).execute()
+    has_active_shift = bool(shift_check.data and len(shift_check.data) > 0)
+    
     return {
         "last_event": last_event,
         "last_marked_at": logs_res.data[0]["marked_at"] if logs_res.data else None,
-        "available_actions": available_actions
+        "available_actions": available_actions,
+        "has_active_shift": has_active_shift
     }
 
 @app.post("/attendance/mark")
