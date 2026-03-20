@@ -229,6 +229,27 @@ export interface InventoryDashboardSummary {
     due_schedules: Array<Record<string, unknown>>;
 }
 
+// Employee Shifts
+export interface EmployeeShiftDay {
+    id: string;
+    weekday: number;
+    start_time: string | null;
+    end_time: string | null;
+    day_off: boolean;
+}
+
+export interface EmployeeShift {
+    id: string;
+    profile_id: string;
+    venue_id: string;
+    modality: 'fixed' | 'rotating' | 'flexible';
+    weekdays: number[] | null;
+    start_time: string | null;
+    end_time: string | null;
+    is_active: boolean;
+    shift_days?: EmployeeShiftDay[];
+}
+
 // Attendance API
 export const attendanceApi = {
     getStatus: (): Promise<Record<string, unknown>> => fetchWithAuth('/attendance/today/status'),
@@ -250,6 +271,18 @@ export const adminApi = {
         if (profileId) url += `&profile_id=${profileId}`;
         return url;
     },
+
+    getEmployeeShifts: (venueId?: string): Promise<EmployeeShift[]> =>
+        fetchWithAuth(`/employee-shifts${venueId ? `?venue_id=${venueId}` : ''}`),
+        
+    createEmployeeShift: (data: Record<string, unknown>): Promise<EmployeeShift> =>
+        fetchWithAuth('/employee-shifts', { method: 'POST', body: JSON.stringify(data) }),
+        
+    updateEmployeeShift: (id: string, data: Record<string, unknown>): Promise<EmployeeShift> =>
+        fetchWithAuth(`/employee-shifts/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+        
+    updateEmployeeShiftDays: (id: string, data: { weekday: number; start_time?: string | null; end_time?: string | null; day_off: boolean }): Promise<Record<string, unknown>> =>
+        fetchWithAuth(`/employee-shifts/${id}/days`, { method: 'POST', body: JSON.stringify(data) }),
 
     getOrganizations: (): Promise<Organization[]> =>
         fetchWithAuth('/admin/organizations'),

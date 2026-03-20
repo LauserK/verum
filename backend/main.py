@@ -2546,7 +2546,7 @@ async def mark_attendance(body: MarkAttendanceRequest, current_user=Depends(get_
 async def get_live_attendance(venue_id: str, db=Depends(get_db), _=Depends(require_permission("attendance.view_team"))):
     today_str = datetime.now(CARACAS_TZ).strftime("%Y-%m-%d")
     # Fetch all logs for today in this venue
-    logs_res = db.table("attendance_logs").select("*, profiles(full_name)").eq("venue_id", venue_id).gte("marked_at", f"{today_str}T00:00:00-04:00").order("marked_at", desc=True).execute()
+    logs_res = db.table("attendance_logs").select("*, profiles!attendance_logs_profile_id_fkey(full_name)").eq("venue_id", venue_id).gte("marked_at", f"{today_str}T00:00:00-04:00").order("marked_at", desc=True).execute()
     
     # Group by profile to find latest state
     staff_status = {}
@@ -2625,10 +2625,10 @@ async def get_attendance_alerts(venue_id: str, db=Depends(get_db), _=Depends(req
     today = datetime.now(CARACAS_TZ).strftime("%Y-%m-%d")
     
     # Absences
-    absences_res = db.table("absences").select("*, profiles(full_name)").eq("venue_id", venue_id).eq("date", today).eq("type", "unexcused").execute()
+    absences_res = db.table("absences").select("*, profiles!absences_profile_id_fkey(full_name)").eq("venue_id", venue_id).eq("date", today).eq("type", "unexcused").execute()
     
     # Lates today
-    lates_res = db.table("attendance_logs").select("*, profiles(full_name)").eq("venue_id", venue_id).gte("marked_at", f"{today}T00:00:00-04:00").gt("minutes_late", 0).order("marked_at", desc=True).execute()
+    lates_res = db.table("attendance_logs").select("*, profiles!attendance_logs_profile_id_fkey(full_name)").eq("venue_id", venue_id).gte("marked_at", f"{today}T00:00:00-04:00").gt("minutes_late", 0).order("marked_at", desc=True).execute()
     
     return {
         "absences": absences_res.data or [],
