@@ -2376,6 +2376,15 @@ async def get_admin_summary(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# ── Inventory: Dashboard (M10 & M12) ──
+
+@app.get("/inventory/dashboard/summary")
+async def get_inventory_dashboard_summary(
+    venue_id: Optional[str] = None,
+    db=Depends(get_db),
+    current_user=Depends(get_current_user),
+    _=Depends(require_permission("inventory_assets.view"))
+):
     try:
         # We need the org_id to filter correctly if venue_id is not provided
         profile_res = db.table("profiles").select("organization_id").eq("id", current_user.id).single().execute()

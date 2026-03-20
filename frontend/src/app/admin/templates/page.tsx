@@ -7,10 +7,12 @@ import {
 } from '@/lib/api'
 import {
     Plus, Trash2, Edit3, ChevronRight, Save, X, Loader2,
-    GripVertical
+    GripVertical, Clock
 } from 'lucide-react'
 import QuestionConfigEditor from '@/components/admin/QuestionConfigEditor'
 import ScheduleEditor from '@/components/admin/ScheduleEditor'
+import Link from 'next/link'
+import { useTranslations } from '@/components/I18nProvider'
 
 const QUESTION_TYPES = [
     { value: 'check', label: 'Check ✓' },

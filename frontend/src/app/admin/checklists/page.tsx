@@ -1,12 +1,5 @@
-'use client'
-
-import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { redirect } from 'next/navigation'
 
 export default function ChecklistsPage() {
-    const router = useRouter()
-    useEffect(() => {
-        router.replace('/admin/checklists/dashboard')
-    }, [router])
-    return null
+    redirect('/admin/checklists/dashboard')
 }

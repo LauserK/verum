@@ -277,13 +277,17 @@ export const adminApi = {
         
     createEmployeeShift: (data: Record<string, unknown>): Promise<EmployeeShift> =>
         fetchWithAuth('/employee-shifts', { method: 'POST', body: JSON.stringify(data) }),
-        
+
     updateEmployeeShift: (id: string, data: Record<string, unknown>): Promise<EmployeeShift> =>
         fetchWithAuth(`/employee-shifts/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-        
+
     updateEmployeeShiftDays: (id: string, data: { weekday: number; start_time?: string | null; end_time?: string | null; day_off: boolean }): Promise<Record<string, unknown>> =>
         fetchWithAuth(`/employee-shifts/${id}/days`, { method: 'POST', body: JSON.stringify(data) }),
 
+    getAdminSummary: (venueId?: string): Promise<Record<string, any>> =>
+        fetchWithAuth(`/admin/summary${venueId ? `?venue_id=${venueId}` : ''}`),
+
+    // Inventory Dashboard
     getOrganizations: (): Promise<Organization[]> =>
         fetchWithAuth('/admin/organizations'),
 

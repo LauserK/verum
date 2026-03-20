@@ -2,10 +2,13 @@
 
 import { useEffect, useState } from 'react'
 import { adminApi, getProfile, type Profile, type AdminSubmission } from '@/lib/api'
-import { Loader2, CheckCircle2, Clock, Eye } from 'lucide-react'
+import { Loader2, Eye, Clock } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { useTranslations } from '@/components/I18nProvider'
 
 export default function SubmissionsPage() {
+    const { t } = useTranslations()
     const router = useRouter()
     const [profile, setProfile] = useState<Profile | null>(null)
     const [submissions, setSubmissions] = useState<AdminSubmission[]>([])

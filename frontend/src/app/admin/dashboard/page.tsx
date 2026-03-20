@@ -1,241 +1,225 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { adminApi, getProfile, type ComplianceReport, type Profile } from '@/lib/api'
+import { adminApi, getProfile, type Profile, type ComplianceReport } from '@/lib/api'
 import {
-    CheckCircle2, AlertTriangle, XCircle, Clock, TrendingUp,
-    Loader2
+    ClipboardCheck, Box, 
+    AlertTriangle, ArrowRight, Loader2, Users,
+    CheckCircle2, TrendingUp, Wrench, Building2
 } from 'lucide-react'
+import Link from 'next/link'
+import { format } from 'date-fns'
+import { es } from 'date-fns/locale'
 
-import DatePicker from 'react-datepicker'
-import 'react-datepicker/dist/react-datepicker.css'
-import { es } from 'date-fns/locale/es'
-
-export default function AdminDashboard() {
+export default function GeneralAdminDashboard() {
     const [profile, setProfile] = useState<Profile | null>(null)
-    const [report, setReport] = useState<ComplianceReport | null>(null)
+    const [summary, setSummary] = useState<Record<string, any> | null>(null)
+    const [compliance, setCompliance] = useState<ComplianceReport | null>(null)
     const [loading, setLoading] = useState(true)
     const [venueId, setVenueId] = useState<string>('')
-    const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | 'custom'>('today')
-    const [customFrom, setCustomFrom] = useState<Date | null>(new Date())
-    const [customTo, setCustomTo] = useState<Date | null>(new Date())
 
     useEffect(() => {
-        async function load() {
-            try {
-                const p = await getProfile()
-                setProfile(p)
-                if (p.venues.length > 0 && !venueId) {
-                    setVenueId(p.venues[0].id)
-                }
-            } catch { }
-        }
-        load()
+        getProfile().then(p => {
+            setProfile(p)
+            if (p.venues.length > 0) setVenueId(p.venues[0].id)
+        })
     }, [])
 
     useEffect(() => {
         if (!venueId) return
-        if (dateRange === 'custom' && (!customFrom || !customTo)) return
-
         setLoading(true)
+        
+        const today = new Date().toISOString().split('T')[0]
+        
+        Promise.all([
+            adminApi.getAdminSummary(venueId),
+            adminApi.getCompliance({ venue_id: venueId, date_from: today, date_to: today })
+        ]).then(([s, c]) => {
+            setSummary(s)
+            setCompliance(c)
+        }).catch(console.error).finally(() => setLoading(false))
+    }, [venueId])
 
-        const getLocalDateString = (d: Date) => {
-            const year = d.getFullYear()
-            const month = String(d.getMonth() + 1).padStart(2, '0')
-            const day = String(d.getDate()).padStart(2, '0')
-            return `${year}-${month}-${day}`
-        }
-
-        const today = new Date()
-        let dateFrom = getLocalDateString(today)
-        let dateTo = dateFrom
-
-        if (dateRange === 'week') {
-            const d = new Date(today)
-            d.setDate(d.getDate() - 6)
-            dateFrom = getLocalDateString(d)
-        } else if (dateRange === 'month') {
-            const d = new Date(today)
-            d.setDate(d.getDate() - 29)
-            dateFrom = getLocalDateString(d)
-        } else if (dateRange === 'custom' && customFrom && customTo) {
-            dateFrom = getLocalDateString(customFrom)
-            dateTo = getLocalDateString(customTo)
-        }
-
-        adminApi.getCompliance({ venue_id: venueId, date_from: dateFrom, date_to: dateTo })
-            .then(setReport)
-            .catch(console.error)
-            .finally(() => setLoading(false))
-    }, [venueId, dateRange, customFrom, customTo])
-
-    const complianceColor = (pct: number) => {
-        if (pct >= 90) return 'text-success'
-        if (pct >= 70) return 'text-warning'
-        return 'text-error'
+    if (loading || !profile) {
+        return (
+            <div className="flex items-center justify-center py-20">
+                <Loader2 className="w-8 h-8 text-primary animate-spin" />
+            </div>
+        )
     }
 
     return (
-        <div className="space-y-6">
-            {/* Filters */}
-            <div className="flex flex-wrap gap-3 items-center">
+        <div className="space-y-8 animate-in fade-in duration-500">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                    <h1 className="text-3xl font-black text-text-primary tracking-tight">Panel de Control</h1>
+                    <p className="text-text-secondary text-sm mt-1">Vista global de la operativa — {format(new Date(), 'EEEE, d MMMM', { locale: es })}</p>
+                </div>
                 <select
                     value={venueId}
                     onChange={(e) => setVenueId(e.target.value)}
-                    className="bg-surface border border-border rounded-xl px-3 h-10 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
+                    className="bg-surface border border-border rounded-xl px-4 h-11 text-sm font-bold text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none shadow-sm transition-all"
                 >
-                    {profile?.venues.map((v) => (
+                    {profile.venues.map((v) => (
                         <option key={v.id} value={v.id}>{v.name}</option>
                     ))}
                 </select>
-
-                <div className="flex bg-surface-raised rounded-xl border border-border overflow-hidden">
-                    {(['today', 'week', 'month', 'custom'] as const).map((r) => (
-                        <button
-                            key={r}
-                            onClick={() => setDateRange(r)}
-                            className={`px-4 py-2 text-xs font-medium transition-colors capitalize
-                                ${dateRange === r ? 'bg-primary text-text-inverse' : 'text-text-secondary hover:text-text-primary'}`}
-                        >
-                            {r === 'today' ? 'Today' : r === 'week' ? '7 Days' : r === 'month' ? '30 Days' : 'Custom'}
-                        </button>
-                    ))}
-                </div>
-
-                {dateRange === 'custom' && (
-                    <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2 duration-300">
-                        <DatePicker
-                            selected={customFrom}
-                            onChange={(date: Date | null) => setCustomFrom(date)}
-                            dateFormat="dd/MM/yyyy"
-                            className="bg-surface border border-border rounded-xl px-3 h-10 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none w-[120px] cursor-pointer"
-                            locale={es}
-                            placeholderText="DD/MM/YYYY"
-                        />
-                        <span className="text-text-secondary text-sm font-medium">to</span>
-                        <DatePicker
-                            selected={customTo}
-                            onChange={(date: Date | null) => setCustomTo(date)}
-                            dateFormat="dd/MM/yyyy"
-                            className="bg-surface border border-border rounded-xl px-3 h-10 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none w-[120px] cursor-pointer"
-                            locale={es}
-                            placeholderText="DD/MM/YYYY"
-                        />
-                    </div>
-                )}
             </div>
 
-            {loading && (
-                <div className="flex items-center justify-center py-20">
-                    <Loader2 className="w-8 h-8 text-primary animate-spin" />
+            {/* Top Scorecards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Checklist Compliance Card */}
+                <Link href="/admin/checklists/dashboard" className="bg-surface border border-border rounded-3xl p-6 shadow-sm hover:border-primary/50 transition-all group">
+                    <div className="flex justify-between items-start mb-4">
+                        <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+                            <ClipboardCheck className="w-6 h-6" />
+                        </div>
+                        <div className="text-right">
+                            <span className={`text-2xl font-black ${compliance?.compliance_pct >= 90 ? 'text-success' : 'text-warning'}`}>
+                                {compliance?.compliance_pct}%
+                            </span>
+                            <p className="text-[10px] font-bold text-text-secondary uppercase tracking-widest mt-1 text-nowrap">Cumplimiento Hoy</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center justify-between mt-6">
+                        <p className="text-xs text-text-secondary font-medium">Ver detalles de checklists</p>
+                        <ArrowRight className="w-4 h-4 text-text-secondary group-hover:translate-x-1 transition-transform" />
+                    </div>
+                </Link>
+
+                {/* Staff Status Card */}
+                <Link href="/admin/attendance" className="bg-surface border border-border rounded-3xl p-6 shadow-sm hover:border-primary/50 transition-all group">
+                    <div className="flex justify-between items-start mb-4">
+                        <div className="w-12 h-12 rounded-2xl bg-success/10 flex items-center justify-center text-success group-hover:scale-110 transition-transform">
+                            <Users className="w-6 h-6" />
+                        </div>
+                        <div className="text-right">
+                            <span className="text-2xl font-black text-text-primary">
+                                {summary?.active_staff}
+                            </span>
+                            <p className="text-[10px] font-bold text-text-secondary uppercase tracking-widest mt-1 text-nowrap">Personal en Turno</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center justify-between mt-6">
+                        <p className="text-xs text-text-secondary font-medium">Ver asistencia en vivo</p>
+                        <ArrowRight className="w-4 h-4 text-text-secondary group-hover:translate-x-1 transition-transform" />
+                    </div>
+                </Link>
+
+                {/* Pending Issues Card */}
+                <Link href="/admin/inventory" className="bg-surface border border-border rounded-3xl p-6 shadow-sm hover:border-primary/50 transition-all group">
+                    <div className="flex justify-between items-start mb-4">
+                        <div className="w-12 h-12 rounded-2xl bg-error/10 flex items-center justify-center text-error group-hover:scale-110 transition-transform">
+                            <AlertTriangle className="w-6 h-6" />
+                        </div>
+                        <div className="text-right">
+                            <span className="text-2xl font-black text-error">
+                                {summary?.pending_tickets + summary?.critical_failures}
+                            </span>
+                            <p className="text-[10px] font-bold text-text-secondary uppercase tracking-widest mt-1 text-nowrap">Alertas Críticas</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center justify-between mt-6">
+                        <p className="text-xs text-text-secondary font-medium">Ver tickets y averías</p>
+                        <ArrowRight className="w-4 h-4 text-text-secondary group-hover:translate-x-1 transition-transform" />
+                    </div>
+                </Link>
+            </div>
+
+            {/* Middle Section: Insights & Live Alerts */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Checklist Alerts */}
+                <div className="bg-surface border border-border rounded-3xl p-6 shadow-sm">
+                    <h3 className="text-sm font-bold text-text-secondary uppercase tracking-widest mb-6 flex items-center gap-2">
+                        <ClipboardCheck className="w-4 h-4" /> Alertas de Checklist
+                    </h3>
+                    <div className="space-y-4">
+                        {summary?.critical_failures > 0 ? (
+                            <div className="bg-error/5 border border-error/10 rounded-2xl p-4 flex items-start gap-4">
+                                <AlertTriangle className="w-5 h-5 text-error mt-0.5" />
+                                <div>
+                                    <p className="text-sm font-bold text-text-primary">Fallas Críticas Detectadas</p>
+                                    <p className="text-xs text-text-secondary mt-1">Hoy se han reportado {summary.critical_failures} puntos críticos fallidos en los checklists.</p>
+                                    <Link href="/admin/checklists/dashboard" className="text-xs font-bold text-error hover:underline mt-3 inline-block">Revisar envíos →</Link>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="bg-success/5 border border-success/10 rounded-2xl p-4 flex items-center gap-4">
+                                <CheckCircle2 className="w-5 h-5 text-success" />
+                                <p className="text-sm text-text-secondary">Sin fallas críticas reportadas hoy.</p>
+                            </div>
+                        )}
+
+                        <div className="pt-4 border-t border-border">
+                            <div className="flex justify-between items-center mb-2">
+                                <span className="text-xs font-bold text-text-secondary uppercase">Progreso de ejecución</span>
+                                <span className="text-xs font-black text-text-primary">{compliance?.completed_total} / {compliance?.total_expected}</span>
+                            </div>
+                            <div className="h-2 bg-surface-raised rounded-full overflow-hidden">
+                                <div 
+                                    className="h-full bg-primary transition-all duration-1000" 
+                                    style={{ width: `${compliance?.compliance_pct || 0}%` }}
+                                />
+                            </div>
+                        </div>
+                    </div>
                 </div>
-            )}
 
-            {!loading && report && (
-                <>
-                    {/* KPI Cards Row */}
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                        {/* Compliance */}
-                        <div className="bg-surface border border-border rounded-2xl p-5 shadow-sm">
-                            <div className="flex items-center gap-2 mb-3">
-                                <TrendingUp className="w-4 h-4 text-text-secondary" />
-                                <span className="text-xs font-medium text-text-secondary uppercase tracking-wider">Compliance</span>
+                {/* Maintenance & Inventory */}
+                <div className="bg-surface border border-border rounded-3xl p-6 shadow-sm">
+                    <h3 className="text-sm font-bold text-text-secondary uppercase tracking-widest mb-6 flex items-center gap-2">
+                        <Wrench className="w-4 h-4" /> Mantenimiento y Activos
+                    </h3>
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between p-4 bg-surface-raised rounded-2xl">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-warning/10 flex items-center justify-center text-warning">
+                                    <Wrench className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <p className="text-sm font-bold text-text-primary">Tickets Abiertos</p>
+                                    <p className="text-xs text-text-secondary">{summary?.pending_tickets} reparaciones en curso</p>
+                                </div>
                             </div>
-                            <p className={`text-3xl font-bold ${complianceColor(report.compliance_pct)}`}>
-                                {report.compliance_pct}%
-                            </p>
-                            <p className="text-xs text-text-secondary mt-1">
-                                {report.completed_total} / {report.total_expected} completed
-                            </p>
+                            <Link href="/admin/inventory/tickets" className="p-2 text-text-secondary hover:text-primary transition-colors">
+                                <ArrowRight className="w-5 h-5" />
+                            </Link>
                         </div>
 
-                        {/* On Time */}
-                        <div className="bg-surface border border-border rounded-2xl p-5 shadow-sm">
-                            <div className="flex items-center gap-2 mb-3">
-                                <CheckCircle2 className="w-4 h-4 text-success" />
-                                <span className="text-xs font-medium text-text-secondary uppercase tracking-wider">On Time</span>
+                        <div className="flex items-center justify-between p-4 bg-surface-raised rounded-2xl">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                                    <Box className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <p className="text-sm font-bold text-text-primary">Inventario de Utensilios</p>
+                                    <p className="text-xs text-text-secondary">Última auditoría hace 2 días</p>
+                                </div>
                             </div>
-                            <p className="text-3xl font-bold text-success">{report.completed_on_time}</p>
-                            <p className="text-xs text-text-secondary mt-1">
-                                {report.completed_late} late · {report.missing} missing
-                            </p>
-                        </div>
-
-                        {/* Critical Issues */}
-                        <div className="bg-surface border border-border rounded-2xl p-5 shadow-sm">
-                            <div className="flex items-center gap-2 mb-3">
-                                <XCircle className="w-4 h-4 text-error" />
-                                <span className="text-xs font-medium text-text-secondary uppercase tracking-wider">Critical</span>
-                            </div>
-                            <p className={`text-3xl font-bold ${report.critical_issues > 0 ? 'text-error' : 'text-success'}`}>
-                                {report.critical_issues}
-                            </p>
-                            <p className="text-xs text-text-secondary mt-1">
-                                {report.non_critical_issues} non-critical
-                            </p>
-                        </div>
-
-                        {/* Avg Execution Time */}
-                        <div className="bg-surface border border-border rounded-2xl p-5 shadow-sm">
-                            <div className="flex items-center gap-2 mb-3">
-                                <Clock className="w-4 h-4 text-text-secondary" />
-                                <span className="text-xs font-medium text-text-secondary uppercase tracking-wider">Avg Time</span>
-                            </div>
-                            <p className="text-3xl font-bold text-text-primary">{report.avg_execution_minutes}m</p>
-                            <p className="text-xs text-text-secondary mt-1">per checklist</p>
+                            <Link href="/admin/inventory/utensils" className="p-2 text-text-secondary hover:text-primary transition-colors">
+                                <ArrowRight className="w-5 h-5" />
+                            </Link>
                         </div>
                     </div>
+                </div>
+            </div>
 
-                    {/* Summary Bar */}
-                    <div className="bg-surface border border-border rounded-2xl p-5 shadow-sm">
-                        <h3 className="text-sm font-semibold text-text-primary mb-4">Completion Breakdown</h3>
-                        <div className="h-4 bg-surface-raised rounded-full overflow-hidden flex">
-                            {report.total_expected > 0 && (
-                                <>
-                                    <div
-                                        className="bg-success h-full transition-all duration-500"
-                                        style={{ width: `${(report.completed_on_time / report.total_expected) * 100}%` }}
-                                    />
-                                    <div
-                                        className="bg-warning h-full transition-all duration-500"
-                                        style={{ width: `${(report.completed_late / report.total_expected) * 100}%` }}
-                                    />
-                                    <div
-                                        className="bg-error/30 h-full transition-all duration-500"
-                                        style={{ width: `${(report.missing / report.total_expected) * 100}%` }}
-                                    />
-                                </>
-                            )}
-                        </div>
-                        <div className="flex items-center gap-6 mt-3 text-xs text-text-secondary">
-                            <span className="flex items-center gap-1.5">
-                                <span className="w-2.5 h-2.5 rounded-full bg-success" /> On Time ({report.completed_on_time})
-                            </span>
-                            <span className="flex items-center gap-1.5">
-                                <span className="w-2.5 h-2.5 rounded-full bg-warning" /> Late ({report.completed_late})
-                            </span>
-                            <span className="flex items-center gap-1.5">
-                                <span className="w-2.5 h-2.5 rounded-full bg-error/30" /> Missing ({report.missing})
-                            </span>
-                        </div>
-                    </div>
-
-                    {/* Warnings */}
-                    {report.critical_issues > 0 && (
-                        <div className="bg-error/5 border border-error/20 rounded-2xl p-4 flex items-start gap-3">
-                            <AlertTriangle className="w-5 h-5 text-error flex-shrink-0 mt-0.5" />
-                            <div>
-                                <p className="text-sm font-semibold text-error">
-                                    {report.critical_issues} Critical Issue{report.critical_issues > 1 ? 's' : ''} Detected
-                                </p>
-                                <p className="text-xs text-text-secondary mt-1">
-                                    Review submissions for details on critical failures that require immediate action.
-                                </p>
-                            </div>
-                        </div>
-                    )}
-                </>
-            )}
+            {/* Quick Actions Footer */}
+            <div className="bg-primary/5 border border-primary/10 rounded-3xl p-8 text-center">
+                <h3 className="text-lg font-bold text-primary mb-2">Accesos Rápidos</h3>
+                <div className="flex flex-wrap justify-center gap-4 mt-6">
+                    <Link href="/admin/team" className="px-6 h-12 bg-primary text-text-inverse rounded-2xl font-bold text-sm flex items-center gap-2 hover:bg-primary-hover transition-all shadow-lg shadow-primary/20">
+                        <Users className="w-4 h-4" /> Crear Usuario
+                    </Link>
+                    <Link href="/admin/venues" className="px-6 h-12 bg-surface border border-border text-text-primary rounded-2xl font-bold text-sm flex items-center gap-2 hover:bg-surface-raised transition-all">
+                        <Building2 className="w-4 h-4" /> Configurar Sede
+                    </Link>
+                    <Link href="/admin/checklists/dashboard" className="px-6 h-12 bg-surface border border-border text-text-primary rounded-2xl font-bold text-sm flex items-center gap-2 hover:bg-surface-raised transition-all">
+                        <TrendingUp className="w-4 h-4" /> Ver Reportes
+                    </Link>
+                </div>
+            </div>
         </div>
     )
 }
