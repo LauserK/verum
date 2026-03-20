@@ -86,11 +86,18 @@ export default function TemplatesPage() {
 
     useEffect(() => {
         if (!venueId) return
-        setLoading(true)
+        
+        let mounted = true;
         adminApi.getTemplates(venueId)
-            .then(setTemplates)
+            .then(res => {
+                if (mounted) setTemplates(res)
+            })
             .catch(console.error)
-            .finally(() => setLoading(false))
+            .finally(() => {
+                if (mounted) setLoading(false)
+            })
+            
+        return () => { mounted = false; }
     }, [venueId])
 
     const loadQuestions = async (tmpl: TemplateDetail) => {

@@ -217,6 +217,19 @@ export interface CountSchedule {
     item_ids?: string[]
 }
 
+export interface RepairTicket {
+    id: string;
+    asset_id: string;
+    title: string;
+    issue_description: string | null;
+    status: string;
+    opened_at: string;
+    closed_at: string | null;
+    assets?: {
+        name: string;
+    };
+}
+
 export interface InventoryDashboardSummary {
     asset_stats: {
         total: number;
@@ -224,9 +237,9 @@ export interface InventoryDashboardSummary {
         en_reparacion: number;
         baja: number;
     };
-    active_tickets: Array<Record<string, unknown>>;
-    pending_counts: Array<Record<string, unknown>>;
-    due_schedules: Array<Record<string, unknown>>;
+    active_tickets: RepairTicket[];
+    pending_counts: AttendanceLog[];
+    due_schedules: CountSchedule[];
 }
 
 // Employee Shifts

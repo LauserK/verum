@@ -1,3 +1,4 @@
+// frontend/src/app/admin/checklists/dashboard/page.tsx
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -34,6 +35,7 @@ export default function ChecklistDashboard() {
             } catch { }
         }
         load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
     useEffect(() => {
@@ -41,8 +43,7 @@ export default function ChecklistDashboard() {
         if (dateRange === 'custom' && (!customFrom || !customTo)) return
 
         let mounted = true;
-        setLoading(true)
-
+        
         const getLocalDateString = (d: Date) => {
             const year = d.getFullYear()
             const month = String(d.getMonth() + 1).padStart(2, '0')
@@ -69,12 +70,12 @@ export default function ChecklistDashboard() {
 
         adminApi.getCompliance({ venue_id: venueId, date_from: dateFrom, date_to: dateTo })
             .then(res => {
-                if (mounted) setReport(res)
+                if (mounted) {
+                    setReport(res)
+                    setLoading(false)
+                }
             })
             .catch(console.error)
-            .finally(() => {
-                if (mounted) setLoading(false)
-            })
 
         return () => { mounted = false; }
     }, [venueId, dateRange, customFrom, customTo])
@@ -106,7 +107,10 @@ export default function ChecklistDashboard() {
             <div className="flex flex-wrap gap-3 items-center">
                 <select
                     value={venueId}
-                    onChange={(e) => setVenueId(e.target.value)}
+                    onChange={(e) => {
+                        setVenueId(e.target.value)
+                        setLoading(true)
+                    }}
                     className="bg-surface border border-border rounded-xl px-3 h-10 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
                 >
                     {profile?.venues.map((v) => (
@@ -118,7 +122,10 @@ export default function ChecklistDashboard() {
                     {(['today', 'week', 'month', 'custom'] as const).map((r) => (
                         <button
                             key={r}
-                            onClick={() => setDateRange(r)}
+                            onClick={() => {
+                                setDateRange(r)
+                                setLoading(true)
+                            }}
                             className={`px-4 py-2 text-xs font-medium transition-colors capitalize
                                 ${dateRange === r ? 'bg-primary text-text-inverse' : 'text-text-secondary hover:text-text-primary'}`}
                         >
@@ -131,7 +138,10 @@ export default function ChecklistDashboard() {
                     <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2 duration-300">
                         <DatePicker
                             selected={customFrom}
-                            onChange={(date: Date | null) => setCustomFrom(date)}
+                            onChange={(date: Date | null) => {
+                                setCustomFrom(date)
+                                setLoading(true)
+                            }}
                             dateFormat="dd/MM/yyyy"
                             className="bg-surface border border-border rounded-xl px-3 h-10 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none w-[120px] cursor-pointer"
                             locale={es}
@@ -140,7 +150,10 @@ export default function ChecklistDashboard() {
                         <span className="text-text-secondary text-sm font-medium">to</span>
                         <DatePicker
                             selected={customTo}
-                            onChange={(date: Date | null) => setCustomTo(date)}
+                            onChange={(date: Date | null) => {
+                                setCustomTo(date)
+                                setLoading(true)
+                            }}
                             dateFormat="dd/MM/yyyy"
                             className="bg-surface border border-border rounded-xl px-3 h-10 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none w-[120px] cursor-pointer"
                             locale={es}

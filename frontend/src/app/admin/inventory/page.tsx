@@ -22,16 +22,21 @@ export default function InventoryDashboardPage() {
 
   useEffect(() => {
     let active = true
-    adminApi.getInventoryDashboard(selectedVenue || undefined)
-      .then(res => {
-        if (active) setData(res)
-      })
-      .catch(console.error)
-      .finally(() => {
-        if (active) setLoading(false)
-      })
+    
+    if (selectedVenue || venues.length > 0) {
+        setLoading(true)
+        adminApi.getInventoryDashboard(selectedVenue || undefined)
+          .then(res => {
+            if (active) setData(res)
+          })
+          .catch(console.error)
+          .finally(() => {
+            if (active) setLoading(false)
+          })
+    }
+    
     return () => { active = false }
-  }, [selectedVenue])
+  }, [selectedVenue, venues.length])
 
   if (loading || !data) {
     return <div className="animate-pulse space-y-6 p-6"><div className="h-32 bg-surface rounded-2xl w-full"></div></div>
@@ -94,13 +99,13 @@ export default function InventoryDashboardPage() {
               <Wrench className="w-4 h-4" /> Tickets Activos
             </h3>
             <div className="space-y-3">
-              {data.active_tickets.map((t: Record<string, any>) => (
-                <Link href={`/admin/inventory/tickets/${t.id}`} key={t.id as string} className="flex justify-between items-center p-3 hover:bg-surface-raised rounded-xl transition-colors border border-border hover:border-primary/50 group">
+              {data.active_tickets.map((t) => (
+                <Link href={`/admin/inventory/tickets/${t.id}`} key={t.id} className="flex justify-between items-center p-3 hover:bg-surface-raised rounded-xl transition-colors border border-border hover:border-primary/50 group">
                   <div>
-                    <p className="font-semibold text-sm text-text-primary group-hover:text-primary transition-colors">{t.assets?.name as string}</p>
-                    <p className="text-xs text-text-secondary mt-1">{(t.issue_description || t.title) as string}</p>
+                    <p className="font-semibold text-sm text-text-primary group-hover:text-primary transition-colors">{t.assets?.name}</p>
+                    <p className="text-xs text-text-secondary mt-1">{t.issue_description || t.title}</p>
                   </div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider bg-warning/10 text-warning px-2.5 py-1 rounded-md">{(t.status as string).replace('_', ' ')}</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider bg-warning/10 text-warning px-2.5 py-1 rounded-md">{t.status.replace('_', ' ')}</span>
                 </Link>
               ))}
             </div>
@@ -119,7 +124,7 @@ export default function InventoryDashboardPage() {
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="bg-surface border border-border rounded-2xl p-5 shadow-sm">
-            <h3 className="text-sm font-bold text-text-secondary uppercase tracking-wider mb-4 flex items-center justify-between">
+            <h3 className="text-sm font-bold text-text-secondary uppercase tracking-widest mb-4 flex items-center justify-between">
               Conteos Pendientes
               {data.pending_counts.length > 0 && (
                 <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-full text-xs font-bold">{data.pending_counts.length}</span>
@@ -129,12 +134,12 @@ export default function InventoryDashboardPage() {
               <p className="text-sm text-text-secondary text-center py-6">No hay conteos pendientes de auditar.</p>
             ) : (
               <div className="space-y-3">
-                {data.pending_counts.map((c: Record<string, any>) => (
-                  <Link href={`/admin/inventory/utensils/counts/${c.id}`} key={c.id as string} className="flex justify-between items-center p-3 bg-surface border border-border hover:border-primary/50 rounded-xl transition-colors group">
+                {data.pending_counts.map((c) => (
+                  <Link href={`/admin/inventory/utensils/counts/${c.id}`} key={c.id} className="flex justify-between items-center p-3 bg-surface border border-border hover:border-primary/50 rounded-xl transition-colors group">
                     <div>
-                      <p className="font-semibold text-sm text-text-primary group-hover:text-primary transition-colors">Conteo de {c.profiles?.full_name as string}</p>
+                      <p className="font-semibold text-sm text-text-primary group-hover:text-primary transition-colors">Conteo de {c.profiles?.full_name}</p>
                       <p className="text-xs text-text-secondary flex items-center gap-1 mt-1">
-                        <Clock className="w-3 h-3" /> {format(new Date(c.created_at as string), "dd MMM, HH:mm", { locale: es })}
+                        <Clock className="w-3 h-3" /> {format(new Date(c.marked_at), "dd MMM, HH:mm", { locale: es })}
                       </p>
                     </div>
                     <ArrowRight className="w-4 h-4 text-text-secondary group-hover:text-primary transition-colors" />
@@ -150,7 +155,7 @@ export default function InventoryDashboardPage() {
           </div>
 
           <div className="bg-surface border border-border rounded-2xl p-5 shadow-sm">
-            <h3 className="text-sm font-bold text-text-secondary uppercase tracking-wider mb-4 flex items-center justify-between">
+            <h3 className="text-sm font-bold text-text-secondary uppercase tracking-widest mb-4 flex items-center justify-between">
               Órdenes Vencidas / Para Hoy
               {data.due_schedules.length > 0 && (
                 <span className="bg-error/10 text-error px-2 py-0.5 rounded-full text-xs font-bold">{data.due_schedules.length}</span>
@@ -160,14 +165,14 @@ export default function InventoryDashboardPage() {
               <p className="text-sm text-text-secondary text-center py-6">El staff está al día con el cronograma.</p>
             ) : (
               <div className="space-y-3">
-                {data.due_schedules.map((s: any) => {
+                {data.due_schedules.map((s) => {
                   const isOverdue = s.next_due < new Date().toLocaleDateString('en-CA')
                   return (
                   <div key={s.id} className={`flex justify-between items-center p-3 rounded-xl border ${isOverdue ? 'bg-error/5 border-error/20' : 'bg-warning/5 border-warning/20'}`}>
                     <div>
                       <p className="font-semibold text-sm text-text-primary">{s.name}</p>
                       <p className={`text-xs mt-1 ${isOverdue ? 'text-error' : 'text-warning-strong'}`}>
-                        {s.venues?.name} - {isOverdue ? 'Vencida el' : 'Para hoy'}: {format(new Date(s.next_due + 'T00:00:00'), "dd MMM", { locale: es })}
+                        {venues.find(v => v.id === s.venue_id)?.name || 'Sede'} - {isOverdue ? 'Vencida el' : 'Para hoy'}: {format(new Date(s.next_due + 'T00:00:00'), "dd MMM", { locale: es })}
                       </p>
                     </div>
                   </div>

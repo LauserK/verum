@@ -150,12 +150,12 @@ export default function GeneralAdminDashboard() {
                         <ClipboardCheck className="w-4 h-4" /> Alertas de Checklist
                     </h3>
                     <div className="space-y-4">
-                        {summary?.critical_failures > 0 ? (
+                        {(summary?.critical_failures ?? 0) > 0 ? (
                             <div className="bg-error/5 border border-error/10 rounded-2xl p-4 flex items-start gap-4">
                                 <AlertTriangle className="w-5 h-5 text-error mt-0.5" />
                                 <div>
                                     <p className="text-sm font-bold text-text-primary">Fallas Críticas Detectadas</p>
-                                    <p className="text-xs text-text-secondary mt-1">Hoy se han reportado {summary.critical_failures} puntos críticos fallidos en los checklists.</p>
+                                    <p className="text-xs text-text-secondary mt-1">Hoy se han reportado {summary?.critical_failures} puntos críticos fallidos en los checklists.</p>
                                     <Link href="/admin/checklists/dashboard" className="text-xs font-bold text-error hover:underline mt-3 inline-block">Revisar envíos →</Link>
                                 </div>
                             </div>
@@ -169,12 +169,12 @@ export default function GeneralAdminDashboard() {
                         <div className="pt-4 border-t border-border">
                             <div className="flex justify-between items-center mb-2">
                                 <span className="text-xs font-bold text-text-secondary uppercase">Progreso de ejecución</span>
-                                <span className="text-xs font-black text-text-primary">{compliance?.completed_total} / {compliance?.total_expected}</span>
+                                <span className="text-xs font-black text-text-primary">{compliance?.completed_total ?? 0} / {compliance?.total_expected ?? 0}</span>
                             </div>
                             <div className="h-2 bg-surface-raised rounded-full overflow-hidden">
                                 <div 
                                     className="h-full bg-primary transition-all duration-1000" 
-                                    style={{ width: `${compliance?.compliance_pct || 0}%` }}
+                                    style={{ width: `${compliance?.compliance_pct ?? 0}%` }}
                                 />
                             </div>
                         </div>
@@ -194,7 +194,7 @@ export default function GeneralAdminDashboard() {
                                 </div>
                                 <div>
                                     <p className="text-sm font-bold text-text-primary">Tickets Abiertos</p>
-                                    <p className="text-xs text-text-secondary">{summary?.pending_tickets} reparaciones en curso</p>
+                                    <p className="text-xs text-text-secondary">{summary?.pending_tickets ?? 0} reparaciones en curso</p>
                                 </div>
                             </div>
                             <Link href="/admin/inventory/tickets" className="p-2 text-text-secondary hover:text-primary transition-colors">

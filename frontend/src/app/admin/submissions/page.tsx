@@ -29,13 +29,21 @@ export default function SubmissionsPage() {
 
     useEffect(() => {
         if (!venueId) return
-        setLoading(true)
+        
+        let mounted = true;
         const filters: Record<string, string> = { venue_id: venueId }
         if (statusFilter) filters.status = statusFilter
+        
         adminApi.getSubmissions(filters)
-            .then(setSubmissions)
+            .then(res => {
+                if (mounted) setSubmissions(res)
+            })
             .catch(console.error)
-            .finally(() => setLoading(false))
+            .finally(() => {
+                if (mounted) setLoading(false)
+            })
+            
+        return () => { mounted = false; }
     }, [venueId, statusFilter])
 
     const formatDate = (iso: string) => {
