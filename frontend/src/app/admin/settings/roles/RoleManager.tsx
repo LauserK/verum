@@ -24,7 +24,7 @@ export function RoleManager() {
   const [rolePermissions, setRolePermissions] = useState<string[]>([]); // Array of permission IDs
   const [loadingPerms, setLoadingPerms] = useState(false);
   const supabase = createClient();
-  const { t } = useTranslations('admin.roles');
+  const { t } = useTranslations('admin');
 
   useEffect(() => {
     // Initial fetch of roles and the full permissions catalog
@@ -82,7 +82,7 @@ export function RoleManager() {
     <div className="flex gap-6 h-[calc(100vh-200px)]">
       {/* Left Column: Roles List */}
       <div className="w-1/3 bg-surface border border-border p-4 rounded-xl flex flex-col">
-        <h2 className="font-semibold mb-4 text-text-primary">{t('rolesSubtitle')}</h2>
+        <h2 className="font-semibold mb-4 text-text-primary">{t('roles.rolesSubtitle')}</h2>
         <ul className="space-y-2 overflow-y-auto flex-1 pr-1">
           {roles.map((r) => (
             <li 
@@ -99,14 +99,14 @@ export function RoleManager() {
           ))}
         </ul>
         <button className="mt-4 w-full bg-primary text-text-inverse rounded-xl h-11 font-semibold hover:bg-primary-hover transition-colors shadow-sm">
-          {t('createRole')}
+          {t('roles.createRole')}
         </button>
       </div>
 
       {/* Right Column: Permission Matrix */}
       <div className="w-2/3 bg-surface border border-border p-6 rounded-xl overflow-y-auto">
         <h2 className="font-semibold mb-6 text-text-primary border-b border-border pb-2 flex items-center justify-between">
-          {t('permissionsSubtitle')}
+          {t('roles.permissionsSubtitle')}
           {selectedRole && <span className="text-xs font-normal text-text-secondary italic">({selectedRole.name})</span>}
         </h2>
         
@@ -115,7 +115,7 @@ export function RoleManager() {
              <div className="w-12 h-12 rounded-full bg-surface-raised flex items-center justify-center mb-3">
                🛡️
              </div>
-             <p className="text-text-secondary text-sm max-w-[200px]">{t('selectRoleToEdit')}</p>
+             <p className="text-text-secondary text-sm max-w-[200px]">{t('roles.selectRoleToEdit')}</p>
           </div>
         ) : loadingPerms ? (
           <div className="flex items-center justify-center h-40">

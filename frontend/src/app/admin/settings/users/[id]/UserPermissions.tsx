@@ -11,7 +11,7 @@ interface CustomRole {
 }
 
 export function UserPermissions({ userId }: { userId: string }) {
-  const { t } = useTranslations('admin.users');
+  const { t } = useTranslations('admin');
   const supabase = createClient();
   
   const [roles, setRoles] = useState<CustomRole[]>([]);
@@ -98,7 +98,7 @@ export function UserPermissions({ userId }: { userId: string }) {
       <div className="bg-surface border border-border p-6 rounded-2xl shadow-sm">
         <div className="flex items-center justify-between mb-6">
           <h2 className="font-bold text-text-primary text-lg">
-            {t('assignedRoleFor', { userId: userName || userId })}
+            {t('users.assignedRoleFor', { userId: userName || userId })}
           </h2>
           {saveStatus === 'success' && (
             <span className="text-success text-sm flex items-center gap-1 animate-in fade-in slide-in-from-right-2">
@@ -119,7 +119,7 @@ export function UserPermissions({ userId }: { userId: string }) {
             disabled={saving}
             className="bg-surface border border-border rounded-xl px-4 h-12 w-full text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none appearance-none disabled:opacity-50 transition-all cursor-pointer"
           >
-            <option value="">{t('selectRolePlaceholder')}</option>
+            <option value="">{t('users.selectRolePlaceholder')}</option>
             {roles.map(role => (
               <option key={role.id} value={role.id}>{role.name}</option>
             ))}
@@ -131,13 +131,13 @@ export function UserPermissions({ userId }: { userId: string }) {
       </div>
 
       <div className="bg-surface border border-border p-6 rounded-2xl shadow-sm opacity-50 cursor-not-allowed">
-        <h2 className="font-bold text-text-primary text-lg mb-2">{t('individualOverrides')}</h2>
-        <p className="text-text-secondary text-sm mb-4">{t('overridesDesc')}</p>
+        <h2 className="font-bold text-text-primary text-lg mb-2">{t('users.individualOverrides')}</h2>
+        <p className="text-text-secondary text-sm mb-4">{t('users.overridesDesc')}</p>
         <button 
           disabled
           className="border border-border text-text-primary rounded-xl h-11 px-6 font-semibold transition-colors"
         >
-          {t('addOverride')} (Próximamente)
+          {t('users.addOverride')} (Próximamente)
         </button>
       </div>
     </div>

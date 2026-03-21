@@ -1,19 +1,12 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { attendanceApi } from '@/lib/api'
+import { attendanceApi, type AttendanceStatus } from '@/lib/api'
 import { Clock, Loader2, ArrowLeft, X } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { useTranslations } from '@/components/I18nProvider'
-
-interface AttendanceStatus {
-    last_event: string | null;
-    last_marked_at: string | null;
-    available_actions: string[];
-    has_active_shift?: boolean;
-}
 
 export default function AttendancePage() {
     const { t } = useTranslations()

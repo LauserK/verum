@@ -2,23 +2,14 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { createClient } from '@/utils/supabase/client'
+import { adminApi, getProfile, type VenueInfo, type Asset } from '@/lib/api'
 import { Plus, QrCode, Edit3, Save, X, Loader2, Search, Filter } from 'lucide-react'
 import { useReactToPrint } from 'react-to-print'
 import { QRCodePrint } from '@/components/inventory/QRCodePrint'
 import { v4 as uuidv4 } from 'uuid'
 import Link from 'next/link'
 import { useTranslations } from '@/components/I18nProvider'
-
-interface Asset {
-  id: string
-  name: string
-  venue_id: string
-  category_id: string
-  status: string
-  qr_code: string
-  asset_categories?: { name: string }
-}
+import { createClient } from '@/utils/supabase/client'
 
 interface Category {
   id: string

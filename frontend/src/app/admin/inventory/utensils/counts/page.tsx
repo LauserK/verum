@@ -11,7 +11,7 @@ import { useTranslations } from '@/components/I18nProvider'
 
 export default function UtensilCountsPage() {
   const { t } = useTranslations()
-  const [counts, setCounts] = useState<any[]>([]) // Using any for now as UtensilCount interface might need update
+  const [counts, setCounts] = useState<UtensilCount[]>([])
   const [loading, setLoading] = useState(true)
 
   const fetchCounts = useCallback(async () => {

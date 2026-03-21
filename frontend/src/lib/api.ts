@@ -201,6 +201,19 @@ export interface AdminSubmission {
     checklist_templates: { title: string } | null
 }
 
+export interface Asset {
+    id: string
+    name: string
+    venue_id: string
+    category_id: string
+    status: string
+    qr_code: string
+    serial?: string | null
+    brand?: string | null
+    model?: string | null
+    asset_categories?: { name: string }
+}
+
 export interface CountSchedule {
     id: string
     org_id: string
@@ -215,6 +228,8 @@ export interface CountSchedule {
     is_active: boolean
     created_at: string
     item_ids?: string[]
+    venues?: { name: string }
+    profiles?: { full_name: string }
 }
 
 export interface RepairTicket {
@@ -227,6 +242,19 @@ export interface RepairTicket {
     closed_at: string | null;
     assets?: {
         name: string;
+    };
+}
+
+export interface UtensilCount {
+    id: string;
+    org_id: string;
+    venue_id: string;
+    profile_id: string;
+    status: 'pending' | 'confirmed';
+    created_at: string;
+    confirmed_at: string | null;
+    profiles?: {
+        full_name: string;
     };
 }
 
@@ -276,9 +304,16 @@ export interface AttendanceLog {
     };
 }
 
+export interface AttendanceStatus {
+    last_event: string | null;
+    last_marked_at: string | null;
+    available_actions: string[];
+    has_active_shift?: boolean;
+}
+
 // Attendance API
 export const attendanceApi = {
-    getStatus: (): Promise<Record<string, unknown>> => fetchWithAuth('/attendance/today/status'),
+    getStatus: (): Promise<AttendanceStatus> => fetchWithAuth('/attendance/today/status'),
     mark: (event_type: string, data: Record<string, unknown> = {}): Promise<AttendanceLog> => fetchWithAuth('/attendance/mark', { method: 'POST', body: JSON.stringify({ event_type, ...data }) }),
     getLive: (venueId: string): Promise<AttendanceLog[]> => fetchWithAuth(`/attendance/live?venue_id=${venueId}`),
     getHistory: (): Promise<AttendanceLog[]> => fetchWithAuth('/attendance/me'),
@@ -456,10 +491,10 @@ export const adminApi = {
     }): Promise<{ id: string; status: string }> =>
         fetchWithAuth('/utensil-counts', { method: 'POST', body: JSON.stringify(data) }),
 
-    getUtensilsCounts: (venueId?: string): Promise<any[]> =>
+    getUtensilsCounts: (venueId?: string): Promise<UtensilCount[]> =>
         fetchWithAuth(`/utensil-counts${venueId ? `?venue_id=${venueId}` : ''}`),
 
-    getUtensilCountDetail: (countId: string): Promise<any> =>
+    getUtensilCountDetail: (countId: string): Promise<UtensilCount & { items: any[] }> =>
         fetchWithAuth(`/utensil-counts/${countId}`),
 
     confirmUtensilCount: (countId: string, items: Array<{ utensil_id: string; confirmed_count: number }>): Promise<any> =>
