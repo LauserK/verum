@@ -22,7 +22,10 @@
     "inventory": "Inventory",
     "attendance": "Attendance",
     "company": "Company",
-    "team": "Team"
+    "team": "Team",
+    "audits": "Audits",
+    "history": "History",
+    "settings": "Settings"
   },
   "inventory": {
     "utensils": {

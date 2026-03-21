@@ -22,7 +22,10 @@
     "inventory": "Inventario",
     "attendance": "Asistencia",
     "company": "Empresa",
-    "team": "Equipo"
+    "team": "Equipo",
+    "audits": "Auditorías",
+    "history": "Historial",
+    "settings": "Ajustes"
   },
   "inventory": {
     "utensils": {
