@@ -249,12 +249,11 @@ async def get_checklists(venue_id: str, user=Depends(require_permission("checkli
             tid = q["template_id"]
             questions_by_template[tid] = questions_by_template.get(tid, 0) + 1
 
-        # 3. Get today's submissions for the current venue and user (all shifts)
+        # 3. Get today's submissions for the current venue (all shifts, all users)
         submissions_res = (
             db.table("submissions")
             .select("*")
             .eq("venue_id", venue_id)
-            .eq("user_id", user.id)
             .gte("created_at", f"{today}T00:00:00-04:00")
             .in_("template_id", template_ids)
             .execute()
