@@ -170,7 +170,8 @@
     "todaysAudits": "Auditorías de Hoy",
     "done": "{completed}/{total} completas",
     "noAuditsTitle": "Sin auditorías en este turno",
-    "noAuditsDesc": "Aún no hay listas asignadas. Contacta a tu administrador."
+    "noAuditsDesc": "Aún no hay listas asignadas. Contacta a tu administrador.",
+    "noShiftError": "No tienes un turno asociado. Por favor, informa a tu administrador para que te asigne uno."
   },
   "checklist": {
     "title": "Lista de Verificación",

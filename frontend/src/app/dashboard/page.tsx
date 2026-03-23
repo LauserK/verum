@@ -53,8 +53,9 @@ export default function DashboardPage() {
     const [mounted, setMounted] = useState(false)
     const [theme, setTheme] = useState<'light' | 'dark'>('light')
 
-    const shiftInfo = getShiftInfo(t)
-    const ShiftIcon = shiftInfo.icon
+    const fallbackShiftInfo = getShiftInfo(t)
+    const shiftLabel = profile?.shift_name || fallbackShiftInfo.label
+    const ShiftIcon = fallbackShiftInfo.icon
 
     useEffect(() => {
         setMounted(true)
@@ -84,13 +85,22 @@ export default function DashboardPage() {
                     try {
                         const checklistData = await getChecklists(targetVenueId)
                         setChecklists(checklistData)
-                    } catch {
-                        // Venue might not have checklists yet
-                        setChecklists([])
+                    } catch (err: any) {
+                        // Check if it's the specific no_shift_assigned error
+                        if (err.message && err.message.includes('no_shift_assigned')) {
+                            setError('no_shift_assigned')
+                        } else {
+                            // Venue might not have checklists yet or other error
+                            setChecklists([])
+                        }
                     }
                 }
             } catch (err: any) {
-                setError(err.message || 'Failed to load data')
+                if (err.message && err.message.includes('no_shift_assigned')) {
+                    setError('no_shift_assigned')
+                } else {
+                    setError(err.message || 'Failed to load data')
+                }
             } finally {
                 setLoading(false)
             }
@@ -159,7 +169,7 @@ export default function DashboardPage() {
                     <div>
                         <div className="flex items-center gap-2 mb-1">
                             <ShiftIcon className="w-5 h-5 text-primary" />
-                            <span className="text-sm font-semibold text-primary">{shiftInfo.label}</span>
+                            <span className="text-sm font-semibold text-primary">{shiftLabel}</span>
                         </div>
                         <p className="text-xs text-text-secondary">{formatDate(language)}</p>
                     </div>
@@ -187,7 +197,7 @@ export default function DashboardPage() {
                 {/* Error */}
                 {error && (
                     <div className="bg-error-light text-error text-sm p-3 rounded-lg border border-error/20 mb-4">
-                        ⚠️ {error}
+                        ⚠️ {error === 'no_shift_assigned' ? t('noShiftError') : error}
                     </div>
                 )}
 

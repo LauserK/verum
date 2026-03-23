@@ -41,6 +41,21 @@ def get_current_shift() -> str:
         return "closing"
 
 
+async def get_user_shift_identifier(user_id: str, db) -> str:
+    """
+    Retorna el shift_id del usuario si existe.
+    De lo contrario lanza un error 403.
+    """
+    res = db.table("profiles").select("shift_id").eq("id", user_id).single().execute()
+    shift_id = res.data.get("shift_id")
+    if not shift_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="no_shift_assigned"
+        )
+    return str(shift_id)
+
+
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     token = credentials.credentials
     try:
@@ -94,6 +109,7 @@ class ProfileResponse(BaseModel):
     venues: list[VenueInfo] = []
     venue_id: Optional[str] = None
     shift_id: Optional[str] = None
+    shift_name: Optional[str] = None
 
 
 class ChecklistItem(BaseModel):
@@ -197,6 +213,14 @@ async def get_profile(user=Depends(get_current_user)):
             )
             venues = venues_res.data or []
 
+        # Fetch shift name if shift_id is present
+        shift_name = None
+        shift_id = profile.get("shift_id")
+        if shift_id:
+            shift_res = db.table("shifts").select("name").eq("id", shift_id).execute()
+            if shift_res.data and len(shift_res.data) > 0:
+                shift_name = shift_res.data[0].get("name")
+
         return {
             "id": profile["id"],
             "full_name": profile.get("full_name"),
@@ -204,7 +228,8 @@ async def get_profile(user=Depends(get_current_user)):
             "organization_id": org_id,
             "venues": venues,
             "venue_id": profile.get("venue_id"),
-            "shift_id": profile.get("shift_id"),
+            "shift_id": shift_id,
+            "shift_name": shift_name,
         }
     except HTTPException:
         raise
@@ -220,7 +245,7 @@ async def get_checklists(venue_id: str, user=Depends(require_permission("checkli
     """
     try:
         db = get_db()
-        shift = get_current_shift()
+        shift = await get_user_shift_identifier(user.id, db)
         today = datetime.now(CARACAS_TZ).strftime("%Y-%m-%d")
 
         # 1. Get all templates for this venue
@@ -445,13 +470,25 @@ async def get_submission_history(user=Depends(require_permission("checklists.vie
             )
             venue_map = {v["id"]: v["name"] for v in (v_res.data or [])}
 
+        # Fetch shift names
+        shift_ids = list(set(s["shift"] for s in submissions if len(s["shift"]) > 10)) # Simple UUID check
+        shift_map: dict[str, str] = {}
+        if shift_ids:
+            s_res = (
+                db.table("shifts")
+                .select("id, name")
+                .in_("id", shift_ids)
+                .execute()
+            )
+            shift_map = {sh["id"]: sh["name"] for sh in (s_res.data or [])}
+
         # Build result
         result = []
         for s in submissions:
             result.append({
                 "id": s["id"],
                 "template_title": tmpl_map.get(s["template_id"], "Untitled"),
-                "shift": s["shift"],
+                "shift": shift_map.get(s["shift"], s["shift"]),
                 "completed_at": s.get("completed_at", s.get("created_at", "")),
                 "total_questions": q_counts.get(s["template_id"], 0),
                 "venue_name": venue_map.get(s.get("venue_id", ""), None),
@@ -473,7 +510,7 @@ async def create_submission(body: CreateSubmissionRequest, user=Depends(require_
     """
     try:
         db = get_db()
-        shift = get_current_shift()
+        shift = await get_user_shift_identifier(user.id, db)
         today = datetime.now(CARACAS_TZ).strftime("%Y-%m-%d")
 
         # Get template frequency
@@ -554,7 +591,8 @@ async def get_submission(submission_id: str, user=Depends(get_current_user)):
                 is_same_venue = str(sub["venue_id"]) == str(user_venue_id)
                 is_valid_window = True
                 if t_freq == "shift":
-                    is_valid_window = sub["shift"] == get_current_shift()
+                    user_shift = await get_user_shift_identifier(user.id, db)
+                    is_valid_window = sub["shift"] == user_shift
                 
                 if sub["status"] == "draft" and is_same_venue and is_valid_window:
                     # User must at least have checklists.view

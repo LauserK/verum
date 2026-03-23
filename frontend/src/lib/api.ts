@@ -43,6 +43,7 @@ export interface Profile {
     venues: VenueInfo[]
     venue_id?: string | null
     shift_id?: string | null
+    shift_name?: string | null
 }
 
 export interface ChecklistItem {
