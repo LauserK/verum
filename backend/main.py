@@ -476,18 +476,23 @@ async def create_submission(body: CreateSubmissionRequest, user=Depends(require_
         shift = get_current_shift()
         today = datetime.now(CARACAS_TZ).strftime("%Y-%m-%d")
 
+        # Get template frequency
+        tmpl_res = db.table("checklist_templates").select("frequency").eq("id", body.template_id).single().execute()
+        freq = tmpl_res.data.get("frequency", "daily") if tmpl_res.data else "daily"
+
         # Check for ANY existing submission today (completed or draft)
-        existing = (
+        query = (
             db.table("submissions")
             .select("*")
             .eq("template_id", body.template_id)
-            .eq("user_id", user.id)
-            .eq("shift", shift)
+            .eq("venue_id", body.venue_id)
             .gte("created_at", f"{today}T00:00:00-04:00")
-            .order("created_at", desc=True)
-            .limit(1)
-            .execute()
         )
+        
+        if freq == "shift":
+            query = query.eq("shift", shift)
+            
+        existing = query.order("created_at", desc=True).limit(1).execute()
 
         if existing.data and len(existing.data) > 0:
             return existing.data[0]
@@ -529,14 +534,36 @@ async def get_submission(submission_id: str, user=Depends(get_current_user)):
 
         # --- PERMISSION CHECK ---
         is_owner = sub["user_id"] == user.id
+        can_access = is_owner
+
         if not is_owner:
+            # Check if user has view_all
             can_view_all = await resolve_permission(user.id, "checklists.view_all", db)
-            if not can_view_all:
-                raise HTTPException(status_code=403, detail="Forbidden: You do not have permission to view this submission")
-        else:
-            can_view = await resolve_permission(user.id, "checklists.view", db)
-            if not can_view:
-                raise HTTPException(status_code=403, detail="Forbidden: Missing checklists.view permission")
+            if can_view_all:
+                can_access = True
+            else:
+                # COLLABORATIVE CHECKLIVES: allow if same venue, same shift (or same day if not shift-based), and it's a draft
+                # First get current user's venue
+                prof_res = db.table("profiles").select("venue_id").eq("id", user.id).single().execute()
+                user_venue_id = prof_res.data.get("venue_id") if prof_res.data else None
+                
+                # Get template frequency to check if we should enforce shift match
+                t_res = db.table("checklist_templates").select("frequency").eq("id", sub["template_id"]).single().execute()
+                t_freq = t_res.data.get("frequency", "daily") if t_res.data else "daily"
+
+                is_same_venue = str(sub["venue_id"]) == str(user_venue_id)
+                is_valid_window = True
+                if t_freq == "shift":
+                    is_valid_window = sub["shift"] == get_current_shift()
+                
+                if sub["status"] == "draft" and is_same_venue and is_valid_window:
+                    # User must at least have checklists.view
+                    can_view = await resolve_permission(user.id, "checklists.view", db)
+                    if can_view:
+                        can_access = True
+
+        if not can_access:
+            raise HTTPException(status_code=403, detail="Forbidden: You do not have permission to access this submission")
 
         # Get template info
         tmpl_res = (
