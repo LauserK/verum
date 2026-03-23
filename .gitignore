@@ -56,4 +56,12 @@ next-env.d.ts
 # Project specific
 backend/.data/
 backend/migrations/*.db
+# Python
+__pycache__/
 *.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.venv/
+env/
+venv/
