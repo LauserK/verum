@@ -795,6 +795,15 @@ class CreateQuestionRequest(BaseModel):
     sort_order: int = 0
 
 
+class ReorderItem(BaseModel):
+    id: str
+    sort_order: int
+
+
+class ReorderQuestionsRequest(BaseModel):
+    questions: list[ReorderItem]
+
+
 class CreateUserRequest(BaseModel):
     email: str
     password: str
@@ -1166,6 +1175,14 @@ async def update_question(question_id: str, body: CreateQuestionRequest, user=De
         payload["config"] = body.config
     res = db.table("questions").update(payload).eq("id", question_id).execute()
     return res.data[0] if res.data else {"ok": True}
+
+
+@app.put("/admin/templates/{template_id}/questions/reorder")
+async def reorder_questions(template_id: str, body: ReorderQuestionsRequest, user=Depends(require_permission("checklists.manage_templates"))):
+    db = get_db()
+    for item in body.questions:
+        db.table("questions").update({"sort_order": item.sort_order}).eq("id", item.id).execute()
+    return {"ok": True}
 
 
 @app.delete("/admin/questions/{question_id}")
