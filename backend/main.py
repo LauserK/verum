@@ -75,7 +75,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 from permissions import resolve_permission
 
 
-from permissions import resolve_permission
+from permissions import resolve_permission, check_restriction
 from attendance_utils import is_clocked_in
 
 def require_permission(permission_key: str):
@@ -84,9 +84,14 @@ def require_permission(permission_key: str):
         profile_id = current_user.id
         
         # 1. Check if user is forced to clock-in before other actions
-        # Exclude attendance-related actions to prevent circular block
-        if not permission_key.startswith("attendance.") and permission_key != "admin.view_reports":
-            force_check = await resolve_permission(profile_id, "attendance.force_clock_in", db)
+        # Exclude attendance and admin modules to prevent circular block or blocking admins
+        is_attendance_action = permission_key.startswith("attendance.")
+        is_admin_action = permission_key.startswith("admin.")
+        
+        if not is_attendance_action and not is_admin_action:
+            # We use check_restriction to ignore the admin bypass here
+            # because force_clock_in is a restriction, not a capability.
+            force_check = await check_restriction(profile_id, "attendance.force_clock_in", db)
             if force_check:
                 clocked_in = await is_clocked_in(profile_id, db)
                 if not clocked_in:
