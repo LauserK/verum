@@ -1223,7 +1223,7 @@ async def list_submissions(
     """Lists submissions with optional filters."""
     db = get_db()
     query = db.table("submissions").select(
-        "*, profiles(full_name), checklist_templates(title)"
+        "*, profiles(full_name), checklist_templates(title), shifts(name), venues(name)"
     )
     if venue_id:
         query = query.eq("venue_id", venue_id)
