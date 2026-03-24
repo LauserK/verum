@@ -289,6 +289,9 @@
   },
   "attendance": {
     "title": "Attendance",
+    "requiredTitle": "Clock-in Required",
+    "requiredDesc": "You must mark your clock-in in the attendance module before accessing other features.",
+    "goToAttendance": "Go to Attendance",
     "actions": {
       "clock_in": "Clock In",
       "clock_out": "Clock Out",

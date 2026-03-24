@@ -20,8 +20,14 @@ export async function fetchWithAuth(path: string, options: RequestInit = {}) {
     })
 
     if (!res.ok) {
-        const error = await res.text()
-        throw new Error(error || `API Error: ${res.status}`)
+        const errorData = await res.json().catch(() => ({}))
+        const errorDetail = errorData.detail?.detail || errorData.detail
+
+        if (errorDetail === 'CLOCK_IN_REQUIRED') {
+            window.dispatchEvent(new CustomEvent('attendance-required'))
+        }
+
+        throw new Error(errorDetail || `API Error: ${res.status}`)
     }
 
     return res.json()

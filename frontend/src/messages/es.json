@@ -290,6 +290,9 @@
   },
   "attendance": {
     "title": "Asistencia",
+    "requiredTitle": "Entrada Requerida",
+    "requiredDesc": "Debes marcar tu entrada en el módulo de asistencia antes de acceder a otras funciones.",
+    "goToAttendance": "Ir a Asistencia",
     "actions": {
       "clock_in": "Entrada",
       "clock_out": "Salida",
