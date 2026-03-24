@@ -386,6 +386,9 @@ export const adminApi = {
     deleteQuestion: (id: string): Promise<{ ok: boolean }> =>
         fetchWithAuth(`/admin/questions/${id}`, { method: 'DELETE' }),
 
+    reorderQuestions: (templateId: string, questions: { id: string, sort_order: number }[]): Promise<{ ok: boolean }> =>
+        fetchWithAuth(`/admin/templates/${templateId}/questions/reorder`, { method: 'PUT', body: JSON.stringify({ questions }) }),
+
     getSubmissions: (filters?: { venue_id?: string; status?: string; date_from?: string; date_to?: string }): Promise<AdminSubmission[]> => {
         const params = new URLSearchParams()
         if (filters?.venue_id) params.set('venue_id', filters.venue_id)
