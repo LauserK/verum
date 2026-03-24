@@ -210,6 +210,8 @@ export interface AdminSubmission {
     created_at: string
     profiles: { full_name: string } | null
     checklist_templates: { title: string } | null
+    shifts?: { name: string } | null
+    venues?: { name: string } | null
 }
 
 export interface Asset {

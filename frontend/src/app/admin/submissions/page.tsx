@@ -130,7 +130,7 @@ export default function SubmissionsPage() {
                                 <div className="flex items-center gap-3 mt-1 text-xs text-text-secondary">
                                     <span>{s.profiles?.full_name || 'Unknown'}</span>
                                     <span>·</span>
-                                    <span className="capitalize">{s.shift}</span>
+                                    <span className="capitalize">{s.shifts?.name || s.shift}</span>
                                     <span>·</span>
                                     <span>{formatDate(s.created_at)}</span>
                                 </div>
