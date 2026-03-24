@@ -7,8 +7,11 @@ import {
 } from '@/lib/api'
 import {
     Plus, Trash2, Edit3, ChevronRight, Save, X, Loader2,
-    GripVertical, Clock
+    Clock
 } from 'lucide-react'
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { SortableQuestionItem } from '@/components/admin/SortableQuestionItem';
 import QuestionConfigEditor from '@/components/admin/QuestionConfigEditor'
 import ScheduleEditor from '@/components/admin/ScheduleEditor'
 import Link from 'next/link'
@@ -71,6 +74,37 @@ export default function TemplatesPage() {
     const [eqType, setEqType] = useState('check')
     const [eqRequired, setEqRequired] = useState(true)
     const [eqConfig, setEqConfig] = useState<Record<string, any>>({})
+
+    const sensors = useSensors(
+        useSensor(PointerSensor),
+        useSensor(KeyboardSensor, {
+            coordinateGetter: sortableKeyboardCoordinates,
+        })
+    );
+
+    const handleDragEnd = async (event: DragEndEvent) => {
+        const { active, over } = event;
+        if (!over || active.id === over.id || !selectedTemplate) return;
+
+        const oldIndex = questions.findIndex((q) => q.id === active.id);
+        const newIndex = questions.findIndex((q) => q.id === over.id);
+
+        const newQuestions = arrayMove(questions, oldIndex, newIndex).map((q, index) => ({
+            ...q,
+            sort_order: index,
+        }));
+
+        setQuestions(newQuestions);
+
+        try {
+            await adminApi.reorderQuestions(
+                selectedTemplate.id,
+                newQuestions.map(q => ({ id: q.id, sort_order: q.sort_order }))
+            );
+        } catch (err) {
+            console.error('Failed to save new order', err);
+        }
+    };
 
     useEffect(() => {
         async function load() {
@@ -537,84 +571,62 @@ export default function TemplatesPage() {
                         <div className="text-center py-10 text-text-secondary text-sm">No questions yet.</div>
                     ) : (
                         <>
-                            {questions.map((q, idx) => (
-                                <div key={q.id} className="bg-surface border border-border rounded-2xl p-4">
-                                    {editingQuestionId === q.id ? (
-                                        /* Inline Edit Form */
-                                        <div className="space-y-3">
-                                            <input
-                                                value={eqLabel}
-                                                onChange={(e) => setEqLabel(e.target.value)}
-                                                className="w-full bg-surface border border-border rounded-xl px-4 h-10 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
-                                            />
-                                            <div className="flex gap-3">
-                                                <select
-                                                    value={eqType}
-                                                    onChange={(e) => setEqType(e.target.value)}
-                                                    className="bg-surface border border-border rounded-xl px-3 h-10 text-sm text-text-primary focus:border-primary outline-none flex-1"
-                                                >
-                                                    {QUESTION_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-                                                </select>
-                                                <label className="flex items-center gap-2 text-sm text-text-primary">
-                                                    <input type="checkbox" checked={eqRequired} onChange={(e) => setEqRequired(e.target.checked)} className="accent-primary" />
-                                                    Required
-                                                </label>
-                                            </div>
-                                            <QuestionConfigEditor type={eqType} config={eqConfig} onChange={setEqConfig} />
-                                            <div className="flex gap-2">
-                                                <button
-                                                    onClick={handleUpdateQuestion}
-                                                    disabled={saving}
-                                                    className="flex items-center gap-1.5 bg-primary text-text-inverse px-4 h-9 rounded-xl text-sm font-medium hover:bg-primary-hover transition-colors disabled:opacity-50"
-                                                >
-                                                    <Save className="w-3.5 h-3.5" /> {saving ? 'Saving...' : 'Save'}
-                                                </button>
-                                                <button
-                                                    onClick={() => setEditingQuestionId(null)}
-                                                    className="flex items-center gap-1.5 border border-border text-text-primary px-4 h-9 rounded-xl text-sm font-medium hover:bg-surface-raised transition-colors"
-                                                >
-                                                    <X className="w-3.5 h-3.5" /> Cancel
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        /* Read-only View */
-                                        <div className="flex items-start justify-between gap-3">
-                                            <div className="flex items-start gap-2 min-w-0">
-                                                <GripVertical className="w-4 h-4 text-text-disabled flex-shrink-0 mt-0.5" />
-                                                <div className="min-w-0">
-                                                    <p className="text-sm font-medium text-text-primary">{q.label}</p>
-                                                    <div className="flex items-center gap-2 mt-1">
-                                                        <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded-md bg-primary/10 text-primary">
-                                                            {q.type}
-                                                        </span>
-                                                        {q.is_required && (
-                                                            <span className="text-[10px] font-medium text-error">Required</span>
-                                                        )}
-                                                        {q.config && (
-                                                            <span className="text-[10px] text-text-secondary">config ✓</span>
-                                                        )}
+                            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                                <SortableContext items={questions.map(q => q.id)} strategy={verticalListSortingStrategy}>
+                                    <div className="space-y-3">
+                                        {questions.map((q) => (
+                                            editingQuestionId === q.id ? (
+                                                /* Inline Edit Form */
+                                                <div key={q.id} className="bg-surface border border-border rounded-2xl p-4">
+                                                    <div className="space-y-3">
+                                                        <input
+                                                            value={eqLabel}
+                                                            onChange={(e) => setEqLabel(e.target.value)}
+                                                            className="w-full bg-surface border border-border rounded-xl px-4 h-10 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
+                                                        />
+                                                        <div className="flex gap-3">
+                                                            <select
+                                                                value={eqType}
+                                                                onChange={(e) => setEqType(e.target.value)}
+                                                                className="bg-surface border border-border rounded-xl px-3 h-10 text-sm text-text-primary focus:border-primary outline-none flex-1"
+                                                            >
+                                                                {QUESTION_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                                                            </select>
+                                                            <label className="flex items-center gap-2 text-sm text-text-primary">
+                                                                <input type="checkbox" checked={eqRequired} onChange={(e) => setEqRequired(e.target.checked)} className="accent-primary" />
+                                                                Required
+                                                            </label>
+                                                        </div>
+                                                        <QuestionConfigEditor type={eqType} config={eqConfig} onChange={setEqConfig} />
+                                                        <div className="flex gap-2">
+                                                            <button
+                                                                onClick={handleUpdateQuestion}
+                                                                disabled={saving}
+                                                                className="flex items-center gap-1.5 bg-primary text-text-inverse px-4 h-9 rounded-xl text-sm font-medium hover:bg-primary-hover transition-colors disabled:opacity-50"
+                                                            >
+                                                                <Save className="w-3.5 h-3.5" /> {saving ? 'Saving...' : 'Save'}
+                                                            </button>
+                                                            <button
+                                                                onClick={() => setEditingQuestionId(null)}
+                                                                className="flex items-center gap-1.5 border border-border text-text-primary px-4 h-9 rounded-xl text-sm font-medium hover:bg-surface-raised transition-colors"
+                                                            >
+                                                                <X className="w-3.5 h-3.5" /> Cancel
+                                                            </button>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
-                                            <div className="flex items-center gap-1 flex-shrink-0">
-                                                <button
-                                                    onClick={() => startEditQuestion(q)}
-                                                    className="text-text-secondary hover:text-primary transition-colors p-1"
-                                                >
-                                                    <Edit3 className="w-3.5 h-3.5" />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDeleteQuestion(q.id)}
-                                                    className="text-text-secondary hover:text-error transition-colors p-1"
-                                                >
-                                                    <Trash2 className="w-3.5 h-3.5" />
-                                                </button>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
+                                            ) : (
+                                                <SortableQuestionItem
+                                                    key={q.id}
+                                                    question={q}
+                                                    onEdit={startEditQuestion}
+                                                    onDelete={handleDeleteQuestion}
+                                                />
+                                            )
+                                        ))}
+                                    </div>
+                                </SortableContext>
+                            </DndContext>
                         </>
                     )}
 
