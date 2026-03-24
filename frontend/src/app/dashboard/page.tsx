@@ -5,6 +5,7 @@ import { logout } from '@/app/login/actions'
 import { getProfile, getChecklists, type Profile, type ChecklistItem } from '@/lib/api'
 import ChecklistCard from '@/components/ChecklistCard'
 import BottomNav from '@/components/BottomNav'
+import ConfirmationModal from '@/components/ConfirmationModal'
 import { LogOut, Sun, Moon, Sunrise, CloudSun, Sunset, Shield, Clock } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from '@/components/I18nProvider'
@@ -52,6 +53,7 @@ export default function DashboardPage() {
     const [error, setError] = useState<string | null>(null)
     const [mounted, setMounted] = useState(false)
     const [theme, setTheme] = useState<'light' | 'dark'>('light')
+    const [pendingChecklist, setPendingChecklist] = useState<ChecklistItem | null>(null)
 
     const fallbackShiftInfo = getShiftInfo(t)
     const shiftLabel = profile?.shift_name || fallbackShiftInfo.label
@@ -113,6 +115,20 @@ export default function DashboardPage() {
         setTheme(newTheme)
         document.documentElement.setAttribute('data-theme', newTheme)
         localStorage.setItem('verum-theme', newTheme)
+    }
+
+    const handleChecklistClick = (checklist: ChecklistItem) => {
+        if (checklist.status === 'pending') {
+            setPendingChecklist(checklist)
+        } else if (checklist.status !== 'locked') {
+            proceedToChecklist(checklist)
+        }
+    }
+
+    const proceedToChecklist = (checklist: ChecklistItem) => {
+        const venueId = profile?.venue_id || profile?.venues?.[0]?.id || ''
+        router.push(`/checklist/${checklist.id}?venue=${venueId}&from=dashboard`)
+        setPendingChecklist(null)
     }
 
     return (
@@ -217,10 +233,7 @@ export default function DashboardPage() {
                             <ChecklistCard
                                 key={checklist.id}
                                 checklist={checklist}
-                                onClick={() => {
-                                    const venueId = profile?.venues?.[0]?.id || ''
-                                    router.push(`/checklist/${checklist.id}?venue=${venueId}&from=dashboard`)
-                                }}
+                                onClick={() => handleChecklistClick(checklist)}
                             />
                         ))}
                     </div>
@@ -242,6 +255,16 @@ export default function DashboardPage() {
 
             {/* ── Bottom Nav ─────────────────────────────── */}
             <BottomNav />
+
+            <ConfirmationModal
+                isOpen={!!pendingChecklist}
+                title={t('startConfirmationTitle')}
+                message={t('startConfirmationDesc')}
+                confirmLabel={t('startConfirm')}
+                cancelLabel={t('startCancel')}
+                onConfirm={() => pendingChecklist && proceedToChecklist(pendingChecklist)}
+                onCancel={() => setPendingChecklist(null)}
+            />
         </div>
     )
 }
