@@ -162,17 +162,21 @@
     "closingShift": "Closing"
   },
   "dashboard": {
-    "hello": "Hello, {name}",
-    "staff": "Staff",
-    "morningShift": "Morning Shift",
-    "midShift": "Mid Shift",
-    "closingShift": "Closing Shift",
-    "todaysAudits": "Today's Audits",
-    "done": "{completed}/{total} done",
-    "noAuditsTitle": "No audits for this shift",
-    "noAuditsDesc": "There are no checklists assigned yet. Contact your administrator."
-  },
-  "checklist": {
+  "hello": "Hello, {name}",
+  "staff": "Staff",
+  "morningShift": "Morning Shift",
+  "midShift": "Mid Shift",
+  "closingShift": "Closing Shift",
+  "todaysAudits": "Today's Audits",
+  "done": "{completed}/{total} done",
+  "noAuditsTitle": "No audits for this shift",
+  "noAuditsDesc": "There are no checklists assigned yet. Contact your administrator.",
+  "noShiftError": "You don't have a shift assigned. Please inform your administrator to assign one.",
+  "startConfirmationTitle": "Start checklist?",
+  "startConfirmationDesc": "You are about to start this checklist. Once started, it will appear as 'In progress'. Do you want to continue?",
+  "startConfirm": "Yes, start",
+  "startCancel": "No, not now"
+  },  "checklist": {
     "title": "Checklist",
     "stepCheck": "Check",
     "stepReview": "Review",
