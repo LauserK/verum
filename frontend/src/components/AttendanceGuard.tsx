@@ -17,6 +17,12 @@ export default function AttendanceGuard({ children }: { children: React.ReactNod
             }
         }
 
+        // Check if there was a pending block event before mount
+        if ((window as any).__attendanceRequiredPending) {
+            handleAttendanceRequired()
+            delete (window as any).__attendanceRequiredPending
+        }
+
         window.addEventListener('attendance-required', handleAttendanceRequired)
         return () => window.removeEventListener('attendance-required', handleAttendanceRequired)
     }, [pathname])

@@ -24,7 +24,11 @@ export async function fetchWithAuth(path: string, options: RequestInit = {}) {
         const errorDetail = errorData.detail?.detail || errorData.detail
 
         if (errorDetail === 'CLOCK_IN_REQUIRED') {
-            window.dispatchEvent(new CustomEvent('attendance-required'))
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('attendance-required'))
+                // Also set a flag in case the Guard hasn't mounted yet
+                ;(window as any).__attendanceRequiredPending = true
+            }
         }
 
         throw new Error(errorDetail || `API Error: ${res.status}`)
