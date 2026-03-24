@@ -75,10 +75,28 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 from permissions import resolve_permission
 
 
+from permissions import resolve_permission
+from attendance_utils import is_clocked_in
+
 def require_permission(permission_key: str):
     async def _check(current_user=Depends(get_current_user), db=Depends(get_db)):
         # profile_id is current_user.id in Supabase Auth
-        has_perm = await resolve_permission(current_user.id, permission_key, db)
+        profile_id = current_user.id
+        
+        # 1. Check if user is forced to clock-in before other actions
+        # Exclude attendance-related actions to prevent circular block
+        if not permission_key.startswith("attendance.") and permission_key != "admin.view_reports":
+            force_check = await resolve_permission(profile_id, "attendance.force_clock_in", db)
+            if force_check:
+                clocked_in = await is_clocked_in(profile_id, db)
+                if not clocked_in:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail={"detail": "CLOCK_IN_REQUIRED", "required": "attendance.mark"}
+                    )
+
+        # 2. Standard permission check
+        has_perm = await resolve_permission(profile_id, permission_key, db)
         if not has_perm:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
