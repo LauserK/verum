@@ -9,6 +9,7 @@ import ConfirmationModal from '@/components/ConfirmationModal'
 import { LogOut, Sun, Moon, Sunrise, CloudSun, Sunset, Shield, Clock } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from '@/components/I18nProvider'
+import { useTheme } from '@/components/ThemeProvider'
 
 function getShiftInfo(t: any): { label: string; icon: typeof Sun } {
     const hour = new Date().getHours()
@@ -46,13 +47,13 @@ function ChecklistSkeleton() {
 export default function DashboardPage() {
     const { t, language } = useTranslations('dashboard')
     const { t: attendanceT } = useTranslations('attendance')
+    const { theme, toggleTheme } = useTheme()
     const router = useRouter()
     const [profile, setProfile] = useState<Profile | null>(null)
     const [checklists, setChecklists] = useState<ChecklistItem[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [mounted, setMounted] = useState(false)
-    const [theme, setTheme] = useState<'light' | 'dark'>('light')
     const [pendingChecklist, setPendingChecklist] = useState<ChecklistItem | null>(null)
 
     const fallbackShiftInfo = getShiftInfo(t)
@@ -61,17 +62,6 @@ export default function DashboardPage() {
 
     useEffect(() => {
         setMounted(true)
-        const savedTheme = localStorage.getItem('verum-theme')
-        if (savedTheme) {
-            setTheme(savedTheme as 'light' | 'dark')
-            document.documentElement.setAttribute('data-theme', savedTheme)
-        } else {
-            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-            if (prefersDark) {
-                setTheme('dark')
-                document.documentElement.setAttribute('data-theme', 'dark')
-            }
-        }
     }, [])
 
     useEffect(() => {
@@ -109,13 +99,6 @@ export default function DashboardPage() {
         }
         loadData()
     }, [])
-
-    const toggleTheme = () => {
-        const newTheme = theme === 'light' ? 'dark' : 'light'
-        setTheme(newTheme)
-        document.documentElement.setAttribute('data-theme', newTheme)
-        localStorage.setItem('verum-theme', newTheme)
-    }
 
     const handleChecklistClick = (checklist: ChecklistItem) => {
         if (checklist.status === 'pending') {

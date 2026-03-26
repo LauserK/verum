@@ -4,11 +4,13 @@ import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { getProfile, type Profile } from '@/lib/api'
 import { logout } from '@/app/login/actions'
-import { LayoutDashboard, ClipboardCheck, Users, Building2, Box, Clock, LogOut, ChevronLeft } from 'lucide-react'
+import { LayoutDashboard, ClipboardCheck, Users, Building2, Box, Clock, LogOut, ChevronLeft, Moon, Sun } from 'lucide-react'
 import { useTranslations } from '@/components/I18nProvider'
+import { useTheme } from '@/components/ThemeProvider'
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
     const { t } = useTranslations()
+    const { theme, toggleTheme } = useTheme()
     const router = useRouter()
     const pathname = usePathname()
     const [profile, setProfile] = useState<Profile | null>(null)
@@ -61,6 +63,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 </div>
                 <div className="flex items-center gap-3">
                     <span className="text-xs text-text-secondary hidden sm:block">{profile?.full_name}</span>
+                    <button 
+                        onClick={toggleTheme}
+                        className="p-2 text-text-secondary hover:text-primary hover:bg-surface-raised rounded-xl transition-all"
+                        aria-label="Toggle Theme"
+                    >
+                        {theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+                    </button>
                     <button onClick={() => logout()} className="text-text-secondary hover:text-error transition-colors">
                         <LogOut className="w-4 h-4" />
                     </button>

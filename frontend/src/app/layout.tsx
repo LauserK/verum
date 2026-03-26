@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { I18nProvider } from "@/components/I18nProvider";
+import { ThemeProvider } from "@/components/ThemeProvider";
 import AttendanceGuard from "@/components/AttendanceGuard";
 
 const geistSans = Geist({
@@ -29,11 +30,13 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <I18nProvider>
-          <AttendanceGuard>
-            {children}
-          </AttendanceGuard>
-        </I18nProvider>
+        <ThemeProvider>
+          <I18nProvider>
+            <AttendanceGuard>
+              {children}
+            </AttendanceGuard>
+          </I18nProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
