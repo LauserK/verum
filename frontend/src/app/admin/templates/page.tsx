@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import {
     adminApi, getProfile,
     type Profile, type TemplateDetail, type Question
@@ -74,6 +74,14 @@ export default function TemplatesPage() {
     const [eqType, setEqType] = useState('check')
     const [eqRequired, setEqRequired] = useState(true)
     const [eqConfig, setEqConfig] = useState<Record<string, any>>({})
+
+    const newQuestionRef = useRef<HTMLDivElement>(null)
+
+    useEffect(() => {
+        if (showNewQuestion) {
+            newQuestionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
+    }, [showNewQuestion])
 
     const sensors = useSensors(
         useSensor(PointerSensor),
@@ -632,7 +640,7 @@ export default function TemplatesPage() {
 
                     {/* New Question Form */}
                     {showNewQuestion && (
-                        <div className="bg-surface border border-primary/30 rounded-2xl p-5 space-y-3">
+                        <div ref={newQuestionRef} className="bg-surface border border-primary/30 rounded-2xl p-5 space-y-3">
                             <input
                                 placeholder="Question label"
                                 value={qLabel}
