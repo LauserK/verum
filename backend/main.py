@@ -355,12 +355,27 @@ async def get_checklists(venue_id: str, user=Depends(require_permission("checkli
         }
 
         # 6. Build response with status calculation
+        # Database 0=Sun, 1=Mon, ..., 6=Sat. Python weekday() is 0=Mon, 6=Sun.
+        day_of_week = (datetime.now(CARACAS_TZ).weekday() + 1) % 7
+        
         result: list[dict] = []
         for t in templates:
             # If due_date is set, only show the checklist on that specific date
             tmpl_due_date = t.get("due_date")
             if tmpl_due_date and tmpl_due_date != today:
                 continue
+            
+            # If frequency is weekly/monthly/custom, check the schedule
+            freq = t.get("frequency")
+            sched = t.get("schedule") or []
+            if freq == "weekly" and sched:
+                if day_of_week not in sched:
+                    continue
+            elif freq == "custom" and sched:
+                if day_of_week not in sched:
+                    continue
+            # Note: monthly logic is a bit more complex, for now we skip filtering here 
+            # to avoid accidental hiding, as get_compliance handles it for reports.
 
             tid = t["id"]
             total_q = questions_by_template.get(tid, 0)
@@ -1262,27 +1277,55 @@ async def get_compliance_report(
     """
     try:
         db = get_db()
+        # Get organization of current admin
+        profile_res = db.table("profiles").select("organization_id").eq("id", user.id).single().execute()
+        if not profile_res.data:
+            raise HTTPException(404, "Profile not found")
+        org_id = profile_res.data["organization_id"]
+
         today = datetime.now(CARACAS_TZ).strftime("%Y-%m-%d")
         d_from = date_from or today
         d_to = date_to or today
 
-        # Get templates
+        # 1. Get all venue IDs for this organization to ensure strict data isolation
+        venues_res = db.table("venues").select("id").eq("org_id", org_id).execute()
+        org_venue_ids = [v["id"] for v in (venues_res.data or [])]
+        
+        if not org_venue_ids:
+            return {
+                "total_expected": 0, "completed_on_time": 0,
+                "completed_late": 0, "completed_total": 0,
+                "missing": 0, "compliance_pct": 0,
+                "critical_issues": 0, "non_critical_issues": 0,
+                "avg_execution_minutes": 0,
+            }
+
+        # 2. Get templates for this organization (and optionally a specific venue)
         tmpl_query = db.table("checklist_templates").select("id, venue_id, due_time, due_date, frequency, schedule")
+        
         if venue_id:
+            # Security check: ensure the requested venue belongs to the admin's organization
+            if venue_id not in org_venue_ids:
+                raise HTTPException(status_code=403, detail="Venue does not belong to your organization")
             tmpl_query = tmpl_query.eq("venue_id", venue_id)
+        else:
+            tmpl_query = tmpl_query.in_("venue_id", org_venue_ids)
+        
         templates = (tmpl_query.execute()).data or []
 
         if not templates:
             return {
                 "total_expected": 0, "completed_on_time": 0,
-                "completed_late": 0, "missing": 0,
+                "completed_late": 0, "completed_total": 0,
+                "missing": 0, "compliance_pct": 0,
                 "critical_issues": 0, "non_critical_issues": 0,
                 "avg_execution_minutes": 0,
             }
 
         template_ids = [t["id"] for t in templates]
 
-        # Get submissions in date range (using Caracas offset -04:00)
+        # Get submissions in date range
+        # Filter by venue_id if provided to be more specific, otherwise by template_ids
         sub_query = (
             db.table("submissions")
             .select("id, template_id, status, started_at, completed_at, created_at, shift")
@@ -1290,6 +1333,9 @@ async def get_compliance_report(
             .gte("created_at", f"{d_from}T00:00:00-04:00")
             .lte("created_at", f"{d_to}T23:59:59-04:00")
         )
+        if venue_id:
+            sub_query = sub_query.eq("venue_id", venue_id)
+            
         submissions = (sub_query.execute()).data or []
 
         # Count completed
@@ -1349,7 +1395,8 @@ async def get_compliance_report(
         
         for i in range(num_days):
             curr_date = start_date + timedelta(days=i)
-            day_of_week = curr_date.weekday() # 0 = Monday, 6 = Sunday
+            # Database 0=Sun, 1=Mon, ..., 6=Sat. Python weekday() is 0=Mon, 6=Sun.
+            day_of_week = (curr_date.weekday() + 1) % 7
             day_of_month = curr_date.day
             
             for t in templates:
@@ -2438,37 +2485,63 @@ async def get_admin_summary(
             raise HTTPException(404, "Profile not found")
         org_id = profile_res.data["organization_id"]
 
-        # 1. Checklist Compliance (Today)
+        # 1. Active Staff Count
         today_str = datetime.now(CARACAS_TZ).strftime("%Y-%m-%d")
-        comp_url = f"venue_id={venue_id}&" if venue_id else ""
-        # We reuse the logic from get_compliance but simpler or just call it if possible.
-        # Since it's an internal call, let's just aggregate here.
         
-        # 2. Active Staff Count
-        live_query = db.table("attendance_logs").select("profile_id, event_type", count="exact").gte("marked_at", f"{today_str}T00:00:00-04:00")
-        if venue_id:
-            live_query = live_query.eq("venue_id", venue_id)
-        live_res = live_query.execute()
-        # Find unique profiles whose last event isn't 'clock_out'
-        logs = live_res.data or []
-        staff_status = {}
-        for l in logs:
-            staff_status[l["profile_id"]] = l["event_type"]
-        active_staff = sum(1 for status in staff_status.values() if status != 'clock_out')
+        # Get venues for this org to filter attendance
+        venues_res = db.table("venues").select("id").eq("org_id", org_id).execute()
+        org_venue_ids = [v["id"] for v in (venues_res.data or [])]
+        
+        active_staff = 0
+        if org_venue_ids:
+            live_query = db.table("attendance_logs").select("profile_id, event_type").gte("marked_at", f"{today_str}T00:00:00-04:00")
+            if venue_id:
+                if venue_id in org_venue_ids:
+                    live_query = live_query.eq("venue_id", venue_id)
+                else:
+                    return {"active_staff": 0, "pending_tickets": 0, "critical_failures": 0, "today": today_str}
+            else:
+                live_query = live_query.in_("venue_id", org_venue_ids)
+            
+            live_res = live_query.execute()
+            logs = live_res.data or []
+            staff_status = {}
+            for l in logs:
+                staff_status[l["profile_id"]] = l["event_type"]
+            active_staff = sum(1 for status in staff_status.values() if status != 'clock_out')
 
-        # 3. Pending Repair Tickets
-        # Repair tickets don't have org_id directly, we join with assets
-        tickets_query = db.table("repair_tickets").select("id, assets!inner(org_id)", count="exact").neq("status", "resuelto").eq("assets.org_id", org_id)
-        if venue_id:
-            tickets_query = tickets_query.eq("assets.venue_id", venue_id)
-        tickets_res = tickets_query.execute()
-        pending_tickets = tickets_res.count if tickets_res.count is not None else 0
+        # 2. Pending Repair Tickets
+        pending_tickets = 0
+        if org_venue_ids:
+            # First get assets for the org/venue
+            asset_query = db.table("assets").select("id").in_("venue_id", org_venue_ids)
+            if venue_id:
+                asset_query = asset_query.eq("venue_id", venue_id)
+            
+            asset_ids = [a["id"] for a in (asset_query.execute().data or [])]
+            
+            if asset_ids:
+                tickets_res = db.table("repair_tickets").select("id", count="exact").neq("status", "resuelto").in_("asset_id", asset_ids).execute()
+                pending_tickets = tickets_res.count if tickets_res.count is not None else 0
 
-        # 4. Critical Checklist Failures (Today)
-        # Assuming critical if result is 'no' or 'fail' in some questions.
-        # For now, let's just return a placeholder or real count if easy.
-        critical_res = db.table("answers").select("id", count="exact").eq("is_critical_failure", True).gte("created_at", f"{today_str}T00:00:00-04:00")
-        critical_failures = critical_res.count if critical_res.count is not None else 0
+        # 3. Critical Checklist Failures (Today)
+        # We only count failures for templates that belong to this organization
+        critical_failures = 0
+        if org_venue_ids:
+            tmpl_query = db.table("checklist_templates").select("id").in_("venue_id", org_venue_ids)
+            if venue_id:
+                tmpl_query = tmpl_query.eq("venue_id", venue_id)
+            
+            template_ids = [t["id"] for t in (tmpl_query.execute().data or [])]
+            
+            if template_ids:
+                # Find submissions for these templates today
+                sub_query = db.table("submissions").select("id").in_("template_id", template_ids).gte("created_at", f"{today_str}T00:00:00-04:00")
+                sub_ids = [s["id"] for s in (sub_query.execute().data or [])]
+                
+                if sub_ids:
+                    critical_res = db.table("answers").select("id", count="exact").eq("is_critical_failure", True).in_("submission_id", sub_ids).execute()
+                    critical_failures = critical_res.count if critical_res.count is not None else 0
 
         return {
             "active_staff": active_staff,

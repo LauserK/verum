@@ -38,22 +38,44 @@ export default function GeneralAdminDashboard() {
         // Use a flag to avoid setting state on unmounted component
         let mounted = true;
         
-        const today = new Date().toISOString().split('T')[0]
+        const getLocalDateString = (d: Date) => {
+            const year = d.getFullYear()
+            const month = String(d.getMonth() + 1).padStart(2, '0')
+            const day = String(d.getDate()).padStart(2, '0')
+            return `${year}-${month}-${day}`
+        }
         
-        Promise.all([
-            adminApi.getAdminSummary(venueId),
-            adminApi.getCompliance({ venue_id: venueId, date_from: today, date_to: today })
-        ]).then(([s, c]) => {
-            if (mounted) {
-                setSummary(s as AdminSummary)
-                setCompliance(c)
+        const today = getLocalDateString(new Date())
+        
+        async function fetchData() {
+            try {
+                // Separate calls to handle partial failures
+                const summaryPromise = adminApi.getAdminSummary(venueId)
+                    .then(s => { if (mounted) setSummary(s as AdminSummary) })
+                    .catch(err => console.error('Summary fetch error:', err));
+
+                const compliancePromise = adminApi.getCompliance({ venue_id: venueId, date_from: today, date_to: today })
+                    .then(c => { if (mounted) setCompliance(c) })
+                    .catch(err => console.error('Compliance fetch error:', err));
+                
+                await Promise.allSettled([summaryPromise, compliancePromise])
+            } catch (err) {
+                console.error('Dashboard general error:', err)
+            } finally {
+                if (mounted) setLoading(false)
             }
-        }).catch(console.error).finally(() => {
-            if (mounted) setLoading(false)
-        })
+        }
+
+        fetchData()
 
         return () => { mounted = false; }
     }, [venueId])
+
+    const complianceColor = (pct: number) => {
+        if (pct >= 90) return 'text-success'
+        if (pct >= 70) return 'text-warning'
+        return 'text-error'
+    }
 
     if (loading || !profile) {
         return (
@@ -73,7 +95,10 @@ export default function GeneralAdminDashboard() {
                 </div>
                 <select
                     value={venueId}
-                    onChange={(e) => setVenueId(e.target.value)}
+                    onChange={(e) => {
+                        setVenueId(e.target.value)
+                        setLoading(true)
+                    }}
                     className="bg-surface border border-border rounded-xl px-4 h-11 text-sm font-bold text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none shadow-sm transition-all"
                 >
                     {profile.venues.map((v) => (
@@ -91,14 +116,16 @@ export default function GeneralAdminDashboard() {
                             <ClipboardCheck className="w-6 h-6" />
                         </div>
                         <div className="text-right">
-                            <span className={`text-2xl font-black ${(compliance?.compliance_pct ?? 0) >= 90 ? 'text-success' : 'text-warning'}`}>
+                            <span className={`text-2xl font-black ${complianceColor(compliance?.compliance_pct ?? 0)}`}>
                                 {compliance?.compliance_pct ?? 0}%
                             </span>
                             <p className="text-[10px] font-bold text-text-secondary uppercase tracking-widest mt-1 text-nowrap">Cumplimiento Hoy</p>
                         </div>
                     </div>
                     <div className="flex items-center justify-between mt-6">
-                        <p className="text-xs text-text-secondary font-medium">Ver detalles de checklists</p>
+                        <p className="text-xs text-text-secondary font-medium">
+                            {compliance?.completed_total ?? 0} / {compliance?.total_expected ?? 0} completados
+                        </p>
                         <ArrowRight className="w-4 h-4 text-text-secondary group-hover:translate-x-1 transition-transform" />
                     </div>
                 </Link>
