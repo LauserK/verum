@@ -144,9 +144,12 @@ export default function AttendancePage() {
                     </div>
                 </div>
 
-                <div className="text-center">
+                <div className="flex flex-col items-center gap-4">
                     <Link href="/attendance/history" className="text-primary text-sm font-bold mt-4 inline-block hover:underline">
                         Ver mi historial completo
+                    </Link>
+                    <Link href="/attendance/requests" className="bg-surface-raised border border-border px-6 py-3 rounded-2xl text-text-primary text-sm font-black shadow-sm active:scale-95 transition-all">
+                        Gestionar mis Solicitudes
                     </Link>
                 </div>
             </main>

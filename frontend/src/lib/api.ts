@@ -330,10 +330,24 @@ export const attendanceApi = {
     mark: (event_type: string, data: Record<string, unknown> = {}): Promise<AttendanceLog> => fetchWithAuth('/attendance/mark', { method: 'POST', body: JSON.stringify({ event_type, ...data }) }),
     getLive: (venueId: string): Promise<AttendanceLog[]> => fetchWithAuth(`/attendance/live?venue_id=${venueId}`),
     getHistory: (): Promise<AttendanceLog[]> => fetchWithAuth('/attendance/me'),
+    
+    // Leave Requests
+    requestLeave: (data: { date: string; type: string; reason?: string }): Promise<any> => 
+        fetchWithAuth('/attendance/requests', { method: 'POST', body: JSON.stringify(data) }),
+    getOwnRequests: (): Promise<any[]> => fetchWithAuth('/attendance/requests/me'),
 };
 
 // Admin CRUD
 export const adminApi = {
+    // Leave Requests Admin
+    getPendingRequests: (venueId?: string): Promise<any[]> => 
+        fetchWithAuth(`/admin/attendance/requests${venueId ? `?venue_id=${venueId}` : ''}`),
+    getAllAbsences: (venueId?: string): Promise<any[]> => 
+        fetchWithAuth(`/admin/attendance/absences${venueId ? `?venue_id=${venueId}` : ''}`),
+    reviewRequest: (id: string, data: { status: 'approved' | 'rejected'; admin_comment?: string }): Promise<any> => 
+        fetchWithAuth(`/admin/attendance/requests/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    createAbsence: (data: { profile_id: string; venue_id: string; date: string; type: string; reason?: string }): Promise<any> =>
+        fetchWithAuth('/attendance/absences', { method: 'POST', body: JSON.stringify(data) }),
 
     getAttendanceReport: (venueId: string, from: string, to: string, profileId?: string): Promise<any[]> => {
         let url = `/attendance/report?venue_id=${venueId}&date_from=${from}&date_to=${to}`;

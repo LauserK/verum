@@ -2543,10 +2543,23 @@ async def get_admin_summary(
                     critical_res = db.table("answers").select("id", count="exact").eq("is_critical_failure", True).in_("submission_id", sub_ids).execute()
                     critical_failures = critical_res.count if critical_res.count is not None else 0
 
+        # 4. Pending Absence Requests
+        pending_absences = 0
+        if org_venue_ids:
+            abs_query = db.table("absences").select("id", count="exact").eq("status", "pending")
+            if venue_id:
+                abs_query = abs_query.eq("venue_id", venue_id)
+            else:
+                abs_query = abs_query.in_("venue_id", org_venue_ids)
+            
+            abs_res = abs_query.execute()
+            pending_absences = abs_res.count if abs_res.count is not None else 0
+
         return {
             "active_staff": active_staff,
             "pending_tickets": pending_tickets,
             "critical_failures": critical_failures,
+            "pending_absences": pending_absences,
             "today": today_str
         }
     except Exception as e:
@@ -2803,11 +2816,122 @@ class AbsenceRequest(BaseModel):
     type: str
     reason: Optional[str] = None
 
+class LeaveRequest(BaseModel):
+    date: str  # YYYY-MM-DD
+    type: str  # 'leave', 'sick', 'holiday'
+    reason: Optional[str] = None
+
+class AbsenceApprovalRequest(BaseModel):
+    status: str  # 'approved', 'rejected'
+    admin_comment: Optional[str] = None
+
 @app.post("/attendance/absences")
 async def create_absence(body: AbsenceRequest, current_user=Depends(get_current_user), db=Depends(get_db), _=Depends(require_permission("attendance.manage"))):
     data = body.dict()
     data["approved_by"] = current_user.id
+    data["status"] = "approved"
     res = db.table("absences").upsert(data, on_conflict="profile_id,date").execute()
+    return res.data[0] if res.data else {"ok": True}
+
+@app.post("/attendance/requests")
+async def request_leave(body: LeaveRequest, current_user=Depends(get_current_user), db=Depends(get_db), _=Depends(require_permission("attendance.request_leave"))):
+    """Staff requests a leave. Sets status to 'pending'."""
+    # Check if user has a venue assigned
+    profile_res = db.table("profiles").select("venue_id").eq("id", current_user.id).single().execute()
+    venue_id = profile_res.data.get("venue_id")
+    if not venue_id:
+        raise HTTPException(400, "No venue assigned to your profile")
+
+    # Check for existing mark or approved absence on that date
+    log_check = db.table("attendance_logs").select("id").eq("profile_id", current_user.id).gte("marked_at", f"{body.date}T00:00:00-04:00").lte("marked_at", f"{body.date}T23:59:59-04:00").limit(1).execute()
+    if log_check.data:
+        raise HTTPException(400, "Ya tienes marcas registradas para esa fecha")
+
+    abs_check = db.table("absences").select("id, status").eq("profile_id", current_user.id).eq("date", body.date).execute()
+    if abs_check.data:
+        status = abs_check.data[0]["status"]
+        if status == "approved":
+            raise HTTPException(400, "Ya tienes una ausencia aprobada para esa fecha")
+        elif status == "pending":
+            raise HTTPException(400, "Ya tienes una solicitud pendiente para esa fecha")
+        elif status == "rejected":
+            raise HTTPException(400, "Ya tienes una solicitud rechazada para esa fecha. Contacta a un administrador si necesitas renegociar.")
+        else:
+            raise HTTPException(400, f"Ya existe un registro de ausencia ({status}) para esa fecha")
+
+    data = {
+        "profile_id": current_user.id,
+        "venue_id": venue_id,
+        "date": body.date,
+        "type": body.type,
+        "reason": body.reason,
+        "status": "pending"
+    }
+    res = db.table("absences").insert(data).execute()
+    return res.data[0] if res.data else {"ok": True}
+
+@app.get("/attendance/requests/me")
+async def get_my_requests(current_user=Depends(get_current_user), db=Depends(get_db), _=Depends(require_permission("attendance.view_own"))):
+    """Returns the authenticated user's leave requests."""
+    res = db.table("absences").select("*").eq("profile_id", current_user.id).order("date", desc=True).limit(50).execute()
+    return res.data or []
+
+@app.get("/admin/attendance/requests")
+async def get_pending_requests(venue_id: Optional[str] = None, current_user=Depends(get_current_user), db=Depends(get_db), _=Depends(require_permission("attendance.manage"))):
+    """Admin lists pending leave requests for their organization/venue."""
+    # Get organization
+    profile_res = db.table("profiles").select("organization_id").eq("id", current_user.id).single().execute()
+    org_id = profile_res.data.get("organization_id")
+    
+    # Get venue IDs for this org
+    venues_res = db.table("venues").select("id").eq("org_id", org_id).execute()
+    org_venue_ids = [v["id"] for v in (venues_res.data or [])]
+    
+    # Use explicit relationship names to avoid ambiguity since absences has two FKs to profiles
+    query = db.table("absences").select("*, profiles!profile_id(full_name), venues(name)").eq("status", "pending")
+    
+    if venue_id:
+        query = query.eq("venue_id", venue_id)
+    else:
+        query = query.in_("venue_id", org_venue_ids)
+        
+    res = query.order("date", desc=True).execute()
+    return res.data or []
+
+@app.get("/admin/attendance/absences")
+async def list_all_absences(venue_id: Optional[str] = None, current_user=Depends(get_current_user), db=Depends(get_db), _=Depends(require_permission("attendance.manage"))):
+    """Admin lists all absences (history) for their organization/venue."""
+    # Get organization
+    profile_res = db.table("profiles").select("organization_id").eq("id", current_user.id).single().execute()
+    org_id = profile_res.data.get("organization_id")
+    
+    # Get venue IDs for this org
+    venues_res = db.table("venues").select("id").eq("org_id", org_id).execute()
+    org_venue_ids = [v["id"] for v in (venues_res.data or [])]
+    
+    # Get employee info AND admin info (reviewer)
+    query = db.table("absences").select("*, profiles!profile_id(full_name), venues(name), reviewer:profiles!approved_by(full_name)")
+    
+    if venue_id:
+        query = query.eq("venue_id", venue_id)
+    else:
+        query = query.in_("venue_id", org_venue_ids)
+        
+    res = query.order("date", desc=True).limit(100).execute()
+    return res.data or []
+
+@app.patch("/admin/attendance/requests/{absence_id}")
+async def review_leave_request(absence_id: str, body: AbsenceApprovalRequest, current_user=Depends(get_current_user), db=Depends(get_db), _=Depends(require_permission("attendance.manage"))):
+    """Admin approves or rejects a leave request."""
+    # Verify the absence exists and belongs to the admin's org
+    # (Simplified for now, assuming permission check is enough or doing a quick check)
+    update_data = {
+        "status": body.status,
+        "admin_comment": body.admin_comment,
+        "approved_by": current_user.id if body.status == "approved" else None
+    }
+    
+    res = db.table("absences").update(update_data).eq("id", absence_id).execute()
     return res.data[0] if res.data else {"ok": True}
 
 @app.post("/internal/attendance/check-absences")

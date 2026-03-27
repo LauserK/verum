@@ -5,7 +5,8 @@ import { adminApi, getProfile, type Profile, type ComplianceReport } from '@/lib
 import {
     ClipboardCheck, Box, 
     AlertTriangle, ArrowRight, Loader2, Users,
-    CheckCircle2, TrendingUp, Wrench, Building2
+    CheckCircle2, TrendingUp, Wrench, Building2,
+    Calendar
 } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'
@@ -15,6 +16,7 @@ interface AdminSummary {
     active_staff: number;
     pending_tickets: number;
     critical_failures: number;
+    pending_absences: number;
     today: string;
 }
 
@@ -108,7 +110,7 @@ export default function GeneralAdminDashboard() {
             </div>
 
             {/* Top Scorecards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 {/* Checklist Compliance Card */}
                 <Link href="/admin/checklists/dashboard" className="bg-surface border border-border rounded-3xl p-6 shadow-sm hover:border-primary/50 transition-all group">
                     <div className="flex justify-between items-start mb-4">
@@ -145,6 +147,25 @@ export default function GeneralAdminDashboard() {
                     </div>
                     <div className="flex items-center justify-between mt-6">
                         <p className="text-xs text-text-secondary font-medium">Ver asistencia en vivo</p>
+                        <ArrowRight className="w-4 h-4 text-text-secondary group-hover:translate-x-1 transition-transform" />
+                    </div>
+                </Link>
+
+                {/* Pending Absences Card */}
+                <Link href="/admin/attendance/absences" className="bg-surface border border-border rounded-3xl p-6 shadow-sm hover:border-primary/50 transition-all group">
+                    <div className="flex justify-between items-start mb-4">
+                        <div className="w-12 h-12 rounded-2xl bg-warning/10 flex items-center justify-center text-warning group-hover:scale-110 transition-transform">
+                            <Calendar className="w-6 h-6" />
+                        </div>
+                        <div className="text-right">
+                            <span className={`text-2xl font-black ${(summary?.pending_absences ?? 0) > 0 ? 'text-warning' : 'text-text-primary'}`}>
+                                {summary?.pending_absences}
+                            </span>
+                            <p className="text-[10px] font-bold text-text-secondary uppercase tracking-widest mt-1 text-nowrap">Ausencias Pendientes</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center justify-between mt-6">
+                        <p className="text-xs text-text-secondary font-medium">Revisar solicitudes</p>
                         <ArrowRight className="w-4 h-4 text-text-secondary group-hover:translate-x-1 transition-transform" />
                     </div>
                 </Link>

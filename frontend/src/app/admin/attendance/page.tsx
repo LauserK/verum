@@ -69,6 +69,10 @@ export default function AdminAttendancePage() {
                         <a href="/admin/attendance/shifts" className="text-sm font-bold text-primary hover:underline flex items-center gap-1">
                             Horarios
                         </a>
+                        <span className="text-border">|</span>
+                        <a href="/admin/attendance/absences" className="text-sm font-bold text-primary hover:underline flex items-center gap-1">
+                            Ausencias
+                        </a>
                     </div>
                 </div>
                 <div className="flex items-center gap-2 text-xs font-semibold text-text-secondary">
