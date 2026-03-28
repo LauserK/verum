@@ -53,7 +53,7 @@ export default function AssetsPage() {
   const [newModel, setNewModel] = useState('')
 
   const [showPrintConfig, setShowPrintConfig] = useState(false)
-  const [gridConfig, setGridConfig] = useState({ rows: 2, cols: 2 })
+  const [gridConfig, setGridConfig] = useState<{ rows: number; cols: number; scale?: number }>({ rows: 2, cols: 2 })
   const bulkPrintRef = useRef<HTMLDivElement>(null)
 
   const printRef = useRef<HTMLDivElement>(null)
@@ -65,7 +65,7 @@ export default function AssetsPage() {
     onAfterPrint: () => setShowPrintConfig(false)
   })
 
-  const handleConfirmPrint = (config: { rows: number; cols: number }) => {
+  const handleConfirmPrint = (config: { rows: number; cols: number; scale?: number }) => {
     setGridConfig(config)
     setTimeout(() => {
       handleBulkPrintTrigger()
