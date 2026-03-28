@@ -172,16 +172,22 @@ async def get_profile(user=Depends(get_current_user)):
         profile = result.data[0]
         org_id = profile.get("organization_id")
 
-        # Fetch venues for the user's organization
+        # Fetch venues based on profile_venues table
         venues = []
-        if org_id:
-            venues_res = (
-                db.table("venues")
-                .select("id, name")
-                .eq("org_id", org_id)
-                .execute()
-            )
-            venues = venues_res.data or []
+        # Get assigned venues for staff or all for admin
+        if profile.get("role") == "admin":
+             if org_id:
+                venues_res = db.table("venues").select("id, name").eq("org_id", org_id).execute()
+                venues = venues_res.data or []
+        else:
+            pv_res = db.table("profile_venues").select("venue_id, venues(name)").eq("profile_id", user.id).execute()
+            if pv_res.data:
+                for pv in pv_res.data:
+                    if pv.get("venues"):
+                        venues.append({
+                            "id": pv["venue_id"],
+                            "name": pv["venues"].get("name")
+                        })
 
         # Fetch shift name if shift_id is present
         shift_name = None
@@ -836,6 +842,12 @@ async def create_user(body: CreateUserRequest, user=Depends(require_permission("
             profile_data["shift_id"] = body.shift_id
         db.table("profiles").upsert(profile_data).execute()
 
+        # Handle profile_venues
+        v_ids = body.venue_ids or ([body.venue_id] if body.venue_id else [])
+        if v_ids:
+            pv_data = [{"profile_id": new_user.id, "venue_id": vid} for vid in v_ids]
+            db.table("profile_venues").insert(pv_data).execute()
+
         # Handle custom role assignment
         if body.role not in ["staff", "admin"]:
             # Find the role by name in custom_roles
@@ -866,10 +878,27 @@ async def update_user(user_id: str, body: UpdateUserRequest, user=Depends(requir
         payload["venue_id"] = body.venue_id
     if body.shift_id is not None:
         payload["shift_id"] = body.shift_id
-    if not payload:
+        
+    if not payload and body.venue_ids is None:
         raise HTTPException(400, "No fields to update")
-    res = db.table("profiles").update(payload).eq("id", user_id).execute()
-    return res.data[0] if res.data else {}
+        
+    res_data = {}
+    if payload:
+        res = db.table("profiles").update(payload).eq("id", user_id).execute()
+        if res.data:
+            res_data = res.data[0]
+            
+    if body.venue_ids is not None:
+        # Delete old mappings and insert new ones
+        db.table("profile_venues").delete().eq("profile_id", user_id).execute()
+        if body.venue_ids:
+            pv_data = [{"profile_id": user_id, "venue_id": vid} for vid in body.venue_ids]
+            db.table("profile_venues").insert(pv_data).execute()
+    elif body.venue_id is not None:
+         db.table("profile_venues").delete().eq("profile_id", user_id).execute()
+         db.table("profile_venues").insert({"profile_id": user_id, "venue_id": body.venue_id}).execute()
+         
+    return res_data or {"ok": True}
 
 
 @app.delete("/admin/users/{user_id}")

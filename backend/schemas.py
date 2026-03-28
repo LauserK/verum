@@ -125,6 +125,7 @@ class CreateUserRequest(BaseModel):
 class UpdateUserRequest(BaseModel):
     full_name: Optional[str] = None
     role: Optional[str] = None
+    venue_ids: Optional[List[str]] = None
     venue_id: Optional[str] = None
     shift_id: Optional[str] = None
 
