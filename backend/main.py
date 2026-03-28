@@ -1096,8 +1096,11 @@ async def list_submissions(
 ):
     """Lists submissions with optional filters."""
     db = get_db()
+    # In migrations: user_id -> profiles, template_id -> checklist_templates, venue_id -> venues
+    # shift can be a string ('morning') or a UUID referencing 'shifts' table.
+    # We remove shifts:shift(name) because there's no explicit FK constraint in the DB.
     query = db.table("submissions").select(
-        "*, profiles(full_name), checklist_templates(title), shifts(name), venues(name)"
+        "*, profiles:user_id(full_name), checklist_templates(title), venues(name)"
     )
     if venue_id:
         query = query.eq("venue_id", venue_id)
@@ -1110,7 +1113,29 @@ async def list_submissions(
 
     query = query.order("created_at", desc=True).limit(100)
     res = query.execute()
-    return res.data or []
+    
+    data = res.data or []
+    if not data:
+        return []
+
+    # Resolve shift names manually
+    shift_ids = list(set(item["shift"] for item in data if item.get("shift") and len(item["shift"]) > 10))
+    shift_map = {}
+    if shift_ids:
+        s_res = db.table("shifts").select("id, name").in_("id", shift_ids).execute()
+        shift_map = {sh["id"]: sh["name"] for sh in (s_res.data or [])}
+
+    for item in data:
+        s_val = item.get("shift")
+        name = shift_map.get(s_val, s_val) # Name from map or original string
+        item["shift_name"] = name
+        # We also populate 'shifts' object for frontend compatibility s.shifts?.name
+        if s_val in shift_map:
+            item["shifts"] = {"name": shift_map[s_val]}
+        else:
+            item["shifts"] = {"name": s_val}
+            
+    return data
 
 
 # ── Admin Compliance Report ─────────────────────────────
@@ -2290,6 +2315,7 @@ async def get_inventory_dashboard_summary(
         raise HTTPException(status_code=500, detail=str(e))
 
 # ── Attendance: Shifts Endpoints (M13) ──
+@app.get("/employee-shifts")
 async def list_employee_shifts(profile_id: Optional[str] = None, venue_id: Optional[str] = None, db=Depends(get_db), _=Depends(require_permission("attendance.manage"))):
     query = db.table("employee_shifts").select("*, shift_days(*)")
     if profile_id:
@@ -2299,15 +2325,18 @@ async def list_employee_shifts(profile_id: Optional[str] = None, venue_id: Optio
     res = query.execute()
     return res.data
 
+
 @app.post("/employee-shifts")
 async def create_employee_shift(body: EmployeeShiftRequest, db=Depends(get_db), _=Depends(require_permission("attendance.manage"))):
     res = db.table("employee_shifts").insert(body.dict(exclude_none=True)).execute()
     return res.data[0]
 
+
 @app.patch("/employee-shifts/{shift_id}")
 async def update_employee_shift(shift_id: str, body: EmployeeShiftRequest, db=Depends(get_db), _=Depends(require_permission("attendance.manage"))):
     res = db.table("employee_shifts").update(body.dict(exclude_none=True)).eq("id", shift_id).execute()
     return res.data[0]
+
 
 @app.post("/employee-shifts/{shift_id}/days")
 async def update_shift_day(shift_id: str, body: ShiftDayRequest, db=Depends(get_db), _=Depends(require_permission("attendance.manage"))):
@@ -2316,7 +2345,10 @@ async def update_shift_day(shift_id: str, body: ShiftDayRequest, db=Depends(get_
     res = db.table("shift_days").upsert(data, on_conflict="employee_shift_id,weekday").execute()
     return res.data[0]
 
+
 # ── Attendance: Marking Endpoints (M13) ──
+
+def get_active_shift_for_today(profile_id: str, venue_id: str, db) -> Optional[dict]:
     today_dt = datetime.now(CARACAS_TZ)
     iso_weekday = today_dt.isoweekday() # 1=Mon, 7=Sun
     
@@ -2431,6 +2463,22 @@ async def mark_attendance(body: MarkAttendanceRequest, current_user=Depends(get_
     return res.data[0]
 
 # ── Attendance: Absences & Admin Views (M13) ──
+
+@app.get("/attendance/live")
+async def get_live_attendance(venue_id: str, db=Depends(get_db), _=Depends(require_permission("attendance.view_team"))):   
+    today_str = datetime.now(CARACAS_TZ).strftime("%Y-%m-%d")
+    # Fetch all logs for today in this venue
+    logs_res = db.table("attendance_logs").select("*, profiles!attendance_logs_profile_id_fkey(full_name)").eq("venue_id", venue_id).gte("marked_at", f"{today_str}T00:00:00-04:00").order("marked_at", desc=True).execute()
+    
+    # Group by profile to find latest state
+    staff_status = {}
+    for log in logs_res.data or []:
+        pid = log["profile_id"]
+        if pid not in staff_status:
+            staff_status[pid] = log
+
+    return list(staff_status.values())
+
 
 @app.post("/attendance/absences")
 async def create_absence(body: AbsenceRequest, current_user=Depends(get_current_user), db=Depends(get_db), _=Depends(require_permission("attendance.manage"))):
