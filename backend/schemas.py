@@ -119,6 +119,7 @@ class CreateUserRequest(BaseModel):
     full_name: str
     role: str = "staff"  # 'admin' or 'staff'
     organization_id: str
+    venue_ids: Optional[List[str]] = None
     venue_id: Optional[str] = None
     shift_id: Optional[str] = None
 

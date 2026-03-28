@@ -843,7 +843,7 @@ async def create_user(body: CreateUserRequest, user=Depends(require_permission("
         db.table("profiles").upsert(profile_data).execute()
 
         # Handle profile_venues
-        v_ids = body.venue_ids or ([body.venue_id] if body.venue_id else [])
+        v_ids = body.venue_ids if body.venue_ids is not None else ([body.venue_id] if body.venue_id else [])
         if v_ids:
             pv_data = [{"profile_id": new_user.id, "venue_id": vid} for vid in v_ids]
             db.table("profile_venues").insert(pv_data).execute()
@@ -859,7 +859,7 @@ async def create_user(body: CreateUserRequest, user=Depends(require_permission("
                     "role_id": role_id
                 }).execute()
 
-        return {"id": new_user.id, "email": body.email, "full_name": body.full_name, "role": body.role, "venue_id": body.venue_id, "shift_id": body.shift_id, "organization_id": body.organization_id}
+        return {"id": new_user.id, "email": body.email, "full_name": body.full_name, "role": body.role, "venue_ids": v_ids, "venue_id": body.venue_id, "shift_id": body.shift_id, "organization_id": body.organization_id}
     except HTTPException:
         raise
     except Exception as e:
@@ -882,11 +882,8 @@ async def update_user(user_id: str, body: UpdateUserRequest, user=Depends(requir
     if not payload and body.venue_ids is None:
         raise HTTPException(400, "No fields to update")
         
-    res_data = {}
     if payload:
-        res = db.table("profiles").update(payload).eq("id", user_id).execute()
-        if res.data:
-            res_data = res.data[0]
+        db.table("profiles").update(payload).eq("id", user_id).execute()
             
     if body.venue_ids is not None:
         # Delete old mappings and insert new ones
@@ -898,7 +895,9 @@ async def update_user(user_id: str, body: UpdateUserRequest, user=Depends(requir
          db.table("profile_venues").delete().eq("profile_id", user_id).execute()
          db.table("profile_venues").insert({"profile_id": user_id, "venue_id": body.venue_id}).execute()
          
-    return res_data or {"ok": True}
+    # Fetch and return the updated profile to ensure consistency
+    updated_profile = db.table("profiles").select("*").eq("id", user_id).single().execute()
+    return updated_profile.data if updated_profile.data else {"ok": True}
 
 
 @app.delete("/admin/users/{user_id}")
