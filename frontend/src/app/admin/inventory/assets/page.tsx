@@ -6,6 +6,8 @@ import { adminApi, getProfile, type VenueInfo, type Asset } from '@/lib/api'
 import { Plus, QrCode, Edit3, Save, X, Loader2, Search, Filter } from 'lucide-react'
 import { useReactToPrint } from 'react-to-print'
 import { QRCodePrint } from '@/components/inventory/QRCodePrint'
+import { BulkQRCodePrint } from '@/components/inventory/BulkQRCodePrint'
+import { PrintConfigModal } from '@/components/inventory/PrintConfigModal'
 import { v4 as uuidv4 } from 'uuid'
 import Link from 'next/link'
 import { useTranslations } from '@/components/I18nProvider'
@@ -50,8 +52,25 @@ export default function AssetsPage() {
   const [newBrand, setNewBrand] = useState('')
   const [newModel, setNewModel] = useState('')
 
+  const [showPrintConfig, setShowPrintConfig] = useState(false)
+  const [gridConfig, setGridConfig] = useState({ rows: 2, cols: 2 })
+  const bulkPrintRef = useRef<HTMLDivElement>(null)
+
   const printRef = useRef<HTMLDivElement>(null)
   const supabase = createClient()
+
+  const handleBulkPrintTrigger = useReactToPrint({
+    contentRef: bulkPrintRef,
+    documentTitle: 'Inventario-QRs-Masivo',
+    onAfterPrint: () => setShowPrintConfig(false)
+  })
+
+  const handleConfirmPrint = (config: { rows: number; cols: number }) => {
+    setGridConfig(config)
+    setTimeout(() => {
+      handleBulkPrintTrigger()
+    }, 200)
+  }
 
   const resetForm = () => {
     setNewName('')
@@ -228,13 +247,23 @@ export default function AssetsPage() {
             </Link>
           </div>
         </div>
-        <button 
-          onClick={() => { resetForm(); setShowCreate(true); }}
-          className="flex items-center gap-2 bg-primary text-text-inverse px-4 h-10 rounded-xl text-sm font-medium hover:bg-primary-hover transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          {t('inventory.assets.newAsset')}
-        </button>
+        <div className="flex gap-2">
+          <button 
+            onClick={() => setShowPrintConfig(true)}
+            disabled={filteredAssets.length === 0}
+            className="flex items-center gap-2 bg-surface border border-border text-text-primary px-4 h-10 rounded-xl text-sm font-medium hover:bg-surface-raised transition-colors disabled:opacity-50"
+          >
+            <QrCode className="w-4 h-4" />
+            Imprimir Filtrados
+          </button>
+          <button 
+            onClick={() => { resetForm(); setShowCreate(true); }}
+            className="flex items-center gap-2 bg-primary text-text-inverse px-4 h-10 rounded-xl text-sm font-medium hover:bg-primary-hover transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            {t('inventory.assets.newAsset')}
+          </button>
+        </div>
       </div>
 
       {/* Formulario Crear Activo (Modal) */}
@@ -512,7 +541,20 @@ export default function AssetsPage() {
             }} 
           />
         )}
+        <BulkQRCodePrint 
+          ref={bulkPrintRef}
+          assets={filteredAssets}
+          venues={venues}
+          gridConfig={gridConfig}
+        />
       </div>
+
+      <PrintConfigModal 
+        isOpen={showPrintConfig}
+        onClose={() => setShowPrintConfig(false)}
+        onConfirm={handleConfirmPrint}
+        totalAssets={filteredAssets.length}
+      />
     </div>
   )
 }
