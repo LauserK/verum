@@ -15,7 +15,7 @@ Este proyecto es una plataforma de gestión operativa para restaurantes y empres
 ## 2. Stack Tecnológico
 
 * **Frontend:** Next.js 14+ (App Router), Tailwind CSS, Shadcn/UI.
-* **Backend:** Python 3.11+, FastAPI, Pydantic v2.
+* **Backend:** Python 3.11+, FastAPI, Pydantic v2, Pytest
 * **Base de Datos & Auth:** Supabase (PostgreSQL, Auth, Storage).
 * **Infraestructura:** Vercel (Frontend), Render (Backend), Supabase (Data).
 
