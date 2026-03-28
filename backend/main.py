@@ -2555,6 +2555,12 @@ async def request_leave(body: LeaveRequest, current_user=Depends(get_current_use
     if not venue_id:
         raise HTTPException(400, "venue_id is required")
 
+    status_res = await get_attendance_status(venue_id, current_user, db)
+    
+    # Validation: Cross-venue lock
+    if status_res.get("locked_to_venue") and str(status_res["locked_to_venue"]) != str(venue_id):
+        raise HTTPException(400, "Ya tienes un turno activo en otra sede")
+
     # Check for existing mark or approved absence on that date
     log_check = db.table("attendance_logs").select("id").eq("profile_id", current_user.id).gte("marked_at", f"{body.date}T00:00:00-04:00").lte("marked_at", f"{body.date}T23:59:59-04:00").limit(1).execute()
     if log_check.data:
