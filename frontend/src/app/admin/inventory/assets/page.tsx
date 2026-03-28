@@ -3,7 +3,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { adminApi, getProfile, type VenueInfo, type Asset } from '@/lib/api'
-import { Plus, QrCode, Edit3, Save, X, Loader2, Search, Filter } from 'lucide-react'
+import { Plus, QrCode, Edit3, Save, X, Loader2, Search, Filter, ChevronUp, ChevronDown } from 'lucide-react'
 import { useReactToPrint } from 'react-to-print'
 import { QRCodePrint } from '@/components/inventory/QRCodePrint'
 import { BulkQRCodePrint } from '@/components/inventory/BulkQRCodePrint'
@@ -43,6 +43,19 @@ export default function AssetsPage() {
   const [categoryFilter, setCategoryFilter] = useState('')
   const [venueFilter, setVenueFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'operativo' | 'en_reparacion' | 'baja'>('all')
+
+  // Sort State
+  const [sortField, setSortField] = useState<'name' | 'category' | 'status'>('name')
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
+
+  const toggleSort = (field: 'name' | 'category' | 'status') => {
+    if (sortField === field) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortDirection('asc')
+    }
+  }
 
   // Form State
   const [newName, setNewName] = useState('')
@@ -214,17 +227,31 @@ export default function AssetsPage() {
     }
   }
 
-  const filteredAssets = assets.filter(asset => {
-    const matchesSearch = asset.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      asset.serial?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      asset.asset_categories?.name?.toLowerCase().includes(searchTerm.toLowerCase())
-    
-    const matchesCategory = !categoryFilter || asset.category_id === categoryFilter
-    const matchesVenue = !venueFilter || asset.venue_id === venueFilter
-    const matchesStatus = statusFilter === 'all' || asset.status === statusFilter
+  const filteredAssets = assets
+    .filter(asset => {
+      const matchesSearch = asset.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        asset.serial?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        asset.asset_categories?.name?.toLowerCase().includes(searchTerm.toLowerCase())
+      
+      const matchesCategory = !categoryFilter || asset.category_id === categoryFilter
+      const matchesVenue = !venueFilter || asset.venue_id === venueFilter
+      const matchesStatus = statusFilter === 'all' || asset.status === statusFilter
 
-    return matchesSearch && matchesCategory && matchesVenue && matchesStatus
-  })
+      return matchesSearch && matchesCategory && matchesVenue && matchesStatus
+    })
+    .sort((a, b) => {
+      let comparison = 0
+      if (sortField === 'name') {
+        comparison = a.name.localeCompare(b.name)
+      } else if (sortField === 'category') {
+        const catA = a.asset_categories?.name || ''
+        const catB = b.asset_categories?.name || ''
+        comparison = catA.localeCompare(catB)
+      } else if (sortField === 'status') {
+        comparison = a.status.localeCompare(b.status)
+      }
+      return sortDirection === 'asc' ? comparison : -comparison
+    })
 
   return (
     <div className="space-y-6">
@@ -482,9 +509,39 @@ export default function AssetsPage() {
           <table className="w-full text-left text-sm">
             <thead className="bg-surface-raised text-text-secondary font-semibold">
               <tr>
-                <th className="px-6 py-4">{t('inventory.assets.table.name')}</th>
-                <th className="px-6 py-4">{t('inventory.assets.table.category')}</th>
-                <th className="px-6 py-4">{t('inventory.assets.table.status')}</th>
+                <th 
+                  className="px-6 py-4 cursor-pointer hover:text-text-primary transition-colors group"
+                  onClick={() => toggleSort('name')}
+                >
+                  <div className="flex items-center gap-1">
+                    {t('inventory.assets.table.name')}
+                    <div className={`transition-opacity ${sortField === 'name' ? 'opacity-100' : 'opacity-0 group-hover:opacity-50'}`}>
+                      {sortField === 'name' && sortDirection === 'desc' ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                    </div>
+                  </div>
+                </th>
+                <th 
+                  className="px-6 py-4 cursor-pointer hover:text-text-primary transition-colors group"
+                  onClick={() => toggleSort('category')}
+                >
+                  <div className="flex items-center gap-1">
+                    {t('inventory.assets.table.category')}
+                    <div className={`transition-opacity ${sortField === 'category' ? 'opacity-100' : 'opacity-0 group-hover:opacity-50'}`}>
+                      {sortField === 'category' && sortDirection === 'desc' ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                    </div>
+                  </div>
+                </th>
+                <th 
+                  className="px-6 py-4 cursor-pointer hover:text-text-primary transition-colors group"
+                  onClick={() => toggleSort('status')}
+                >
+                  <div className="flex items-center gap-1">
+                    {t('inventory.assets.table.status')}
+                    <div className={`transition-opacity ${sortField === 'status' ? 'opacity-100' : 'opacity-0 group-hover:opacity-50'}`}>
+                      {sortField === 'status' && sortDirection === 'desc' ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                    </div>
+                  </div>
+                </th>
                 <th className="px-6 py-4 text-right">{t('inventory.assets.table.actions')}</th>
               </tr>
             </thead>
