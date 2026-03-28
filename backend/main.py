@@ -2422,43 +2422,75 @@ def calculate_overtime(real_time_str: str, expected_time_str: str, is_entry: boo
     return diff // 60 # Floor hours
 
 @app.get("/attendance/today/status")
-async def get_attendance_status(current_user=Depends(get_current_user), db=Depends(get_db)):
-    profile_res = db.table("profiles").select("venue_id").eq("id", current_user.id).single().execute()
-    venue_id = profile_res.data.get("venue_id")
-    if not venue_id:
-        raise HTTPException(400, "No venue assigned")
-
+async def get_attendance_status(venue_id: Optional[str] = None, current_user=Depends(get_current_user), db=Depends(get_db)):
+    # 1. First, check if there's any active shift (clock_in without clock_out) across ANY venue today
     today_str = datetime.now(CARACAS_TZ).strftime("%Y-%m-%d")
-    logs_res = db.table("attendance_logs").select("*").eq("profile_id", current_user.id).eq("venue_id", venue_id).gte("marked_at", f"{today_str}T00:00:00-04:00").order("marked_at", desc=True).limit(1).execute()
-    
+
+    # Get all logs for today for this user across all venues
+    all_logs_res = db.table("attendance_logs").select("*").eq("profile_id", current_user.id).gte("marked_at", f"{today_str}T00:00:00-04:00").order("marked_at", desc=True).execute()
+
+    # Determine the latest event across ALL venues
+    global_last_event = None
+    global_last_venue = None
+
+    if all_logs_res.data:
+        latest_log = all_logs_res.data[0]
+        global_last_event = latest_log["event_type"]
+        global_last_venue = latest_log["venue_id"]
+
+    # If the user is currently clocked in somewhere (or on break), they are locked to that venue
+    is_locked = global_last_event in ["clock_in", "break_start", "break_end"]
+
+    # The effective venue is the locked one, or the requested one, or fail.
+    effective_venue_id = global_last_venue if is_locked else venue_id
+
+    if not effective_venue_id:
+        # If not locked and no venue provided, we can't give a specific status. 
+        # Return generic "ready to clock in" but indicate venue is needed.
+        return {
+            "last_event": None,
+            "last_marked_at": None,
+            "available_actions": ["clock_in"],
+            "has_active_shift": False,
+            "locked_to_venue": None
+        }
+
+    # Now get the specific status for the effective_venue_id
+    logs_res = db.table("attendance_logs").select("*").eq("profile_id", current_user.id).eq("venue_id", effective_venue_id).gte("marked_at", f"{today_str}T00:00:00-04:00").order("marked_at", desc=True).limit(1).execute()
+
     last_event = logs_res.data[0]["event_type"] if logs_res.data else None
-    
+
     # State Machine
     available_actions = []
     if not last_event: available_actions = ["clock_in"]
     elif last_event == "clock_in": available_actions = ["break_start", "clock_out"]
     elif last_event == "break_start": available_actions = ["break_end"]
     elif last_event == "break_end": available_actions = ["clock_out"]
-    
-    # Check if user has an assigned active shift
-    shift_check = db.table("employee_shifts").select("id").eq("profile_id", current_user.id).eq("venue_id", venue_id).eq("is_active", True).limit(1).execute()
+
+    # Check if user has an assigned active shift in the EFFECTIVE venue
+    shift_check = db.table("employee_shifts").select("id").eq("profile_id", current_user.id).eq("venue_id", effective_venue_id).eq("is_active", True).limit(1).execute()
     has_active_shift = bool(shift_check.data and len(shift_check.data) > 0)
-    
+
     return {
         "last_event": last_event,
         "last_marked_at": logs_res.data[0]["marked_at"] if logs_res.data else None,
         "available_actions": available_actions,
-        "has_active_shift": has_active_shift
+        "has_active_shift": has_active_shift,
+        "locked_to_venue": effective_venue_id if is_locked else None,
+        "effective_venue_id": effective_venue_id
     }
-
 @app.post("/attendance/mark")
 async def mark_attendance(body: MarkAttendanceRequest, current_user=Depends(get_current_user), db=Depends(get_db), _=Depends(require_permission("attendance.mark"))):
-    profile_res = db.table("profiles").select("venue_id").eq("id", current_user.id).single().execute()
-    venue_id = profile_res.data.get("venue_id")
+    venue_id = body.venue_id
     if not venue_id:
-        raise HTTPException(400, "No venue assigned")
+        raise HTTPException(400, "venue_id is required")
         
-    status_res = await get_attendance_status(current_user, db)
+    status_res = await get_attendance_status(venue_id, current_user, db)
+    
+    # Validation: Cross-venue lock
+    if status_res.get("locked_to_venue") and str(status_res["locked_to_venue"]) != str(venue_id):
+        raise HTTPException(400, "Ya tienes un turno activo en otra sede")
+        
     if body.event_type not in status_res["available_actions"]:
         raise HTTPException(400, f"Invalid state. Allowed: {status_res['available_actions']}")
         
@@ -2519,11 +2551,9 @@ async def create_absence(body: AbsenceRequest, current_user=Depends(get_current_
 @app.post("/attendance/requests")
 async def request_leave(body: LeaveRequest, current_user=Depends(get_current_user), db=Depends(get_db), _=Depends(require_permission("attendance.request_leave"))):
     """Staff requests a leave. Sets status to 'pending'."""
-    # Check if user has a venue assigned
-    profile_res = db.table("profiles").select("venue_id").eq("id", current_user.id).single().execute()
-    venue_id = profile_res.data.get("venue_id")
+    venue_id = body.venue_id
     if not venue_id:
-        raise HTTPException(400, "No venue assigned to your profile")
+        raise HTTPException(400, "venue_id is required")
 
     # Check for existing mark or approved absence on that date
     log_check = db.table("attendance_logs").select("id").eq("profile_id", current_user.id).gte("marked_at", f"{body.date}T00:00:00-04:00").lte("marked_at", f"{body.date}T23:59:59-04:00").limit(1).execute()

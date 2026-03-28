@@ -320,6 +320,7 @@ class MarkAttendanceRequest(BaseModel):
     gps_lat: Optional[float] = None
     gps_lng: Optional[float] = None
     gps_accuracy_m: Optional[int] = None
+    venue_id: str
 
 class AbsenceRequest(BaseModel):
     profile_id: str
@@ -332,6 +333,7 @@ class LeaveRequest(BaseModel):
     date: str  # YYYY-MM-DD
     type: str  # 'leave', 'sick', 'holiday'
     reason: Optional[str] = None
+    venue_id: str
 
 class AbsenceApprovalRequest(BaseModel):
     status: str  # 'approved', 'rejected'
