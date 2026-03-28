@@ -16,18 +16,23 @@ interface Venue {
 interface BulkQRCodePrintProps {
   assets: Asset[];
   venues: Venue[];
-  gridConfig: { rows: number; cols: number };
+  gridConfig: { rows: number; cols: number; scale?: number };
 }
 
 export const BulkQRCodePrint = forwardRef<HTMLDivElement, BulkQRCodePrintProps>(
   ({ assets, venues, gridConfig }, ref) => {
+    // Usamos la escala de la config o calculamos la base según columnas
+    const scale = gridConfig.scale || (1 / gridConfig.cols);
+    const itemWidth = 400 * scale;
+    const itemHeight = 600 * scale;
+
     return (
-      <div ref={ref} className="bg-white p-[10mm] text-black w-full">
+      <div ref={ref} className="bg-white p-4 text-black w-full min-h-screen">
         <style dangerouslySetInnerHTML={{ __html: `
           @media print {
             @page {
               size: letter;
-              margin: 0;
+              margin: 10mm;
             }
             body {
               margin: 0;
@@ -36,15 +41,28 @@ export const BulkQRCodePrint = forwardRef<HTMLDivElement, BulkQRCodePrintProps>(
           }
         `}} />
         <div 
-          className="grid gap-4" 
+          className="grid gap-2" 
           style={{ 
             gridTemplateColumns: `repeat(${gridConfig.cols}, 1fr)`,
-            gridAutoRows: 'auto'
+            justifyItems: 'center'
           }}
         >
           {assets.map((asset) => (
-            <div key={asset.id} className="flex items-center justify-center border border-gray-100 overflow-hidden" style={{ breakInside: 'avoid' }}>
-              <div style={{ transform: `scale(${1 / Math.max(gridConfig.cols, gridConfig.rows/1.5)})`, transformOrigin: 'center' }}>
+            <div 
+              key={asset.id} 
+              className="border border-gray-100 overflow-hidden bg-white" 
+              style={{ 
+                width: `${itemWidth}px`, 
+                height: `${itemHeight}px`,
+                breakInside: 'avoid'
+              }}
+            >
+              <div style={{ 
+                transform: `scale(${scale})`, 
+                transformOrigin: 'top left',
+                width: '400px',
+                height: '600px'
+              }}>
                 <QRCodePrint 
                   asset={{
                     name: asset.name,

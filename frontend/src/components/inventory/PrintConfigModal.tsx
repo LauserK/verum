@@ -5,7 +5,7 @@ import { useTranslations } from '@/components/I18nProvider';
 interface PrintConfigModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (config: { rows: number; cols: number }) => void;
+  onConfirm: (config: { rows: number; cols: number; scale?: number }) => void;
   totalAssets: number;
 }
 
@@ -14,9 +14,10 @@ export function PrintConfigModal({ isOpen, onClose, onConfirm, totalAssets }: Pr
   if (!isOpen) return null;
 
   const options = [
-    { label: '2x2 (4 por hoja)', rows: 2, cols: 2, icon: Grid2X2 },
-    { label: '3x3 (9 por hoja)', rows: 3, cols: 3, icon: Grid3X3 },
-    { label: '4x4 (16 por hoja)', rows: 4, cols: 4, icon: LayoutGrid },
+    { label: '2x2 (4 por hoja)', rows: 2, cols: 2, scale: 0.75, icon: Grid2X2 },
+    { label: '2x3 Mediano (6 por hoja)', rows: 3, cols: 2, scale: 0.5, icon: LayoutGrid },
+    { label: '3x4 Pequeño (12 por hoja)', rows: 4, cols: 3, scale: 0.33, icon: LayoutGrid },
+    { label: '4x6 Mini (24 por hoja)', rows: 6, cols: 4, scale: 0.25, icon: LayoutGrid },
   ];
 
   return (
@@ -40,11 +41,13 @@ export function PrintConfigModal({ isOpen, onClose, onConfirm, totalAssets }: Pr
             {options.map((opt) => (
               <button
                 key={opt.label}
-                onClick={() => onConfirm({ rows: opt.rows, cols: opt.cols })}
+                onClick={() => onConfirm({ rows: opt.rows, cols: opt.cols, scale: opt.scale })}
                 className="flex items-center gap-3 p-4 rounded-xl border border-border hover:border-primary hover:bg-primary/5 transition-all text-left"
               >
                 <opt.icon className="w-5 h-5 text-primary" />
-                <span className="font-medium text-text-primary">{opt.label}</span>
+                <div className="flex flex-col">
+                  <span className="font-medium text-text-primary">{opt.label}</span>
+                </div>
               </button>
             ))}
           </div>

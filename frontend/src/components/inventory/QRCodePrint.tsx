@@ -34,12 +34,12 @@ export const QRCodePrint = forwardRef<HTMLDivElement, QRCodePrintProps>(({ asset
         </div>
 
         {/* Asset Details */}
-        <div className="flex-1 w-full flex flex-col justify-end">
-          <h1 className="text-2xl font-bold leading-tight mb-2 line-clamp-2">
+        <div className="flex-1 w-full flex flex-col justify-end overflow-hidden">
+          <h1 className="text-lg font-bold leading-tight mb-1 line-clamp-2 break-words">
             {asset.name}
           </h1>
           {asset.venueName && (
-            <p className="text-lg font-medium text-gray-600 mb-4">{asset.venueName}</p>
+            <p className="text-sm font-medium text-gray-500 mb-2 truncate">{asset.venueName}</p>
           )}
           
           <div className="mt-auto pt-4 border-t-2 border-black w-full flex justify-between items-center text-xs font-mono font-bold text-gray-400">
