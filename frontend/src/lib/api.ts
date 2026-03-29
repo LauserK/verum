@@ -328,7 +328,8 @@ export interface AttendanceStatus {
 
 // Attendance API
 export const attendanceApi = {
-    getStatus: (): Promise<AttendanceStatus> => fetchWithAuth('/attendance/today/status'),
+    getStatus: (venueId?: string): Promise<AttendanceStatus> => 
+        fetchWithAuth(`/attendance/today/status${venueId ? `?venue_id=${venueId}` : ''}`),
     mark: (event_type: string, data: Record<string, unknown> = {}): Promise<AttendanceLog> => fetchWithAuth('/attendance/mark', { method: 'POST', body: JSON.stringify({ event_type, ...data }) }),
     getLive: (venueId: string): Promise<AttendanceLog[]> => fetchWithAuth(`/attendance/live?venue_id=${venueId}`),
     getHistory: (): Promise<AttendanceLog[]> => fetchWithAuth('/attendance/me'),

@@ -181,5 +181,24 @@ In the UI where the user marks attendance (e.g., Dashboard or AttendanceGuard):
 
 ```bash
 git add frontend/src/app/dashboard/page.tsx frontend/src/components/AttendanceGuard.tsx
-git commit -m "feat(ui): adapt dashboard and attendance UI for multi-venue selection"
+---
+
+### Task 6: Admin UI - Multi-Venue Management
+
+**Files:**
+- Modify: `frontend/src/app/admin/team/page.tsx`
+
+- [ ] **Step 1: Implement Multi-Venue Selector in Team Page**
+
+En la página de gestión de equipo, reemplazar el `select` único de sede por un componente que permita múltiples selecciones (ej. lista de checkboxes o multi-select). 
+
+- [ ] **Step 2: Update Create/Update Logic**
+
+Asegurar que al crear o editar un usuario se envíe el array `venue_ids` a la API.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add frontend/src/app/admin/team/page.tsx
+git commit -m "feat(ui): add multi-venue selection to user management"
 ```

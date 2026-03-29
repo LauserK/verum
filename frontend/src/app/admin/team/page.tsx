@@ -262,7 +262,8 @@ export default function TeamPage() {
                                                     : [...newVenues, v.id]
                                                 setNewVenues(updated)
                                                 setNewShift('')
-                                                if (updated.length > 0) {
+                                                // Only load shifts if exactly ONE venue is selected
+                                                if (updated.length === 1) {
                                                     adminApi.getShifts(updated[0]).then(setNewVenueShifts).catch(() => setNewVenueShifts([]))
                                                 } else {
                                                     setNewVenueShifts([])
@@ -275,7 +276,7 @@ export default function TeamPage() {
                                 ))}
                             </div>
                         </div>
-                        {newVenues.length > 0 && newVenueShifts.length > 0 && (
+                        {newVenues.length === 1 && newVenueShifts.length > 0 && (
                             <select
                                 value={newShift}
                                 onChange={(e) => setNewShift(e.target.value)}
@@ -362,7 +363,8 @@ export default function TeamPage() {
                                                                 : [...editVenues, v.id]
                                                             setEditVenues(updated)
                                                             setEditShift('')
-                                                            if (updated.length > 0) {
+                                                            // Only load shifts if exactly ONE venue is selected
+                                                            if (updated.length === 1) {
                                                                 adminApi.getShifts(updated[0]).then(setEditVenueShifts).catch(() => setEditVenueShifts([]))
                                                             } else {
                                                                 setEditVenueShifts([])
@@ -375,7 +377,7 @@ export default function TeamPage() {
                                             ))}
                                         </div>
                                     </div>
-                                    {(editVenues.length > 0 && editVenueShifts.length > 0) && (
+                                    {editVenues.length === 1 && editVenueShifts.length > 0 && (
                                         <select
                                             value={editShift}
                                             onChange={(e) => setEditShift(e.target.value)}

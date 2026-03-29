@@ -22,11 +22,13 @@ export default function AttendancePage() {
     const router = useRouter()
 
     useEffect(() => {
-        attendanceApi.getStatus()
+        if (!selectedVenueId) return;
+        setLoading(true)
+        attendanceApi.getStatus(selectedVenueId)
             .then(setStatus)
             .catch(console.error)
             .finally(() => setLoading(false))
-    }, [])
+    }, [selectedVenueId])
 
     const executeMark = async (type: string) => {
         setConfirmModal(null)

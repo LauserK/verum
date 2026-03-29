@@ -2478,9 +2478,36 @@ async def get_attendance_status(venue_id: Optional[str] = None, current_user=Dep
     elif last_event == "break_start": available_actions = ["break_end"]
     elif last_event == "break_end": available_actions = ["clock_out"]
 
-    # Check if user has an assigned active shift in the EFFECTIVE venue
-    shift_check = db.table("employee_shifts").select("id").eq("profile_id", current_user.id).eq("venue_id", effective_venue_id).eq("is_active", True).limit(1).execute()
-    has_active_shift = bool(shift_check.data and len(shift_check.data) > 0)
+    # Check if user is Admin (admins bypass shift requirement)
+    # Using a more robust lookup
+    is_admin = False
+    profile_res = db.table("profiles").select("role").eq("id", current_user.id).execute()
+    if profile_res.data:
+        is_admin = profile_res.data[0].get("role") == "admin"
+
+    if is_admin:
+        has_active_shift = True
+    elif is_locked:
+        # If locked, we must have a shift in THAT venue
+        shift_check = db.table("employee_shifts").select("id").eq("profile_id", current_user.id).eq("venue_id", effective_venue_id).eq("is_active", True).limit(1).execute()
+        has_active_shift = bool(shift_check.data and len(shift_check.data) > 0)
+    else:
+        # If not locked, we prioritize the selected venue_id
+        target_venue = venue_id
+        
+        if target_venue:
+            shift_check = db.table("employee_shifts").select("id").eq("profile_id", current_user.id).eq("venue_id", target_venue).eq("is_active", True).limit(1).execute()
+            has_active_shift = bool(shift_check.data and len(shift_check.data) > 0)
+        else:
+            # Fallback: check if they have AT LEAST ONE active shift in ANY of their assigned venues
+            pv_res = db.table("profile_venues").select("venue_id").eq("profile_id", current_user.id).execute()
+            assigned_venue_ids = [pv["venue_id"] for pv in (pv_res.data or [])]
+            
+            if not assigned_venue_ids:
+                has_active_shift = False
+            else:
+                shift_check = db.table("employee_shifts").select("id").eq("profile_id", current_user.id).in_("venue_id", assigned_venue_ids).eq("is_active", True).limit(1).execute()
+                has_active_shift = bool(shift_check.data and len(shift_check.data) > 0)
 
     return {
         "last_event": last_event,
