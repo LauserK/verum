@@ -49,8 +49,6 @@ export function VenueProvider({ children }: { children: React.ReactNode }) {
   const setSelectedVenueId = (id: string) => {
     setSelectedVenueIdState(id)
     localStorage.setItem('selectedVenueId', id)
-    // Dispatch event so other components (like dashboard) know to refresh data
-    window.dispatchEvent(new Event('venueChanged'))
   }
 
   const selectedVenueName = availableVenues.find(v => v.id === selectedVenueIdState)?.name || null

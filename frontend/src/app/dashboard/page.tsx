@@ -51,7 +51,7 @@ export default function DashboardPage() {
     const { t: attendanceT } = useTranslations('attendance')
     const { theme, toggleTheme } = useTheme()
     const router = useRouter()
-    const { selectedVenueId } = useVenue()
+    const { selectedVenueId, isLoading: isVenueLoading } = useVenue()
     const [profile, setProfile] = useState<Profile | null>(null)
     const [checklists, setChecklists] = useState<ChecklistItem[]>([])
     const [loading, setLoading] = useState(true)
@@ -68,6 +68,8 @@ export default function DashboardPage() {
     }, [])
 
     useEffect(() => {
+        if (isVenueLoading) return; // Wait for venue context to resolve to avoid double-fetching
+
         async function loadData() {
             try {
                 setLoading(true)
