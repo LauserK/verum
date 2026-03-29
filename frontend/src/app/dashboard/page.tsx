@@ -5,6 +5,8 @@ import { logout } from '@/app/login/actions'
 import { getProfile, getChecklists, type Profile, type ChecklistItem } from '@/lib/api'
 import ChecklistCard from '@/components/ChecklistCard'
 import BottomNav from '@/components/BottomNav'
+import { VenueSelector } from '@/components/VenueSelector'
+import { useVenue } from '@/components/VenueContext'
 import ConfirmationModal from '@/components/ConfirmationModal'
 import { LogOut, Sun, Moon, Sunrise, CloudSun, Sunset, Shield, Clock } from 'lucide-react'
 import { useRouter } from 'next/navigation'
@@ -49,6 +51,7 @@ export default function DashboardPage() {
     const { t: attendanceT } = useTranslations('attendance')
     const { theme, toggleTheme } = useTheme()
     const router = useRouter()
+    const { selectedVenueId } = useVenue()
     const [profile, setProfile] = useState<Profile | null>(null)
     const [checklists, setChecklists] = useState<ChecklistItem[]>([])
     const [loading, setLoading] = useState(true)
@@ -72,7 +75,7 @@ export default function DashboardPage() {
                 setProfile(profileData)
 
                 // Fetch checklists for the user's assigned venue, fallback to first org venue
-                const targetVenueId = profileData.venue_id || (profileData.venues && profileData.venues.length > 0 ? profileData.venues[0].id : null)
+                const targetVenueId = selectedVenueId || profileData.venue_id || (profileData.venues && profileData.venues.length > 0 ? profileData.venues[0].id : null)
                 if (targetVenueId) {
                     try {
                         const checklistData = await getChecklists(targetVenueId)
@@ -98,7 +101,7 @@ export default function DashboardPage() {
             }
         }
         loadData()
-    }, [])
+    }, [selectedVenueId])
 
     const handleChecklistClick = (checklist: ChecklistItem) => {
         if (checklist.status === 'pending') {
@@ -109,7 +112,7 @@ export default function DashboardPage() {
     }
 
     const proceedToChecklist = (checklist: ChecklistItem) => {
-        const venueId = profile?.venue_id || profile?.venues?.[0]?.id || ''
+        const venueId = selectedVenueId || profile?.venue_id || profile?.venues?.[0]?.id || ''
         router.push(`/checklist/${checklist.id}?venue=${venueId}&from=dashboard`)
         setPendingChecklist(null)
     }
@@ -119,7 +122,7 @@ export default function DashboardPage() {
             {/* ── Header ─────────────────────────────────── */}
             <header className="sticky top-0 z-40 bg-surface border-b border-border">
                 <div className="max-w-lg mx-auto flex justify-between items-center px-4 h-14">
-                    <div>
+                    <div className="flex items-center gap-2">
                         <h1 className="text-base font-bold text-text-primary leading-tight">
                             {loading ? (
                                 <span className="inline-block h-5 w-32 bg-surface-raised rounded animate-pulse" />
@@ -127,6 +130,7 @@ export default function DashboardPage() {
                                 t('hello', { name: profile?.full_name?.split(' ')[0] || t('staff') })
                             )}
                         </h1>
+                        <VenueSelector />
                     </div>
 
                     <div className="flex gap-1 items-center">

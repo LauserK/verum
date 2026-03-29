@@ -7,6 +7,7 @@ import { logout } from '@/app/login/actions'
 import { LayoutDashboard, ClipboardCheck, Users, Building2, Box, Clock, LogOut, ChevronLeft, Moon, Sun } from 'lucide-react'
 import { useTranslations } from '@/components/I18nProvider'
 import { useTheme } from '@/components/ThemeProvider'
+import { VenueSelector } from '@/components/VenueSelector'
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
     const { t } = useTranslations()
@@ -59,10 +60,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     <button onClick={() => router.push('/dashboard')} className="text-text-secondary hover:text-text-primary transition-colors">
                         <ChevronLeft className="w-5 h-5" />
                     </button>
-                    <h1 className="text-base font-bold text-text-primary">VERUM Admin</h1>
+                    <h1 className="text-base font-bold text-text-primary hidden sm:block">VERUM Admin</h1>
+                    <VenueSelector />
                 </div>
                 <div className="flex items-center gap-3">
-                    <span className="text-xs text-text-secondary hidden sm:block">{profile?.full_name}</span>
+                    <span className="text-xs text-text-secondary hidden md:block">{profile?.full_name}</span>
                     <button 
                         onClick={toggleTheme}
                         className="p-2 text-text-secondary hover:text-primary hover:bg-surface-raised rounded-xl transition-all"

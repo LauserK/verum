@@ -4,6 +4,7 @@ import "./globals.css";
 import { I18nProvider } from "@/components/I18nProvider";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import AttendanceGuard from "@/components/AttendanceGuard";
+import { VenueProvider } from "@/components/VenueContext";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -32,9 +33,11 @@ export default function RootLayout({
       >
         <ThemeProvider>
           <I18nProvider>
-            <AttendanceGuard>
-              {children}
-            </AttendanceGuard>
+            <VenueProvider>
+              <AttendanceGuard>
+                {children}
+              </AttendanceGuard>
+            </VenueProvider>
           </I18nProvider>
         </ThemeProvider>
       </body>
