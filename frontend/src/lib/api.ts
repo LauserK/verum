@@ -322,6 +322,8 @@ export interface AttendanceStatus {
     last_marked_at: string | null;
     available_actions: string[];
     has_active_shift?: boolean;
+    locked_to_venue?: string | null;
+    effective_venue_id?: string | null;
 }
 
 // Attendance API

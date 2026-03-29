@@ -2,20 +2,23 @@
 
 import { useEffect, useState } from 'react'
 import { attendanceApi, type AttendanceStatus } from '@/lib/api'
-import { Clock, Loader2, ArrowLeft, X } from 'lucide-react'
+import { Clock, Loader2, ArrowLeft, X, MapPin } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { useTranslations } from '@/components/I18nProvider'
+import { useVenue } from '@/components/VenueContext'
 
 export default function AttendancePage() {
     const { t } = useTranslations()
+    const { availableVenues, selectedVenueId } = useVenue()
     const [status, setStatus] = useState<AttendanceStatus | null>(null)
     const [loading, setLoading] = useState(true)
     const [marking, setMarking] = useState<string | null>(null)
-    const [result, setResult] = useState<Record<string, any> | null>(null)
+    const [result, setResult] = useState<Record<string, unknown> | null>(null)
     const [confirmModal, setConfirmModal] = useState<string | null>(null)
     const [errorModal, setErrorModal] = useState<string | null>(null)
+    const [clockInVenueId, setClockInVenueId] = useState<string>('')
     const router = useRouter()
 
     useEffect(() => {
@@ -29,7 +32,8 @@ export default function AttendancePage() {
         setConfirmModal(null)
         setMarking(type)
         try {
-            const res = await attendanceApi.mark(type)
+            const data = type === 'clock_in' && clockInVenueId ? { venue_id: clockInVenueId } : {}
+            const res = await attendanceApi.mark(type, data)
             setResult({ type, data: res })
             setTimeout(() => {
                 router.push('/dashboard')
@@ -41,6 +45,10 @@ export default function AttendancePage() {
     }
 
     const handleMark = (type: string) => {
+        if (type === 'clock_in') {
+            const initialVenue = status?.locked_to_venue || status?.effective_venue_id || selectedVenueId || availableVenues[0]?.id || ''
+            setClockInVenueId(initialVenue)
+        }
         setConfirmModal(type)
     }
 
@@ -163,10 +171,38 @@ export default function AttendancePage() {
                             <Clock className="w-8 h-8" />
                         </div>
                         <h3 className="text-xl font-bold text-text-primary mb-2">Confirmar Marcación</h3>
-                        <p className="text-text-secondary mb-6">
+                        
+                        <p className="text-text-secondary mb-4">
                             ¿Estás seguro de registrar: <strong className="text-text-primary">{t(`attendance.actions.${confirmModal}`)}</strong>?
                         </p>
-                        <div className="flex gap-3">
+
+                        {confirmModal === 'clock_in' && availableVenues.length > 1 && (
+                            <div className="mb-6 text-left">
+                                <label className="block text-sm font-bold text-text-primary mb-2 flex items-center gap-2">
+                                    <MapPin className="w-4 h-4" />
+                                    Sede de trabajo
+                                </label>
+                                <select
+                                    value={clockInVenueId}
+                                    onChange={(e) => setClockInVenueId(e.target.value)}
+                                    disabled={!!status?.locked_to_venue}
+                                    className="w-full bg-surface-raised border border-border rounded-xl px-4 py-3 text-text-primary font-medium focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {availableVenues.map(v => (
+                                        <option key={v.id} value={v.id}>
+                                            {v.name} {status?.locked_to_venue === v.id ? '(Bloqueada)' : ''}
+                                        </option>
+                                    ))}
+                                </select>
+                                {status?.locked_to_venue && (
+                                    <p className="text-xs text-warning mt-2 font-medium">
+                                        Tienes un turno activo. Debes usar la misma sede.
+                                    </p>
+                                )}
+                            </div>
+                        )}
+
+                        <div className="flex gap-3 mt-6">
                             <button 
                                 onClick={() => setConfirmModal(null)}
                                 className="flex-1 h-12 rounded-xl font-bold text-text-primary bg-surface-raised hover:bg-surface-raised/80 transition-colors"
