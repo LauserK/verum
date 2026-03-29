@@ -6,7 +6,7 @@ import {
     adminApi, getProfile,
     type Profile, type AdminUser, type Shift
 } from '@/lib/api'
-import { Plus, Trash2, Edit3, Save, X, Loader2, UserPlus, Shield, User, KeyRound, Fingerprint } from 'lucide-react'
+import { Plus, Trash2, Edit3, Save, X, Loader2, Shield, User, KeyRound, Fingerprint } from 'lucide-react'
 import { useTranslations } from '@/components/I18nProvider'
 import Link from 'next/link'
 
@@ -26,7 +26,7 @@ export default function TeamPage() {
     const [newFirstName, setNewFirstName] = useState('')
     const [newLastName, setNewLastName] = useState('')
     const [newRole, setNewRole] = useState('staff')
-    const [newVenue, setNewVenue] = useState('')
+    const [newVenues, setNewVenues] = useState<string[]>([])
     const [newShift, setNewShift] = useState('')
     const [newVenueShifts, setNewVenueShifts] = useState<Shift[]>([])
     const [saving, setSaving] = useState(false)
@@ -37,7 +37,7 @@ export default function TeamPage() {
     const [editFirstName, setEditFirstName] = useState('')
     const [editLastName, setEditLastName] = useState('')
     const [editRole, setEditRole] = useState('staff')
-    const [editVenue, setEditVenue] = useState('')
+    const [editVenues, setEditVenues] = useState<string[]>([])
     const [editShift, setEditShift] = useState('')
     const [editVenueShifts, setEditVenueShifts] = useState<Shift[]>([])
     const [editEmail, setEditEmail] = useState('')
@@ -85,7 +85,7 @@ export default function TeamPage() {
                 full_name: `${newFirstName.trim()} ${newLastName.trim()}`,
                 role: newRole,
                 organization_id: profile.organization_id || '',
-                venue_id: newVenue || undefined,
+                venue_ids: newVenues,
                 shift_id: newShift || undefined,
             })
             setUsers((prev) => [...prev, user])
@@ -95,11 +95,11 @@ export default function TeamPage() {
             setNewFirstName('')
             setNewLastName('')
             setNewRole('staff')
-            setNewVenue('')
+            setNewVenues([])
             setNewShift('')
             setNewVenueShifts([])
-        } catch (err: any) {
-            setError(err.message || 'Failed to create user')
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to create user')
         }
         setSaving(false)
     }
@@ -110,12 +110,14 @@ export default function TeamPage() {
         setEditFirstName(parts[0] || '')
         setEditLastName(parts.slice(1).join(' ') || '')
         setEditRole(u.role)
-        setEditVenue(u.venue_id || '')
+        setEditVenues(u.venue_ids || (u.venue_id ? [u.venue_id] : []))
         setEditShift(u.shift_id || '')
         setEditEmail(u.email || '')
-        // Load shifts for this user's venue
-        if (u.venue_id) {
-            adminApi.getShifts(u.venue_id).then(setEditVenueShifts).catch(() => setEditVenueShifts([]))
+        
+        // Load shifts for first assigned venue (legacy/fallback behavior for UI)
+        const firstVenue = u.venue_ids?.[0] || u.venue_id
+        if (firstVenue) {
+            adminApi.getShifts(firstVenue).then(setEditVenueShifts).catch(() => setEditVenueShifts([]))
         } else {
             setEditVenueShifts([])
         }
@@ -136,8 +138,8 @@ export default function TeamPage() {
             setPasswordMsg('✓ Password updated')
             setNewPassword('')
             setChangingPasswordId(null)
-        } catch (err: any) {
-            setPasswordMsg(err.message || 'Failed to change password')
+        } catch (err) {
+            setPasswordMsg(err instanceof Error ? err.message : 'Failed to change password')
         }
         setPasswordSaving(false)
     }
@@ -149,7 +151,7 @@ export default function TeamPage() {
             const updated = await adminApi.updateUser(editingId, {
                 full_name: `${editFirstName.trim()} ${editLastName.trim()}`,
                 role: editRole,
-                venue_id: editVenue || undefined,
+                venue_ids: editVenues,
                 shift_id: editShift || undefined,
             })
             setUsers((prev) => prev.map((u) => u.id === editingId ? { ...u, ...updated } : u))
@@ -244,26 +246,36 @@ export default function TeamPage() {
                                 <option key={r.id} value={r.name}>{r.name}</option>
                             ))}
                         </select>
-                        <select
-                            value={newVenue}
-                            onChange={(e) => {
-                                const vid = e.target.value
-                                setNewVenue(vid)
-                                setNewShift('')
-                                if (vid) {
-                                    adminApi.getShifts(vid).then(setNewVenueShifts).catch(() => setNewVenueShifts([]))
-                                } else {
-                                    setNewVenueShifts([])
-                                }
-                            }}
-                            className="bg-surface border border-border rounded-xl px-3 h-10 text-sm text-text-primary focus:border-primary outline-none"
-                        >
-                            <option value="">{t('team.noVenueAssigned')}</option>
-                            {profile?.venues.map((v) => (
-                                <option key={v.id} value={v.id}>{v.name}</option>
-                            ))}
-                        </select>
-                        {newVenue && newVenueShifts.length > 0 && (
+                        <div className="col-span-1 sm:col-span-2 space-y-2">
+                            <p className="text-xs font-bold text-text-secondary uppercase px-1">Sedes</p>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                {profile?.venues.map((v) => (
+                                    <label key={v.id} className={`flex items-center gap-2 px-3 h-10 rounded-xl border transition-colors cursor-pointer
+                                        ${newVenues.includes(v.id) ? 'bg-primary/5 border-primary' : 'bg-surface border-border hover:bg-surface-raised'}`}
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            checked={newVenues.includes(v.id)}
+                                            onChange={() => {
+                                                const updated = newVenues.includes(v.id) 
+                                                    ? newVenues.filter(id => id !== v.id)
+                                                    : [...newVenues, v.id]
+                                                setNewVenues(updated)
+                                                setNewShift('')
+                                                if (updated.length > 0) {
+                                                    adminApi.getShifts(updated[0]).then(setNewVenueShifts).catch(() => setNewVenueShifts([]))
+                                                } else {
+                                                    setNewVenueShifts([])
+                                                }
+                                            }}
+                                            className="w-4 h-4 rounded border-border text-primary focus:ring-primary/20"
+                                        />
+                                        <span className="text-xs text-text-primary font-medium truncate">{v.name}</span>
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+                        {newVenues.length > 0 && newVenueShifts.length > 0 && (
                             <select
                                 value={newShift}
                                 onChange={(e) => setNewShift(e.target.value)}
@@ -333,27 +345,37 @@ export default function TeamPage() {
                                                 <option key={r.id} value={r.name}>{r.name}</option>
                                             ))}
                                         </select>
-                                        <select
-                                            value={editVenue}
-                                            onChange={(e) => {
-                                                const vid = e.target.value
-                                                setEditVenue(vid)
-                                                setEditShift('')
-                                                if (vid) {
-                                                    adminApi.getShifts(vid).then(setEditVenueShifts).catch(() => setEditVenueShifts([]))
-                                                } else {
-                                                    setEditVenueShifts([])
-                                                }
-                                            }}
-                                            className="bg-surface border border-border rounded-xl px-3 h-10 text-sm text-text-primary focus:border-primary outline-none flex-1"
-                                        >
-                                            <option value="">{t('team.noVenue')}</option>
-                                            {profile?.venues.map((v) => (
-                                                <option key={v.id} value={v.id}>{v.name}</option>
-                                            ))}
-                                        </select>
                                     </div>
-                                    {editVenue && editVenueShifts.length > 0 && (
+                                    <div className="space-y-2">
+                                        <p className="text-xs font-bold text-text-secondary uppercase px-1">Sedes</p>
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                            {profile?.venues.map((v) => (
+                                                <label key={v.id} className={`flex items-center gap-2 px-3 h-10 rounded-xl border transition-colors cursor-pointer
+                                                    ${editVenues.includes(v.id) ? 'bg-primary/5 border-primary' : 'bg-surface border-border hover:bg-surface-raised'}`}
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={editVenues.includes(v.id)}
+                                                        onChange={() => {
+                                                            const updated = editVenues.includes(v.id) 
+                                                                ? editVenues.filter(id => id !== v.id)
+                                                                : [...editVenues, v.id]
+                                                            setEditVenues(updated)
+                                                            setEditShift('')
+                                                            if (updated.length > 0) {
+                                                                adminApi.getShifts(updated[0]).then(setEditVenueShifts).catch(() => setEditVenueShifts([]))
+                                                            } else {
+                                                                setEditVenueShifts([])
+                                                            }
+                                                        }}
+                                                        className="w-4 h-4 rounded border-border text-primary focus:ring-primary/20"
+                                                    />
+                                                    <span className="text-xs text-text-primary font-medium truncate">{v.name}</span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    {(editVenues.length > 0 && editVenueShifts.length > 0) && (
                                         <select
                                             value={editShift}
                                             onChange={(e) => setEditShift(e.target.value)}
@@ -437,11 +459,11 @@ export default function TeamPage() {
                                                 >
                                                     {u.role}
                                                 </span>
-                                                {u.venue_id && (
-                                                    <span className="text-[10px] text-text-secondary">
-                                                        {profile?.venues.find(v => v.id === u.venue_id)?.name || 'Venue'}
+                                                {(u.venue_ids || (u.venue_id ? [u.venue_id] : [])).map(vid => (
+                                                    <span key={vid} className="text-[10px] text-text-secondary bg-surface-raised px-1.5 py-0.5 rounded-md">
+                                                        {profile?.venues.find(v => v.id === vid)?.name || 'Venue'}
                                                     </span>
-                                                )}
+                                                ))}
                                                 {u.shift_id && (
                                                     <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-md">
                                                         {allShifts.find(s => s.id === u.shift_id)?.name || 'Shift'}

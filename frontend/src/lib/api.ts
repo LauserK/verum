@@ -440,10 +440,10 @@ export const adminApi = {
     getUsers: (): Promise<AdminUser[]> =>
         fetchWithAuth('/admin/users'),
 
-    createUser: (data: { email: string; password: string; full_name: string; role: string; organization_id: string; venue_id?: string; shift_id?: string }): Promise<AdminUser> =>
+    createUser: (data: { email: string; password: string; full_name: string; role: string; organization_id: string; venue_id?: string; venue_ids?: string[]; shift_id?: string }): Promise<AdminUser> =>
         fetchWithAuth('/admin/users', { method: 'POST', body: JSON.stringify(data) }),
 
-    updateUser: (id: string, data: { full_name?: string; role?: string; venue_id?: string; shift_id?: string }): Promise<AdminUser> =>
+    updateUser: (id: string, data: { full_name?: string; role?: string; venue_id?: string; venue_ids?: string[]; shift_id?: string }): Promise<AdminUser> =>
         fetchWithAuth(`/admin/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 
     deleteUser: (id: string): Promise<{ ok: boolean }> =>
@@ -563,6 +563,7 @@ export interface AdminUser {
     role: string
     organization_id: string
     venue_id: string | null
+    venue_ids?: string[]
     shift_id: string | null
 }
 
