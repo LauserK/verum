@@ -190,9 +190,8 @@ export default function AttendancePage() {
                                 >
                                     {availableVenues.map(v => (
                                         <option key={v.id} value={v.id}>
-                                            {v.name} {status?.locked_to_venue === v.id ? '(Bloqueada)' : ''}
-                                        </option>
-                                    ))}
+                                            {v.name} {status?.locked_to_venue === v.id ? '(Turno Activo)' : ''}
+                                        </option>                                    ))}
                                 </select>
                                 {status?.locked_to_venue && (
                                     <p className="text-xs text-warning mt-2 font-medium">
