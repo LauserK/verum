@@ -60,19 +60,19 @@ def get_current_shift() -> str:
         return "closing"
 
 
-async def get_user_shift_identifier(user_id: str, db) -> str:
+async def get_user_shift_identifier(user_id: str, venue_id: str, db) -> str:
     """
-    Retorna el shift_id del usuario si existe.
+    Retorna el shift_id (UUID) del usuario para una sede específica desde employee_shifts.
+    En el modelo M:N, el shift es específico de la sede.
     De lo contrario lanza un error 403.
     """
-    res = db.table("profiles").select("shift_id").eq("id", user_id).single().execute()
-    shift_id = res.data.get("shift_id")
-    if not shift_id:
+    res = db.table("employee_shifts").select("id").eq("profile_id", user_id).eq("venue_id", venue_id).eq("is_active", True).execute()
+    if not res.data:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="no_shift_assigned"
         )
-    return str(shift_id)
+    return str(res.data[0]["id"])
 
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
@@ -221,7 +221,13 @@ async def get_checklists(venue_id: str, user=Depends(require_permission("checkli
     """
     try:
         db = get_db()
-        shift = await get_user_shift_identifier(user.id, db)
+        
+        # Security: Verify user belongs to this venue
+        pv_check = db.table("profile_venues").select("venue_id").eq("profile_id", user.id).eq("venue_id", venue_id).execute()
+        if not pv_check.data:
+             raise HTTPException(status_code=403, detail="No tienes acceso a esta sede")
+
+        shift = await get_user_shift_identifier(user.id, venue_id, db)
         today = datetime.now(CARACAS_TZ).strftime("%Y-%m-%d")
 
         # 1. Get all templates for this venue
@@ -491,7 +497,13 @@ async def create_submission(body: CreateSubmissionRequest, user=Depends(require_
     """
     try:
         db = get_db()
-        shift = await get_user_shift_identifier(user.id, db)
+        
+        # Security: Verify user belongs to this venue
+        pv_check = db.table("profile_venues").select("venue_id").eq("profile_id", user.id).eq("venue_id", body.venue_id).execute()
+        if not pv_check.data:
+             raise HTTPException(status_code=403, detail="No tienes acceso a esta sede")
+
+        shift = await get_user_shift_identifier(user.id, body.venue_id, db)
         today = datetime.now(CARACAS_TZ).strftime("%Y-%m-%d")
 
         # Get template frequency
@@ -561,21 +573,20 @@ async def get_submission(submission_id: str, user=Depends(get_current_user)):
                 can_access = True
             else:
                 # COLLABORATIVE CHECKLIVES: allow if same venue, same shift (or same day if not shift-based), and it's a draft
-                # First get current user's venue
-                prof_res = db.table("profiles").select("venue_id").eq("id", user.id).single().execute()
-                user_venue_id = prof_res.data.get("venue_id") if prof_res.data else None
+                # Check if user is assigned to the venue of this submission
+                pv_check = db.table("profile_venues").select("venue_id").eq("profile_id", user.id).eq("venue_id", sub["venue_id"]).execute()
+                is_assigned_to_venue = bool(pv_check.data)
                 
                 # Get template frequency to check if we should enforce shift match
                 t_res = db.table("checklist_templates").select("frequency").eq("id", sub["template_id"]).single().execute()
                 t_freq = t_res.data.get("frequency", "daily") if t_res.data else "daily"
 
-                is_same_venue = str(sub["venue_id"]) == str(user_venue_id)
                 is_valid_window = True
                 if t_freq == "shift":
-                    user_shift = await get_user_shift_identifier(user.id, db)
+                    user_shift = await get_user_shift_identifier(user.id, sub["venue_id"], db)
                     is_valid_window = sub["shift"] == user_shift
                 
-                if sub["status"] == "draft" and is_same_venue and is_valid_window:
+                if sub["status"] == "draft" and is_assigned_to_venue and is_valid_window:
                     # User must at least have checklists.view
                     can_view = await resolve_permission(user.id, "checklists.view", db)
                     if can_view:
@@ -2554,12 +2565,6 @@ async def request_leave(body: LeaveRequest, current_user=Depends(get_current_use
     venue_id = body.venue_id
     if not venue_id:
         raise HTTPException(400, "venue_id is required")
-
-    status_res = await get_attendance_status(venue_id, current_user, db)
-    
-    # Validation: Cross-venue lock
-    if status_res.get("locked_to_venue") and str(status_res["locked_to_venue"]) != str(venue_id):
-        raise HTTPException(400, "Ya tienes un turno activo en otra sede")
 
     # Check for existing mark or approved absence on that date
     log_check = db.table("attendance_logs").select("id").eq("profile_id", current_user.id).gte("marked_at", f"{body.date}T00:00:00-04:00").lte("marked_at", f"{body.date}T23:59:59-04:00").limit(1).execute()
