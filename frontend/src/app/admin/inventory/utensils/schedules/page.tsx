@@ -117,7 +117,8 @@ export default function SchedulesPage() {
     setNewVenueId(schedule.venue_id)
     setNewAssignedTo(schedule.assigned_to || '')
     setNewFrequency(schedule.frequency)
-    setNewScope(schedule.scope as any)
+    const currentScope = schedule.scope === 'full' ? 'all' : schedule.scope as 'all' | 'category' | 'custom'
+    setNewScope(currentScope)
     setNewCategoryId(schedule.category_id || '')
     setNewNextDue(schedule.next_due)
     

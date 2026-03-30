@@ -66,14 +66,14 @@ export default function TemplatesPage() {
     const [qLabel, setQLabel] = useState('')
     const [qType, setQType] = useState('check')
     const [qRequired, setQRequired] = useState(true)
-    const [qConfig, setQConfig] = useState<Record<string, any>>({})
+    const [qConfig, setQConfig] = useState<Record<string, unknown>>({})
 
     // Edit question
     const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null)
     const [eqLabel, setEqLabel] = useState('')
     const [eqType, setEqType] = useState('check')
     const [eqRequired, setEqRequired] = useState(true)
-    const [eqConfig, setEqConfig] = useState<Record<string, any>>({})
+    const [eqConfig, setEqConfig] = useState<Record<string, unknown>>({})
 
     const newQuestionRef = useRef<HTMLDivElement>(null)
 

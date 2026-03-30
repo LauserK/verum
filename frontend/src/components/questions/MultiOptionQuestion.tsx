@@ -16,14 +16,14 @@ const iconMap: Record<string, typeof ShieldCheck> = {
 }
 
 export default function MultiOptionQuestion({ question, value, onChange }: Props) {
-    const options: string[] = question.config?.options || ['Option 1', 'Option 2', 'Option 3']
-    const label = question.config?.label || question.label
+    const options: string[] = (question.config as any)?.options || ['Option 1', 'Option 2', 'Option 3']
+    const label = (question.config as any)?.label || question.label
 
     return (
         <div className="bg-surface border border-border rounded-2xl p-4 shadow-sm dark:shadow-none">
             <h3 className="text-base font-semibold text-text-primary mb-1">{question.label}</h3>
-            {question.config?.label && (
-                <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-3">{question.config.label}</p>
+            {(question.config as any)?.label && (
+                <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-3">{(question.config as any).label}</p>
             )}
             <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.min(options.length, 3)}, 1fr)` }}>
                 {options.map((opt) => {

@@ -9,7 +9,7 @@ interface Props {
 }
 
 export default function NumberQuestion({ question, value, onChange }: Props) {
-    const unit = question.config?.unit || ''
+    const unit = (question.config as any)?.unit || ''
 
     return (
         <div className="bg-surface border border-border rounded-2xl p-4 shadow-sm dark:shadow-none">

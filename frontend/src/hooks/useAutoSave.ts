@@ -24,7 +24,7 @@ export function useAutoSave(submissionId: string | null) {
     const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     // Flush all pending answers to the server
-    const flush = useCallback(async () => {
+    const flush = useCallback(async function flush() {
         if (!submissionId || pendingRef.current.size === 0) return
 
         const answers = Array.from(pendingRef.current.entries()).map(

@@ -123,8 +123,8 @@ export default function ChecklistPage() {
                 if (detail.status === 'completed') {
                     setStep(2)
                 }
-            } catch (err: any) {
-                setError(err.message || 'Failed to load checklist')
+            } catch (err: unknown) {
+                setError((err as Error).message || 'Failed to load checklist')
             } finally {
                 setLoading(false)
             }
@@ -165,8 +165,8 @@ export default function ChecklistPage() {
             })
 
             router.push('/dashboard')
-        } catch (err: any) {
-            setError(err.message || 'Failed to submit audit')
+        } catch (err: unknown) {
+            setError((err as Error).message || 'Failed to submit audit')
             setSubmitting(false)
         }
     }

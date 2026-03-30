@@ -5,13 +5,24 @@ import { adminApi, getProfile, type VenueInfo } from '@/lib/api'
 import { Download, Loader2 } from 'lucide-react'
 import { format, subDays, parseISO } from 'date-fns'
 
+interface AttendanceReportRow {
+    full_name: string
+    work_date: string
+    clock_in: string | null
+    clock_out: string | null
+    net_hours: number
+    overtime_hours: number
+    minutes_late: number
+    absence_type: string | null
+}
+
 export default function AttendanceReportsPage() {
     const [venues, setVenues] = useState<VenueInfo[]>([])
     const [venueId, setVenueId] = useState('')
     const [reportType, setReportType] = useState('daily')
     const [dateFrom, setDateFrom] = useState(format(subDays(new Date(), 7), 'yyyy-MM-dd'))
     const [dateTo, setDateTo] = useState(format(new Date(), 'yyyy-MM-dd'))
-    const [preview, setPreview] = useState<Record<string, unknown>[]>([])
+    const [preview, setPreview] = useState<AttendanceReportRow[]>([])
     const [loading, setLoading] = useState(false)
     const [exporting, setExporting] = useState(false)
 
@@ -29,7 +40,7 @@ export default function AttendanceReportsPage() {
         setLoading(true)
         try {
             const data = await adminApi.getAttendanceReport(venueId, dateFrom, dateTo)
-            setPreview(data)
+            setPreview(data as AttendanceReportRow[])
         } catch {
             alert('Error cargando preview')
         }
@@ -133,14 +144,14 @@ export default function AttendanceReportsPage() {
                             ) : (
                                 preview.map((row, idx) => (
                                     <tr key={idx} className="hover:bg-surface-raised/50 transition-colors">
-                                        <td className="px-6 py-4 font-bold text-text-primary">{row.full_name as string}</td>
-                                        <td className="px-6 py-4 text-text-secondary">{format(parseISO(row.work_date as string), 'dd/MMM/yyyy')}</td>
-                                        <td className="px-6 py-4 font-medium">{row.clock_in ? format(new Date(row.clock_in as string), 'HH:mm') : '—'}</td>
-                                        <td className="px-6 py-4 font-medium">{row.clock_out ? format(new Date(row.clock_out as string), 'HH:mm') : '—'}</td>
-                                        <td className="px-6 py-4 font-black text-primary">{row.net_hours as number}h</td>
-                                        <td className="px-6 py-4">{(row.overtime_hours as number) > 0 ? <span className="bg-success/10 text-success px-2 py-1 rounded-md font-bold text-xs">{row.overtime_hours as number}h</span> : '—'}</td>
-                                        <td className="px-6 py-4">{(row.minutes_late as number) > 0 ? <span className="bg-warning/10 text-warning px-2 py-1 rounded-md font-bold text-xs">{row.minutes_late as number}m</span> : '—'}</td>
-                                        <td className="px-6 py-4">{row.absence_type ? <span className="bg-error/10 text-error px-2 py-1 rounded-md font-bold text-[10px] uppercase tracking-wider">{row.absence_type as string}</span> : '—'}</td>
+                                        <td className="px-6 py-4 font-bold text-text-primary">{row.full_name}</td>
+                                        <td className="px-6 py-4 text-text-secondary">{format(parseISO(row.work_date), 'dd/MMM/yyyy')}</td>
+                                        <td className="px-6 py-4 font-medium">{row.clock_in ? format(new Date(row.clock_in), 'HH:mm') : '—'}</td>
+                                        <td className="px-6 py-4 font-medium">{row.clock_out ? format(new Date(row.clock_out), 'HH:mm') : '—'}</td>
+                                        <td className="px-6 py-4 font-black text-primary">{row.net_hours}h</td>
+                                        <td className="px-6 py-4">{row.overtime_hours > 0 ? <span className="bg-success/10 text-success px-2 py-1 rounded-md font-bold text-xs">{row.overtime_hours}h</span> : '—'}</td>
+                                        <td className="px-6 py-4">{row.minutes_late > 0 ? <span className="bg-warning/10 text-warning px-2 py-1 rounded-md font-bold text-xs">{row.minutes_late}m</span> : '—'}</td>
+                                        <td className="px-6 py-4">{row.absence_type ? <span className="bg-error/10 text-error px-2 py-1 rounded-md font-bold text-[10px] uppercase tracking-wider">{row.absence_type}</span> : '—'}</td>
                                     </tr>
                                 ))
                             )}

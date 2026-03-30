@@ -18,15 +18,19 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         // Load theme from localStorage or system preference
         const savedTheme = localStorage.getItem('verum-theme') as Theme
         if (savedTheme) {
-            setTheme(savedTheme)
+            setTimeout(() => {
+                if (theme !== savedTheme) setTheme(savedTheme)
+            }, 0)
             document.documentElement.setAttribute('data-theme', savedTheme)
         } else {
             const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
             const defaultTheme = prefersDark ? 'dark' : 'light'
-            setTheme(defaultTheme)
+            setTimeout(() => {
+                if (theme !== defaultTheme) setTheme(defaultTheme)
+            }, 0)
             document.documentElement.setAttribute('data-theme', defaultTheme)
         }
-    }, [])
+    }, [theme])
 
     const toggleTheme = () => {
         const newTheme = theme === 'light' ? 'dark' : 'light'

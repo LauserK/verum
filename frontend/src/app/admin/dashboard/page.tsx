@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { adminApi, getProfile, type Profile, type ComplianceReport } from '@/lib/api'
+import { adminApi, getProfile, type Profile, type ComplianceReport, type AdminSummary } from '@/lib/api'
 import {
     ClipboardCheck, Box, 
     AlertTriangle, ArrowRight, Loader2, Users,
@@ -11,14 +11,6 @@ import {
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-
-interface AdminSummary {
-    active_staff: number;
-    pending_tickets: number;
-    critical_failures: number;
-    pending_absences: number;
-    today: string;
-}
 
 export default function GeneralAdminDashboard() {
     const [profile, setProfile] = useState<Profile | null>(null)
@@ -53,7 +45,7 @@ export default function GeneralAdminDashboard() {
             try {
                 // Separate calls to handle partial failures
                 const summaryPromise = adminApi.getAdminSummary(venueId)
-                    .then(s => { if (mounted) setSummary(s as AdminSummary) })
+                    .then(s => { if (mounted) setSummary(s) })
                     .catch(err => console.error('Summary fetch error:', err));
 
                 const compliancePromise = adminApi.getCompliance({ venue_id: venueId, date_from: today, date_to: today })

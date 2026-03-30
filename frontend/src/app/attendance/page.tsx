@@ -15,7 +15,7 @@ export default function AttendancePage() {
     const [status, setStatus] = useState<AttendanceStatus | null>(null)
     const [loading, setLoading] = useState(true)
     const [marking, setMarking] = useState<string | null>(null)
-    const [result, setResult] = useState<Record<string, unknown> | null>(null)
+    const [result, setResult] = useState<{ type: string; data: unknown } | null>(null)
     const [confirmModal, setConfirmModal] = useState<string | null>(null)
     const [errorModal, setErrorModal] = useState<string | null>(null)
     const [clockInVenueId, setClockInVenueId] = useState<string>('')
@@ -23,7 +23,9 @@ export default function AttendancePage() {
 
     useEffect(() => {
         if (!selectedVenueId) return;
-        setLoading(true)
+        setTimeout(() => {
+            setLoading(true)
+        }, 0)
         attendanceApi.getStatus(selectedVenueId)
             .then(setStatus)
             .catch(console.error)
@@ -71,17 +73,17 @@ export default function AttendancePage() {
                 </div>
                 <h1 className="text-2xl font-bold text-text-primary mb-2">Marca Registrada</h1>
                 <p className="text-text-secondary mb-4">
-                    {t(`attendance.actions.${result.type}`)} — {format(new Date(result.data.marked_at), 'hh:mm a')}
+                    {t(`attendance.actions.${result.type}`)} — {format(new Date((result.data as { marked_at: string }).marked_at), 'hh:mm a')}
                 </p>
                 
-                {result.type === 'clock_in' && result.data.minutes_late > 0 && (
+                {result.type === 'clock_in' && (result.data as { minutes_late: number }).minutes_late > 0 && (
                     <p className="text-warning font-bold bg-warning/10 px-4 py-2 rounded-xl text-sm">
-                        {result.data.minutes_late} min tarde
+                        {(result.data as { minutes_late: number }).minutes_late} min tarde
                     </p>
                 )}
-                {result.data.overtime_hours > 0 && (
+                {(result.data as { overtime_hours: number }).overtime_hours > 0 && (
                     <p className="text-success font-bold bg-success/10 px-4 py-2 rounded-xl text-sm mt-2">
-                        {result.data.overtime_hours} hora(s) extra generada(s)
+                        {(result.data as { overtime_hours: number }).overtime_hours} hora(s) extra generada(s)
                     </p>
                 )}
                 

@@ -3,10 +3,20 @@
 import { useState } from 'react'
 import { Plus, Trash2, GripVertical, ChevronUp, ChevronDown } from 'lucide-react'
 
+interface QuestionConfig {
+    min?: number
+    max?: number
+    unit?: string
+    target_min?: number
+    target_max?: number
+    options?: string[]
+    label?: string
+}
+
 interface QuestionConfigEditorProps {
     type: string
-    config: Record<string, any>
-    onChange: (config: Record<string, any>) => void
+    config: Record<string, unknown>
+    onChange: (config: Record<string, unknown>) => void
 }
 
 /**
@@ -21,6 +31,7 @@ interface QuestionConfigEditorProps {
  */
 export default function QuestionConfigEditor({ type, config, onChange }: QuestionConfigEditorProps) {
     const [newOption, setNewOption] = useState('')
+    const typedConfig = config as QuestionConfig
 
     // ── Slider ──────────────────────────────────────
     if (type === 'slider') {
@@ -32,7 +43,7 @@ export default function QuestionConfigEditor({ type, config, onChange }: Questio
                         <label className="text-xs text-text-secondary mb-1 block">Min Value</label>
                         <input
                             type="number"
-                            value={config.min ?? 0}
+                            value={typedConfig.min ?? 0}
                             onChange={(e) => onChange({ ...config, min: Number(e.target.value) })}
                             className="w-full bg-surface border border-border rounded-xl px-3 h-9 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
                         />
@@ -41,7 +52,7 @@ export default function QuestionConfigEditor({ type, config, onChange }: Questio
                         <label className="text-xs text-text-secondary mb-1 block">Max Value</label>
                         <input
                             type="number"
-                            value={config.max ?? 100}
+                            value={typedConfig.max ?? 100}
                             onChange={(e) => onChange({ ...config, max: Number(e.target.value) })}
                             className="w-full bg-surface border border-border rounded-xl px-3 h-9 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
                         />
@@ -51,7 +62,7 @@ export default function QuestionConfigEditor({ type, config, onChange }: Questio
                         <input
                             type="text"
                             placeholder="e.g. °C, kg, %"
-                            value={config.unit ?? ''}
+                            value={typedConfig.unit ?? ''}
                             onChange={(e) => onChange({ ...config, unit: e.target.value })}
                             className="w-full bg-surface border border-border rounded-xl px-3 h-9 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
                         />
@@ -64,7 +75,7 @@ export default function QuestionConfigEditor({ type, config, onChange }: Questio
                         <input
                             type="number"
                             placeholder="—"
-                            value={config.target_min ?? ''}
+                            value={typedConfig.target_min ?? ''}
                             onChange={(e) => onChange({ ...config, target_min: e.target.value ? Number(e.target.value) : undefined })}
                             className="w-full bg-surface border border-border rounded-xl px-3 h-9 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
                         />
@@ -74,7 +85,7 @@ export default function QuestionConfigEditor({ type, config, onChange }: Questio
                         <input
                             type="number"
                             placeholder="—"
-                            value={config.target_max ?? ''}
+                            value={typedConfig.target_max ?? ''}
                             onChange={(e) => onChange({ ...config, target_max: e.target.value ? Number(e.target.value) : undefined })}
                             className="w-full bg-surface border border-border rounded-xl px-3 h-9 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
                         />
@@ -86,7 +97,7 @@ export default function QuestionConfigEditor({ type, config, onChange }: Questio
 
     // ── Multi Option / Select (shared options editor) ──
     if (type === 'multi_option' || type === 'select') {
-        const options: string[] = config.options || []
+        const options: string[] = typedConfig.options || []
 
         const addOption = () => {
             if (!newOption.trim()) return
@@ -184,7 +195,7 @@ export default function QuestionConfigEditor({ type, config, onChange }: Questio
                     <input
                         type="text"
                         placeholder="e.g. STATION 1, DINING ROOM"
-                        value={config.label ?? ''}
+                        value={typedConfig.label ?? ''}
                         onChange={(e) => onChange({ ...config, label: e.target.value })}
                         className="w-full bg-surface border border-border rounded-xl px-3 h-9 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
                     />

@@ -371,7 +371,7 @@ export default function UtensilsPage() {
                   <label className="text-sm font-semibold text-text-secondary">Tipo de Movimiento</label>
                   <select 
                     value={moveType}
-                    onChange={e => setMoveType(e.target.value as any)}
+                    onChange={e => setMoveType(e.target.value as 'entry' | 'exit' | 'transfer' | 'adjustment')}
                     className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary focus:border-primary outline-none appearance-none"
                   >
                     <option value="entry">Entrada (Ingreso)</option>

@@ -23,12 +23,16 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const savedLang = localStorage.getItem('verum-lang') as Language;
     if (savedLang && (savedLang === 'en' || savedLang === 'es')) {
-      setLanguageState(savedLang);
+      setTimeout(() => {
+        if (language !== savedLang) setLanguageState(savedLang);
+      }, 0);
     } else {
       const browserLang = navigator.language.startsWith('es') ? 'es' : 'en';
-      setLanguageState(browserLang);
+      setTimeout(() => {
+        if (language !== browserLang) setLanguageState(browserLang);
+      }, 0);
     }
-  }, []);
+  }, [language]);
 
   const setLanguage = (lang: Language) => {
     setLanguageState(lang);
@@ -38,11 +42,12 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   const t = (key: string, params?: Record<string, string | number>): string => {
     const keys = key.split('.');
-    let value: any = dictionaries[language];
+    let value: unknown = dictionaries[language];
 
     for (const k of keys) {
-      if (value && typeof value === 'object' && k in value) {
-        value = value[k];
+      const valObj = value as Record<string, unknown>
+      if (value && typeof value === 'object' && k in valObj) {
+        value = valObj[k];
       } else {
         return key; // Fallback to key if not found
       }
@@ -54,11 +59,10 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
     let text = value;
     if (params) {
-      Object.entries(params).forEach(([paramKey, paramValue]) => {
-        text = text.replace(new RegExp(`{${paramKey}}`, 'g'), String(paramValue));
+      Object.entries(params).forEach(([k, v]) => {
+        text = text.replace(`{${k}}`, String(v));
       });
     }
-
     return text;
   };
 

@@ -13,7 +13,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from '@/components/I18nProvider'
 import { useTheme } from '@/components/ThemeProvider'
 
-function getShiftInfo(t: any): { label: string; icon: typeof Sun } {
+function getShiftInfo(t: (key: string) => string): { label: string; icon: typeof Sun } {
     const hour = new Date().getHours()
     if (hour >= 6 && hour < 14) return { label: t('morningShift'), icon: Sunrise }
     if (hour >= 14 && hour < 20) return { label: t('midShift'), icon: CloudSun }
@@ -82,9 +82,10 @@ export default function DashboardPage() {
                     try {
                         const checklistData = await getChecklists(targetVenueId)
                         setChecklists(checklistData)
-                    } catch (err: any) {
+                    } catch (err: unknown) {
                         // Check if it's the specific no_shift_assigned error
-                        if (err.message && err.message.includes('no_shift_assigned')) {
+                        const errorMessage = (err as Error).message || ''
+                        if (errorMessage.includes('no_shift_assigned')) {
                             setError('no_shift_assigned')
                         } else {
                             // Venue might not have checklists yet or other error
@@ -92,11 +93,12 @@ export default function DashboardPage() {
                         }
                     }
                 }
-            } catch (err: any) {
-                if (err.message && err.message.includes('no_shift_assigned')) {
+            } catch (err: unknown) {
+                const errorMessage = (err as Error).message || ''
+                if (errorMessage.includes('no_shift_assigned')) {
                     setError('no_shift_assigned')
                 } else {
-                    setError(err.message || 'Failed to load data')
+                    setError(errorMessage || 'Failed to load data')
                 }
             } finally {
                 setLoading(false)

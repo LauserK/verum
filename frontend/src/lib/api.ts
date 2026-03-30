@@ -2,7 +2,13 @@ import { createClient } from '@/utils/supabase/client'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
-export async function fetchWithAuth(path: string, options: RequestInit = {}) {
+declare global {
+    interface Window {
+        __attendanceRequiredPending?: boolean
+    }
+}
+
+export async function fetchWithAuth<T = unknown>(path: string, options: RequestInit = {}): Promise<T> {
     const supabase = createClient()
     const { data: { session } } = await supabase.auth.getSession()
 
@@ -27,14 +33,14 @@ export async function fetchWithAuth(path: string, options: RequestInit = {}) {
             if (typeof window !== 'undefined') {
                 window.dispatchEvent(new CustomEvent('attendance-required'))
                 // Also set a flag in case the Guard hasn't mounted yet
-                ;(window as any).__attendanceRequiredPending = true
+                window.__attendanceRequiredPending = true
             }
         }
 
         throw new Error(errorDetail || `API Error: ${res.status}`)
     }
 
-    return res.json()
+    return res.json() as Promise<T>
 }
 
 
@@ -88,7 +94,7 @@ export interface SubmissionQuestion {
     label: string
     type: string
     is_required: boolean
-    config: Record<string, any> | null
+    config: Record<string, unknown> | null
     sort_order: number
     answer: string | null
     answered_at?: string | null
@@ -182,7 +188,7 @@ export interface Question {
     label: string
     type: string
     is_required: boolean
-    config: Record<string, any> | null
+    config: Record<string, unknown> | null
     sort_order: number
 }
 
@@ -317,6 +323,18 @@ export interface AttendanceLog {
     };
 }
 
+export interface AttendanceRecord {
+    work_date: string
+    profile_id: string
+    venue_id: string
+    clock_in: string | null
+    clock_out: string | null
+    net_hours: number | null
+    overtime_hours: number | null
+    minutes_late: number | null
+    absence_type: string | null
+}
+
 export interface AttendanceStatus {
     last_event: string | null;
     last_marked_at: string | null;
@@ -326,36 +344,61 @@ export interface AttendanceStatus {
     effective_venue_id?: string | null;
 }
 
+export interface LeaveRequest {
+    id: string
+    profile_id: string
+    venue_id: string
+    date: string
+    type: string
+    reason?: string
+    status: 'pending' | 'approved' | 'rejected'
+    admin_comment?: string
+    profiles?: { full_name: string }
+    venues?: { name: string }
+    reviewer?: { full_name: string }
+}
+
 // Attendance API
 export const attendanceApi = {
     getStatus: (venueId?: string): Promise<AttendanceStatus> => 
-        fetchWithAuth(`/attendance/today/status${venueId ? `?venue_id=${venueId}` : ''}`),
-    mark: (event_type: string, data: Record<string, unknown> = {}): Promise<AttendanceLog> => fetchWithAuth('/attendance/mark', { method: 'POST', body: JSON.stringify({ event_type, ...data }) }),
-    getLive: (venueId: string): Promise<AttendanceLog[]> => fetchWithAuth(`/attendance/live?venue_id=${venueId}`),
-    getHistory: (): Promise<AttendanceLog[]> => fetchWithAuth('/attendance/me'),
+        fetchWithAuth<AttendanceStatus>(`/attendance/today/status${venueId ? `?venue_id=${venueId}` : ''}`),
+    mark: (event_type: string, data: Record<string, unknown> = {}): Promise<AttendanceLog> => fetchWithAuth<AttendanceLog>('/attendance/mark', { method: 'POST', body: JSON.stringify({ event_type, ...data }) }),
+    getLive: (venueId: string): Promise<AttendanceLog[]> => fetchWithAuth<AttendanceLog[]>(`/attendance/live?venue_id=${venueId}`),
+    getHistory: (): Promise<AttendanceRecord[]> => fetchWithAuth<AttendanceRecord[]>('/attendance/me'),
     
     // Leave Requests
-    requestLeave: (data: { date: string; type: string; reason?: string }): Promise<any> => 
+    requestLeave: (data: { date: string; type: string; reason?: string }): Promise<unknown> => 
         fetchWithAuth('/attendance/requests', { method: 'POST', body: JSON.stringify(data) }),
-    getOwnRequests: (): Promise<any[]> => fetchWithAuth('/attendance/requests/me'),
+    getOwnRequests: (): Promise<LeaveRequest[]> => fetchWithAuth<LeaveRequest[]>('/attendance/requests/me'),
 };
+
+export interface AdminSummary {
+    active_staff: number
+    pending_tickets: number
+    critical_failures: number
+    pending_absences: number
+    today: {
+        submissions: number
+        attendance_rate: number
+    }
+}
 
 // Admin CRUD
 export const adminApi = {
     // Leave Requests Admin
-    getPendingRequests: (venueId?: string): Promise<any[]> => 
-        fetchWithAuth(`/admin/attendance/requests${venueId ? `?venue_id=${venueId}` : ''}`),
-    getAllAbsences: (venueId?: string): Promise<any[]> => 
-        fetchWithAuth(`/admin/attendance/absences${venueId ? `?venue_id=${venueId}` : ''}`),
-    reviewRequest: (id: string, data: { status: 'approved' | 'rejected'; admin_comment?: string }): Promise<any> => 
+    getPendingRequests: (venueId?: string): Promise<LeaveRequest[]> => 
+        fetchWithAuth<LeaveRequest[]>(`/admin/attendance/requests${venueId ? `?venue_id=${venueId}` : ''}`),
+    getAllAbsences: (venueId?: string): Promise<LeaveRequest[]> => 
+        fetchWithAuth<LeaveRequest[]>(`/admin/attendance/absences${venueId ? `?venue_id=${venueId}` : ''}`),
+    reviewRequest: (id: string, data: { status: 'approved' | 'rejected'; admin_comment?: string }): Promise<unknown> => 
         fetchWithAuth(`/admin/attendance/requests/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-    createAbsence: (data: { profile_id: string; venue_id: string; date: string; type: string; reason?: string }): Promise<any> =>
+    createAbsence: (data: { profile_id: string; venue_id: string; date: string; type: string; reason?: string }): Promise<unknown> =>
         fetchWithAuth('/attendance/absences', { method: 'POST', body: JSON.stringify(data) }),
 
-    getAttendanceReport: (venueId: string, from: string, to: string, profileId?: string): Promise<any[]> => {
+    getAttendanceReport: (venueId: string, from: string, to: string, profileId?: string): Promise<unknown[]> => {
         let url = `/attendance/report?venue_id=${venueId}&date_from=${from}&date_to=${to}`;
         if (profileId) url += `&profile_id=${profileId}`;
-        return fetchWithAuth(url);
+        return fetchWithAuth<unknown[]>(url);
     },
     exportAttendanceCSV: (venueId: string, type: string, from: string, to: string, profileId?: string) => {
         let url = `${API_URL}/attendance/export?venue_id=${venueId}&report_type=${type}&date_from=${from}&date_to=${to}`;
@@ -364,20 +407,19 @@ export const adminApi = {
     },
 
     getEmployeeShifts: (venueId?: string): Promise<EmployeeShift[]> =>
-        fetchWithAuth(`/employee-shifts${venueId ? `?venue_id=${venueId}` : ''}`),
-        
+        fetchWithAuth<EmployeeShift[]>(`/employee-shifts${venueId ? `?venue_id=${venueId}` : ''}`),
+
     createEmployeeShift: (data: Record<string, unknown>): Promise<EmployeeShift> =>
-        fetchWithAuth('/employee-shifts', { method: 'POST', body: JSON.stringify(data) }),
+        fetchWithAuth<EmployeeShift>('/employee-shifts', { method: 'POST', body: JSON.stringify(data) }),
 
     updateEmployeeShift: (id: string, data: Record<string, unknown>): Promise<EmployeeShift> =>
-        fetchWithAuth(`/employee-shifts/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+        fetchWithAuth<EmployeeShift>(`/employee-shifts/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
 
     updateEmployeeShiftDays: (id: string, data: { weekday: number; start_time?: string | null; end_time?: string | null; day_off: boolean }): Promise<Record<string, unknown>> =>
-        fetchWithAuth(`/employee-shifts/${id}/days`, { method: 'POST', body: JSON.stringify(data) }),
+        fetchWithAuth<Record<string, unknown>>(`/employee-shifts/${id}/days`, { method: 'POST', body: JSON.stringify(data) }),
 
-    getAdminSummary: (venueId?: string): Promise<Record<string, any>> =>
-        fetchWithAuth(`/admin/summary${venueId ? `?venue_id=${venueId}` : ''}`),
-
+    getAdminSummary: (venueId?: string): Promise<AdminSummary> =>
+        fetchWithAuth<AdminSummary>(`/admin/summary${venueId ? `?venue_id=${venueId}` : ''}`),
     // Inventory Dashboard
     getOrganizations: (): Promise<Organization[]> =>
         fetchWithAuth('/admin/organizations'),
@@ -514,7 +556,7 @@ export const adminApi = {
         from_venue_id?: string; 
         to_venue_id?: string; 
         notes?: string 
-    }): Promise<any> =>
+    }): Promise<unknown> =>
         fetchWithAuth('/utensil-movements', { method: 'POST', body: JSON.stringify(data) }),
 
     createUtensilCount: (data: {
@@ -527,20 +569,20 @@ export const adminApi = {
     getUtensilsCounts: (venueId?: string): Promise<UtensilCount[]> =>
         fetchWithAuth(`/utensil-counts${venueId ? `?venue_id=${venueId}` : ''}`),
 
-    getUtensilCountDetail: (countId: string): Promise<UtensilCount & { items: any[] }> =>
+    getUtensilCountDetail: (countId: string): Promise<UtensilCount & { items: unknown[] }> =>
         fetchWithAuth(`/utensil-counts/${countId}`),
 
-    confirmUtensilCount: (countId: string, items: Array<{ utensil_id: string; confirmed_count: number }>): Promise<any> =>
+    confirmUtensilCount: (countId: string, items: Array<{ utensil_id: string; confirmed_count: number }>): Promise<unknown> =>
         fetchWithAuth(`/utensil-counts/${countId}/confirm`, { method: 'PATCH', body: JSON.stringify({ items }) }),
 
     // Count Schedules
     getSchedules: (venueId?: string): Promise<CountSchedule[]> =>
         fetchWithAuth(`/count-schedules${venueId ? `?venue_id=${venueId}` : ''}`),
 
-    createSchedule: (data: any): Promise<CountSchedule> =>
+    createSchedule: (data: Record<string, unknown>): Promise<CountSchedule> =>
         fetchWithAuth('/count-schedules', { method: 'POST', body: JSON.stringify(data) }),
 
-    updateSchedule: (id: string, data: any): Promise<any> =>
+    updateSchedule: (id: string, data: Record<string, unknown>): Promise<unknown> =>
         fetchWithAuth(`/count-schedules/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
 
     // Inventory Dashboard

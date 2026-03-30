@@ -56,7 +56,7 @@ export default function PhotoQuestion({ question, value, onChange }: Props) {
                 .getPublicUrl(path)
 
             onChange(urlData.publicUrl)
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Photo upload error:', err)
             setError(t('photoUploadError'))
         } finally {
@@ -76,8 +76,8 @@ export default function PhotoQuestion({ question, value, onChange }: Props) {
     return (
         <div className="bg-surface border border-border rounded-2xl p-4 shadow-sm dark:shadow-none">
             <h3 className="text-base font-semibold text-text-primary mb-1">{question.label}</h3>
-            {question.config?.label && (
-                <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-3">{question.config.label}</p>
+            {(question.config as any)?.label && (
+                <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-3">{(question.config as any).label}</p>
             )}
 
             {/* Hidden file input */}

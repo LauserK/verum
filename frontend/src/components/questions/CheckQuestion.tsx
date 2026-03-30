@@ -17,8 +17,8 @@ export default function CheckQuestion({ question, value, onChange }: Props) {
             <div className="flex items-start justify-between gap-3">
                 <div className="flex-1">
                     <h3 className="text-base font-semibold text-text-primary">{question.label}</h3>
-                    {question.config?.description && (
-                        <p className="text-sm text-text-secondary mt-1">{question.config.description}</p>
+                    {(question.config as any)?.description && (
+                        <p className="text-sm text-text-secondary mt-1">{(question.config as any).description}</p>
                     )}
                 </div>
                 <button

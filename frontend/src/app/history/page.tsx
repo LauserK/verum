@@ -62,8 +62,8 @@ export default function HistoryPage() {
                 ])
                 setProfile(profileData)
                 setHistory(historyData)
-            } catch (err: any) {
-                setError(err.message || 'Failed to load history')
+            } catch (err: unknown) {
+                setError((err as Error).message || 'Failed to load history')
             } finally {
                 setLoading(false)
             }

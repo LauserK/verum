@@ -8,9 +8,18 @@ import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
+interface LeaveRequest {
+    id: string
+    date: string
+    type: string
+    reason?: string
+    status: 'pending' | 'approved' | 'rejected'
+    admin_comment?: string
+}
+
 export default function LeaveRequestsPage() {
     const router = useRouter()
-    const [requests, setRequests] = useState<any[]>([])
+    const [requests, setRequests] = useState<LeaveRequest[]>([])
     const [loading, setLoading] = useState(true)
     const [showForm, setShowForm] = useState(false)
     const [submitting, setSubmitting] = useState(false)
@@ -26,7 +35,7 @@ export default function LeaveRequestsPage() {
 
     async function loadRequests() {
         try {
-            const data = await attendanceApi.getOwnRequests()
+            const data = await attendanceApi.getOwnRequests() as LeaveRequest[]
             setRequests(data)
         } catch (error) {
             console.error('Error loading requests:', error)
@@ -44,8 +53,8 @@ export default function LeaveRequestsPage() {
             setDate('')
             setReason('')
             loadRequests()
-        } catch (error: any) {
-            alert(error.message || 'Error al enviar solicitud')
+        } catch (error: unknown) {
+            alert((error as Error).message || 'Error al enviar solicitud')
         } finally {
             setSubmitting(false)
         }
@@ -129,7 +138,7 @@ export default function LeaveRequestsPage() {
                                     </div>
                                     {req.reason && (
                                         <p className="text-sm text-text-secondary mt-2 border-t border-border pt-2 italic">
-                                            "{req.reason}"
+                                            &quot;{req.reason}&quot;
                                         </p>
                                     )}
                                     {req.admin_comment && (

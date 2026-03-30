@@ -7,7 +7,7 @@ import { useTranslations } from '@/components/I18nProvider'
 
 export default function LoginPage() {
     const { t, language, setLanguage } = useTranslations('login');
-    const [state, formAction, isPending] = useActionState(async (prevState: any, formData: FormData) => {
+    const [state, formAction, isPending] = useActionState(async (prevState: unknown, formData: FormData) => {
         return await login(formData)
     }, null)
 

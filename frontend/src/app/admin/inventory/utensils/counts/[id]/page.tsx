@@ -9,12 +9,31 @@ import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { useTranslations } from '@/components/I18nProvider'
 
+interface CountDetailItem {
+    utensil_id: string
+    utensil_name: string
+    unit: string
+    initial_count: number
+    confirmed_count: number | null
+}
+
+interface CountDetail {
+    id: string
+    status: string
+    created_at: string
+    confirmed_at: string | null
+    confirmed_by_user?: string | null
+    profiles?: { full_name: string }
+    venues?: { name: string }
+    items: CountDetailItem[]
+}
+
 export default function UtensilAuditDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const { t } = useTranslations()
   const router = useRouter()
   
-  const [countData, setCountData] = useState<any>(null)
+  const [countData, setCountData] = useState<CountDetail | null>(null)
   const [confirmedCounts, setConfirmedCounts] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -23,12 +42,12 @@ export default function UtensilAuditDetailPage({ params }: { params: Promise<{ i
   const fetchDetail = useCallback(async () => {
     setLoading(true)
     try {
-      const data = await adminApi.getUtensilCountDetail(id)
+      const data = await adminApi.getUtensilCountDetail(id) as unknown as CountDetail
       setCountData(data)
       
       // Pre-fill confirmed counts with initial ones
       const initial: Record<string, number> = {}
-      data.items.forEach((item: any) => {
+      data.items.forEach((item: CountDetailItem) => {
         initial[item.utensil_id] = item.confirmed_count ?? item.initial_count
       })
       setConfirmedCounts(initial)
@@ -143,7 +162,7 @@ export default function UtensilAuditDetailPage({ params }: { params: Promise<{ i
           <div>
             <p className="text-sm font-bold">Este inventario ya ha sido auditado y cerrado.</p>
             <p className="text-xs mt-0.5 opacity-90">
-              Confirmado por <strong>{countData.confirmed_by_user || 'Supervisor'}</strong> el {format(new Date(countData.confirmed_at), "dd MMM, HH:mm'h'", { locale: es })}.
+              Confirmado por <strong>{countData.confirmed_by_user || 'Supervisor'}</strong> el {countData.confirmed_at ? format(new Date(countData.confirmed_at), "dd MMM, HH:mm'h'", { locale: es }) : 'N/A'}.
             </p>
           </div>
         </div>
@@ -161,13 +180,13 @@ export default function UtensilAuditDetailPage({ params }: { params: Promise<{ i
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {countData.items.map((item: any) => {
+            {countData.items.map((item: CountDetailItem) => {
               const diff = confirmedCounts[item.utensil_id] - item.initial_count
               return (
                 <tr key={item.utensil_id} className="hover:bg-surface-raised/30 transition-colors">
                   <td className="px-6 py-4">
-                    <p className="font-bold text-text-primary">{item.utensils.name}</p>
-                    <p className="text-[10px] text-text-secondary uppercase">{item.utensils.unit}</p>
+                    <p className="font-bold text-text-primary">{item.utensil_name}</p>
+                    <p className="text-[10px] text-text-secondary uppercase">{item.unit}</p>
                   </td>
                   <td className="px-6 py-4 text-center font-medium text-text-secondary">
                     {item.initial_count}

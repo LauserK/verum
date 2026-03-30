@@ -1,14 +1,14 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { attendanceApi } from '@/lib/api'
+import { attendanceApi, type AttendanceRecord } from '@/lib/api'
 import { ArrowLeft, Loader2, Clock } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 
 export default function StaffHistoryPage() {
-    const [history, setHistory] = useState<any[]>([])
+    const [history, setHistory] = useState<AttendanceRecord[]>([])
     const [loading, setLoading] = useState(true)
     const router = useRouter()
 
@@ -55,10 +55,10 @@ export default function StaffHistoryPage() {
                                         <span className="text-text-secondary">Horas Netas</span>
                                         <span className="font-black text-primary">{record.net_hours}h</span>
                                     </div>
-                                    {(record.overtime_hours > 0 || record.minutes_late > 0) && (
+                                    {((record.overtime_hours ?? 0) > 0 || (record.minutes_late ?? 0) > 0) && (
                                         <div className="flex gap-2 pt-1">
-                                            {record.overtime_hours > 0 && <span className="text-[10px] font-bold bg-success/10 text-success px-2 py-0.5 rounded-md">+{record.overtime_hours}h extra</span>}
-                                            {record.minutes_late > 0 && <span className="text-[10px] font-bold bg-warning/10 text-warning px-2 py-0.5 rounded-md">{record.minutes_late} min tarde</span>}
+                                            {(record.overtime_hours ?? 0) > 0 && <span className="text-[10px] font-bold bg-success/10 text-success px-2 py-0.5 rounded-md">+{record.overtime_hours}h extra</span>}
+                                            {(record.minutes_late ?? 0) > 0 && <span className="text-[10px] font-bold bg-warning/10 text-warning px-2 py-0.5 rounded-md">{record.minutes_late} min tarde</span>}
                                         </div>
                                     )}
                                 </div>

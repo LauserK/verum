@@ -12,12 +12,26 @@ import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
+interface LeaveRequest {
+    id: string
+    profile_id: string
+    venue_id: string
+    date: string
+    type: string
+    reason?: string
+    status: 'pending' | 'approved' | 'rejected'
+    admin_comment?: string
+    profiles?: { full_name: string }
+    venues?: { name: string }
+    reviewer?: { full_name: string }
+}
+
 export default function AdminAbsencesPage() {
     const router = useRouter()
     const [profile, setProfile] = useState<Profile | null>(null)
     const [users, setUsers] = useState<AdminUser[]>([])
-    const [requests, setRequests] = useState<any[]>([])
-    const [history, setHistory] = useState<any[]>([])
+    const [requests, setRequests] = useState<LeaveRequest[]>([])
+    const [history, setHistory] = useState<LeaveRequest[]>([])
     const [loading, setLoading] = useState(true)
     const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending')
     const [venueId, setVenueId] = useState<string>('')
@@ -80,8 +94,8 @@ export default function AdminAbsencesPage() {
             setReviewing(null)
             setAdminComment('')
             loadData()
-        } catch (error: any) {
-            alert(error.message || 'Error al procesar solicitud')
+        } catch (error: unknown) {
+            alert((error as Error).message || 'Error al procesar solicitud')
         } finally {
             setSubmitting(false)
         }
@@ -104,8 +118,8 @@ export default function AdminAbsencesPage() {
             setShowManualForm(false)
             setManualReason('')
             loadData()
-        } catch (error: any) {
-            alert(error.message || 'Error al registrar ausencia')
+        } catch (error: unknown) {
+            alert((error as Error).message || 'Error al registrar ausencia')
         } finally {
             setSubmitting(false)
         }
@@ -221,7 +235,7 @@ export default function AdminAbsencesPage() {
                                     {req.reason && (
                                         <div className="flex items-start gap-3 text-sm bg-surface-raised p-3 rounded-xl border border-border">
                                             <FileText className="w-4 h-4 text-text-secondary mt-0.5 shrink-0" />
-                                            <p className="text-text-secondary italic">"{req.reason}"</p>
+                                            <p className="text-text-secondary italic">&quot;{req.reason}&quot;</p>
                                         </div>
                                     )}
                                 </div>
@@ -315,7 +329,7 @@ export default function AdminAbsencesPage() {
                                             <td className="px-6 py-4">
                                                 <div className="max-w-xs space-y-1">
                                                     {row.reason && (
-                                                        <p className="text-xs text-text-primary italic">"{row.reason}"</p>
+                                                        <p className="text-xs text-text-primary italic">&quot;{row.reason}&quot;</p>
                                                     )}
                                                     {row.admin_comment && (
                                                         <p className="text-[10px] bg-primary/5 text-primary px-2 py-1 rounded-lg border border-primary/10">

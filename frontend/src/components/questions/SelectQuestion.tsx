@@ -12,8 +12,8 @@ interface Props {
 
 export default function SelectQuestion({ question, value, onChange }: Props) {
     const { t } = useTranslations('questions')
-    const options: string[] = question.config?.options || []
-    const label = question.config?.label
+    const options: string[] = (question.config as any)?.options || []
+    const label = (question.config as any)?.label
 
     return (
         <div className="bg-surface border border-border rounded-2xl p-4 shadow-sm dark:shadow-none">

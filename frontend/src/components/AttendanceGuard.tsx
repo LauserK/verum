@@ -18,9 +18,9 @@ export default function AttendanceGuard({ children }: { children: React.ReactNod
         }
 
         // Check if there was a pending block event before mount
-        if ((window as any).__attendanceRequiredPending) {
+        if (window.__attendanceRequiredPending) {
             handleAttendanceRequired()
-            delete (window as any).__attendanceRequiredPending
+            delete window.__attendanceRequiredPending
         }
 
         window.addEventListener('attendance-required', handleAttendanceRequired)
@@ -30,9 +30,11 @@ export default function AttendanceGuard({ children }: { children: React.ReactNod
     // If the user navigates to attendance, unblock (they are taking action)
     useEffect(() => {
         if (pathname.includes('/attendance')) {
-            setIsBlocked(false)
+            setTimeout(() => {
+                if (isBlocked) setIsBlocked(false)
+            }, 0)
         }
-    }, [pathname])
+    }, [pathname, isBlocked])
 
     if (isBlocked && !pathname.includes('/attendance')) {
         return (

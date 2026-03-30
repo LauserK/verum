@@ -24,7 +24,9 @@ export default function InventoryDashboardPage() {
     let active = true
     
     if (selectedVenue || venues.length > 0) {
-        setLoading(true)
+        setTimeout(() => {
+          if (active) setLoading(true)
+        }, 0)
         adminApi.getInventoryDashboard(selectedVenue || undefined)
           .then(res => {
             if (active) setData(res)

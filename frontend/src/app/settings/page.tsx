@@ -69,15 +69,19 @@ export default function SettingsPage() {
         // Load theme from localStorage or system
         const savedTheme = localStorage.getItem('verum-theme') as 'light' | 'dark'
         if (savedTheme) {
-            setTheme(savedTheme)
+            setTimeout(() => {
+                if (theme !== savedTheme) setTheme(savedTheme)
+            }, 0)
             document.documentElement.setAttribute('data-theme', savedTheme)
         } else {
             const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
             const defaultTheme = prefersDark ? 'dark' : 'light'
-            setTheme(defaultTheme)
+            setTimeout(() => {
+                if (theme !== defaultTheme) setTheme(defaultTheme)
+            }, 0)
             document.documentElement.setAttribute('data-theme', defaultTheme)
         }
-    }, [router])
+    }, [router, theme])
 
     const toggleTheme = () => {
         const newTheme = theme === 'light' ? 'dark' : 'light'
@@ -163,7 +167,7 @@ export default function SettingsPage() {
                                     </div>
                                     <select 
                                         value={language}
-                                        onChange={(e) => setLanguage(e.target.value as any)}
+                                        onChange={(e) => setLanguage(e.target.value as 'en' | 'es')}
                                         className="bg-surface-raised text-sm font-medium text-text-primary px-3 py-1.5 rounded-lg border border-border outline-none focus:border-primary"
                                     >
                                         <option value="es">Español</option>

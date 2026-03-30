@@ -10,18 +10,23 @@ interface Props {
 }
 
 export default function SliderQuestion({ question, value, onChange }: Props) {
-    const min = question.config?.min ?? 0
-    const max = question.config?.max ?? 100
-    const unit = question.config?.unit || ''
-    const targetMin = question.config?.target_min
-    const targetMax = question.config?.target_max
+    const min = (question.config as any)?.min ?? 0
+    const max = (question.config as any)?.max ?? 100
+    const unit = (question.config as any)?.unit || ''
+    const targetMin = (question.config as any)?.target_min
+    const targetMax = (question.config as any)?.target_max
 
     const numValue = value ? parseFloat(value) : Math.round((min + max) / 2)
     const [localValue, setLocalValue] = useState(numValue)
 
     useEffect(() => {
-        if (value) setLocalValue(parseFloat(value))
-    }, [value])
+        if (value) {
+            const parsed = parseFloat(value)
+            setTimeout(() => {
+                if (localValue !== parsed) setLocalValue(parsed)
+            }, 0)
+        }
+    }, [value, localValue])
 
     const percentage = ((localValue - min) / (max - min)) * 100
     const isInTarget = targetMin !== undefined && targetMax !== undefined
