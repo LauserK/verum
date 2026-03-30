@@ -288,6 +288,12 @@
       "delete": "Eliminar"
     }
   },
+  "venueSelection": {
+    "title": "Selecciona tu sede",
+    "subtitle": "Elige la sede donde trabajarás hoy",
+    "noVenues": "No tienes sedes asignadas. Contacta a tu administrador.",
+    "backToLogin": "Volver al inicio de sesión"
+  },
   "attendance": {
     "title": "Asistencia",
     "requiredTitle": "Entrada Requerida",

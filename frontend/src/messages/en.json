@@ -287,6 +287,12 @@
       "delete": "Delete"
     }
   },
+  "venueSelection": {
+    "title": "Select your venue",
+    "subtitle": "Choose the venue where you'll be working today",
+    "noVenues": "You have no assigned venues. Contact your administrator.",
+    "backToLogin": "Back to login"
+  },
   "attendance": {
     "title": "Attendance",
     "requiredTitle": "Clock-in Required",
