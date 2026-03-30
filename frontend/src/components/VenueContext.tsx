@@ -25,16 +25,18 @@ export function VenueProvider({ children }: { children: React.ReactNode }) {
         if (profile && profile.venues && profile.venues.length > 0) {
           setAvailableVenues(profile.venues)
           
-          // Check local storage first
-          const savedId = localStorage.getItem('selectedVenueId')
-          const validSaved = profile.venues.find(v => v.id === savedId)
-          
-          if (validSaved) {
-            setSelectedVenueIdState(validSaved.id)
-          } else {
-            // Default to first venue
-            setSelectedVenueIdState(profile.venues[0].id)
-            localStorage.setItem('selectedVenueId', profile.venues[0].id)
+          // Only auto-select if not already set (e.g. from venue-selection page)
+          if (!selectedVenueIdState) {
+            const savedId = localStorage.getItem('selectedVenueId')
+            const validSaved = profile.venues.find(v => v.id === savedId)
+            
+            if (validSaved) {
+              setSelectedVenueIdState(validSaved.id)
+            } else {
+              // Default to first venue if nothing saved
+              setSelectedVenueIdState(profile.venues[0].id)
+              localStorage.setItem('selectedVenueId', profile.venues[0].id)
+            }
           }
         }
       } catch (err) {
@@ -44,7 +46,7 @@ export function VenueProvider({ children }: { children: React.ReactNode }) {
       }
     }
     loadProfile()
-  }, [])
+  }, [selectedVenueIdState])
 
   const setSelectedVenueId = (id: string) => {
     setSelectedVenueIdState(id)
