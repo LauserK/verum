@@ -285,6 +285,20 @@
       "permissions": "Permissions",
       "edit": "Edit",
       "delete": "Delete"
+    },
+    "attendance": {
+      "manualEntryTitle": "Manual Attendance Entry",
+      "userLabel": "User",
+      "selectUser": "Select user",
+      "clockInLabel": "Clock In",
+      "clockOutLabel": "Clock Out",
+      "reasonLabel": "Reason",
+      "reasonPlaceholder": "E.g. Forgot to clock in, system error...",
+      "submit": "Record Attendance",
+      "submitting": "Recording...",
+      "success": "Attendance recorded successfully",
+      "error": "Error recording attendance",
+      "cancel": "Cancel"
     }
   },
   "venueSelection": {

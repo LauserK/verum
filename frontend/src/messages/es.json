@@ -286,6 +286,20 @@
       "permissions": "Permisos",
       "edit": "Editar",
       "delete": "Eliminar"
+    },
+    "attendance": {
+      "manualEntryTitle": "Entrada Manual de Asistencia",
+      "userLabel": "Usuario",
+      "selectUser": "Seleccionar usuario",
+      "clockInLabel": "Entrada",
+      "clockOutLabel": "Salida",
+      "reasonLabel": "Motivo",
+      "reasonPlaceholder": "Ej. Olvido marcar, error de sistema...",
+      "submit": "Registrar Asistencia",
+      "submitting": "Registrando...",
+      "success": "Asistencia registrada correctamente",
+      "error": "Error al registrar asistencia",
+      "cancel": "Cancelar"
     }
   },
   "venueSelection": {
