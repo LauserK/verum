@@ -370,6 +370,16 @@ export const attendanceApi = {
     requestLeave: (data: { date: string; type: string; reason?: string }): Promise<unknown> => 
         fetchWithAuth('/attendance/requests', { method: 'POST', body: JSON.stringify(data) }),
     getOwnRequests: (): Promise<LeaveRequest[]> => fetchWithAuth<LeaveRequest[]>('/attendance/requests/me'),
+    manualEntry: (data: {
+        profile_id: string
+        venue_id: string
+        clock_in: string
+        clock_out: string
+        reason: string
+    }) => fetchWithAuth('/admin/attendance/manual', {
+        method: 'POST',
+        body: JSON.stringify(data)
+    })
 };
 
 export interface AdminSummary {
