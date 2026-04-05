@@ -6,46 +6,45 @@ import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { useTranslations } from '@/components/I18nProvider'
 import { RefreshCcw } from 'lucide-react'
+import { useVenue } from '@/components/VenueContext'
+import ManualAttendanceModal from '@/components/admin/ManualAttendanceModal'
 
 export default function AdminAttendancePage() {
     const { t } = useTranslations()
+    const { setSelectedVenueId } = useVenue()
     const [liveData, setLiveData] = useState<AttendanceLog[]>([])
     const [loading, setLoading] = useState(true)
     const [venues, setVenues] = useState<VenueInfo[]>([])
     const [selectedVenue, setSelectedVenue] = useState<string>('')
+    const [showManualModal, setShowManualModal] = useState(false)
     
     useEffect(() => {
         getProfile().then(p => {
             const userVenues = p.venues || []
             setVenues(userVenues)
             if (userVenues.length > 0) {
-                setSelectedVenue(userVenues[0].id)
+                const initialVenue = userVenues[0].id
+                setSelectedVenue(initialVenue)
+                setSelectedVenueId(initialVenue)
             }
         })
-    }, [])
+    }, [setSelectedVenueId])
+
+    const fetchLive = () => {
+        if (!selectedVenue) return
+        attendanceApi.getLive(selectedVenue)
+            .then(data => { 
+                setLiveData(data)
+                setLoading(false)
+            })
+            .catch(console.error)
+    }
 
     useEffect(() => {
         if (!selectedVenue) return
-
-        let mounted = true
-
-        const fetchLive = () => {
-            attendanceApi.getLive(selectedVenue)
-                .then(data => { 
-                    if (mounted) {
-                        setLiveData(data)
-                        setLoading(false)
-                    }
-                })
-                .catch(console.error)
-        }
-        
         fetchLive()
         const interval = setInterval(fetchLive, 60000)
-        return () => {
-            mounted = false
-            clearInterval(interval)
-        }
+        return () => clearInterval(interval)
     }, [selectedVenue])
 
     return (
@@ -56,7 +55,10 @@ export default function AdminAttendancePage() {
                     <div className="flex items-center gap-4 mt-2">
                         <select 
                             value={selectedVenue} 
-                            onChange={e => setSelectedVenue(e.target.value)}
+                            onChange={e => {
+                                setSelectedVenue(e.target.value)
+                                setSelectedVenueId(e.target.value)
+                            }}
                             className="bg-surface border border-border rounded-xl px-4 h-10 text-sm text-text-primary focus:border-primary outline-none"
                         >
                             <option value="" disabled>Selecciona una sede...</option>
@@ -73,6 +75,13 @@ export default function AdminAttendancePage() {
                         <a href="/admin/attendance/absences" className="text-sm font-bold text-primary hover:underline flex items-center gap-1">
                             Ausencias
                         </a>
+                        <span className="text-border">|</span>
+                        <button 
+                            onClick={() => setShowManualModal(true)}
+                            className="text-sm font-bold text-primary hover:underline flex items-center gap-1"
+                        >
+                            Registro Manual
+                        </button>
                     </div>
                 </div>
                 <div className="flex items-center gap-2 text-xs font-semibold text-text-secondary">
@@ -123,6 +132,12 @@ export default function AdminAttendancePage() {
                     </tbody>
                 </table>
             </div>
+
+            <ManualAttendanceModal 
+                isOpen={showManualModal}
+                onClose={() => setShowManualModal(false)}
+                onSuccess={fetchLive}
+            />
         </div>
     )
 }
