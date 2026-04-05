@@ -338,3 +338,10 @@ class LeaveRequest(BaseModel):
 class AbsenceApprovalRequest(BaseModel):
     status: str  # 'approved', 'rejected'
     admin_comment: Optional[str] = None
+
+class ManualAttendanceRequest(BaseModel):
+    profile_id: str
+    venue_id: str
+    clock_in: str  # ISO Format: YYYY-MM-DDTHH:MM:SS
+    clock_out: str # ISO Format: YYYY-MM-DDTHH:MM:SS
+    reason: str
