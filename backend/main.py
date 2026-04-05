@@ -25,7 +25,8 @@ from schemas import (
     ConfirmCountItemSchema, ConfirmCountRequest,
     CreateCountScheduleRequest, UpdateCountScheduleRequest,
     EmployeeShiftRequest, ShiftDayRequest, MarkAttendanceRequest,
-    AbsenceRequest, LeaveRequest, AbsenceApprovalRequest
+    AbsenceRequest, LeaveRequest, AbsenceApprovalRequest,
+    ManualAttendanceRequest
 )
 
 CARACAS_TZ = pytz.timezone("America/Caracas")
@@ -2585,6 +2586,95 @@ async def create_absence(body: AbsenceRequest, current_user=Depends(get_current_
     data["status"] = "approved"
     res = db.table("absences").upsert(data, on_conflict="profile_id,date").execute()
     return res.data[0] if res.data else {"ok": True}
+
+
+@app.post("/admin/attendance/manual")
+async def add_manual_attendance(body: ManualAttendanceRequest, current_user=Depends(get_current_user), db=Depends(get_db), _=Depends(require_permission("attendance.manage"))):
+    """Admin manually adds a clock-in and clock-out for a user."""
+    
+    # 1. Parse dates
+    try:
+        # Expected format from frontend: "YYYY-MM-DDTHH:MM"
+        # We append :00 if needed and parse
+        in_str = body.clock_in if len(body.clock_in) > 16 else f"{body.clock_in}:00"
+        out_str = body.clock_out if len(body.clock_out) > 16 else f"{body.clock_out}:00"
+        
+        in_dt = datetime.fromisoformat(in_str).replace(tzinfo=CARACAS_TZ)
+        out_dt = datetime.fromisoformat(out_str).replace(tzinfo=CARACAS_TZ)
+    except ValueError:
+        raise HTTPException(400, "Formato de fecha inválido. Use ISO8601 (YYYY-MM-DDTHH:MM)")
+
+    if out_dt <= in_dt:
+        raise HTTPException(400, "La hora de salida debe ser posterior a la de entrada")
+
+    # 2. Get shift info for calculations
+    target_date_str = in_dt.strftime("%Y-%m-%d")
+    in_time_str = in_dt.strftime("%H:%M:%S")
+    out_time_str = out_dt.strftime("%H:%M:%S")
+    
+    active_shift = None
+    iso_weekday = in_dt.isoweekday()
+    
+    shift_res = db.table("employee_shifts").select("*").eq("profile_id", body.profile_id).eq("venue_id", body.venue_id).eq("is_active", True).execute()
+    
+    for s in shift_res.data or []:
+        if s["modality"] == "fixed" and s["weekdays"] and iso_weekday in s["weekdays"]:
+            active_shift = {
+                "id": s["id"],
+                "expected_start": s["start_time"],
+                "expected_end": s["end_time"]
+            }
+            break
+        elif s["modality"] == "rotating":
+            d_res = db.table("shift_days").select("*").eq("employee_shift_id", s["id"]).eq("weekday", iso_weekday).execute()
+            if d_res.data and not d_res.data[0].get("day_off"):
+                active_shift = {
+                    "id": s["id"],
+                    "expected_start": d_res.data[0]["start_time"],
+                    "expected_end": d_res.data[0]["end_time"]
+                }
+                break
+
+    # 3. Prepare common log data
+    base_log = {
+        "profile_id": body.profile_id,
+        "venue_id": body.venue_id,
+        "edited_by": current_user.id,
+        "edit_reason": body.reason,
+        "verification_status": "verified"
+    }
+    
+    if active_shift:
+        base_log.update({
+            "employee_shift_id": active_shift["id"],
+            "expected_start": active_shift["expected_start"],
+            "expected_end": active_shift["expected_end"]
+        })
+
+    # 4. Insert Clock In
+    in_log = base_log.copy()
+    in_log.update({
+        "event_type": "clock_in",
+        "marked_at": in_dt.isoformat(),
+    })
+    if active_shift:
+        in_log["minutes_late"] = calculate_late_minutes(in_time_str, active_shift["expected_start"])
+        in_log["overtime_hours"] = calculate_overtime(in_time_str, active_shift["expected_start"], is_entry=True)
+    
+    db.table("attendance_logs").insert(in_log).execute()
+
+    # 5. Insert Clock Out
+    out_log = base_log.copy()
+    out_log.update({
+        "event_type": "clock_out",
+        "marked_at": out_dt.isoformat(),
+    })
+    if active_shift:
+        out_log["overtime_hours"] = calculate_overtime(out_time_str, active_shift["expected_end"], is_entry=False)
+    
+    res = db.table("attendance_logs").insert(out_log).execute()
+    
+    return {"ok": True, "count": 2}
 
 @app.post("/attendance/requests")
 async def request_leave(body: LeaveRequest, current_user=Depends(get_current_user), db=Depends(get_db), _=Depends(require_permission("attendance.request_leave"))):
