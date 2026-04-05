@@ -2599,8 +2599,8 @@ async def add_manual_attendance(body: ManualAttendanceRequest, current_user=Depe
         in_str = body.clock_in if len(body.clock_in) > 16 else f"{body.clock_in}:00"
         out_str = body.clock_out if len(body.clock_out) > 16 else f"{body.clock_out}:00"
         
-        in_dt = datetime.fromisoformat(in_str).replace(tzinfo=CARACAS_TZ)
-        out_dt = datetime.fromisoformat(out_str).replace(tzinfo=CARACAS_TZ)
+        in_dt = CARACAS_TZ.localize(datetime.fromisoformat(in_str))
+        out_dt = CARACAS_TZ.localize(datetime.fromisoformat(out_str))
     except ValueError:
         raise HTTPException(400, "Formato de fecha inválido. Use ISO8601 (YYYY-MM-DDTHH:MM)")
 
