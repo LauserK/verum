@@ -288,9 +288,27 @@
       "delete": "Eliminar"
     },
     "attendance": {
+      "liveTitle": "Asistencia en Vivo",
+      "reports": "Ver Reportes",
+      "shifts": "Horarios",
+      "absences": "Ausencias",
+      "manualEntryAction": "Registro Manual",
+      "autoUpdate": "Actualización automática",
+      "table": {
+        "employee": "Empleado",
+        "lastEvent": "Último Evento",
+        "time": "Hora",
+        "status": "Estado",
+        "loading": "Cargando datos...",
+        "noData": "No hay registros de asistencia hoy.",
+        "active": "Activo",
+        "paused": "En Pausa",
+        "out": "Fuera"
+      },
       "manualEntryTitle": "Entrada Manual de Asistencia",
       "userLabel": "Usuario",
       "selectUser": "Seleccionar usuario",
+      "loadingUsers": "Cargando usuarios...",
       "clockInLabel": "Entrada",
       "clockOutLabel": "Salida",
       "reasonLabel": "Motivo",

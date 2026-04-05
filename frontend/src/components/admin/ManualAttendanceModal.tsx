@@ -68,8 +68,8 @@ export default function ManualAttendanceModal({
             await attendanceApi.manualEntry({
                 profile_id: selectedUserId,
                 venue_id: selectedVenueId,
-                clock_in: new Date(clockIn).toISOString(),
-                clock_out: new Date(clockOut).toISOString(),
+                clock_in: clockIn,
+                clock_out: clockOut,
                 reason
             })
             
@@ -134,16 +134,23 @@ export default function ManualAttendanceModal({
                                         required
                                         value={selectedUserId}
                                         onChange={(e) => setSelectedUserId(e.target.value)}
-                                        className="w-full h-12 pl-12 pr-4 bg-surface-raised border border-border rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all appearance-none"
+                                        className="w-full h-12 pl-12 pr-10 bg-surface-raised border border-border rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all appearance-none disabled:opacity-60"
                                         disabled={isLoadingUsers}
                                     >
-                                        <option value="">{t('admin.attendance.selectUser')}</option>
+                                        <option value="">
+                                            {isLoadingUsers ? t('admin.attendance.loadingUsers') : t('admin.attendance.selectUser')}
+                                        </option>
                                         {users.map(user => (
                                             <option key={user.id} value={user.id}>
                                                 {user.full_name}
                                             </option>
                                         ))}
                                     </select>
+                                    {isLoadingUsers && (
+                                        <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                                            <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 

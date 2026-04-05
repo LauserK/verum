@@ -287,9 +287,27 @@
       "delete": "Delete"
     },
     "attendance": {
+      "liveTitle": "Live Attendance",
+      "reports": "View Reports",
+      "shifts": "Schedules",
+      "absences": "Absences",
+      "manualEntryAction": "Manual Entry",
+      "autoUpdate": "Auto update",
+      "table": {
+        "employee": "Employee",
+        "lastEvent": "Last Event",
+        "time": "Time",
+        "status": "Status",
+        "loading": "Loading data...",
+        "noData": "No attendance records today.",
+        "active": "Active",
+        "paused": "On Break",
+        "out": "Out"
+      },
       "manualEntryTitle": "Manual Attendance Entry",
       "userLabel": "User",
       "selectUser": "Select user",
+      "loadingUsers": "Loading users...",
       "clockInLabel": "Clock In",
       "clockOutLabel": "Clock Out",
       "reasonLabel": "Reason",
