@@ -2554,9 +2554,30 @@ async def mark_attendance(body: MarkAttendanceRequest, current_user=Depends(get_
         
         if body.event_type == "clock_in":
             log_data["minutes_late"] = calculate_late_minutes(now_time_str, active_shift["expected_start"])
-            log_data["overtime_hours"] = calculate_overtime(now_time_str, active_shift["expected_start"], is_entry=True)
+            log_data["overtime_hours"] = 0 # No overtime calculated at entry anymore
         elif body.event_type == "clock_out":
-            log_data["overtime_hours"] = calculate_overtime(now_time_str, active_shift["expected_end"], is_entry=False)
+            # 1. Find corresponding clock_in for today
+            in_log_res = db.table("attendance_logs").select("marked_at").eq("profile_id", current_user.id).eq("venue_id", venue_id).eq("event_type", "clock_in").gte("marked_at", f"{today_str}T00:00:00-04:00").order("marked_at", desc=True).limit(1).execute()
+            
+            if in_log_res.data and active_shift["expected_start"] and active_shift["expected_end"]:
+                in_dt = datetime.fromisoformat(in_log_res.data[0]["marked_at"].replace("Z", "+00:00")).astimezone(CARACAS_TZ)
+                
+                # Expected duration
+                e_in = datetime.strptime(active_shift["expected_start"], "%H:%M:%S")
+                e_out = datetime.strptime(active_shift["expected_end"], "%H:%M:%S")
+                total_expected_mins = (e_out.hour * 60 + e_out.minute) - (e_in.hour * 60 + e_in.minute)
+                
+                # Real duration
+                total_worked_mins = (now_dt - in_dt).total_seconds() / 60
+                
+                if total_worked_mins > total_expected_mins:
+                    overtime_mins = total_worked_mins - total_expected_mins
+                    log_data["overtime_hours"] = int(overtime_mins // 60)
+                else:
+                    log_data["overtime_hours"] = 0
+            else:
+                # Fallback if no clock_in found or no expected times
+                log_data["overtime_hours"] = 0
             
     res = db.table("attendance_logs").insert(log_data).execute()
     return res.data[0]
@@ -2651,30 +2672,49 @@ async def add_manual_attendance(body: ManualAttendanceRequest, current_user=Depe
             "expected_end": active_shift["expected_end"]
         })
 
-    # 4. Insert Clock In
+    # 4. Calculate Minutes Late and Overtime (New Logic)
+    # Overtime only if total_worked_minutes > total_expected_minutes
+    minutes_late = 0
+    overtime_hours = 0
+    
+    if active_shift:
+        # Expected duration in minutes
+        e_in = datetime.strptime(active_shift["expected_start"], "%H:%M:%S")
+        e_out = datetime.strptime(active_shift["expected_end"], "%H:%M:%S")
+        total_expected_mins = (e_out.hour * 60 + e_out.minute) - (e_in.hour * 60 + e_in.minute)
+        
+        # Real duration in minutes
+        total_worked_mins = (out_dt - in_dt).total_seconds() / 60
+        
+        # 1. Late Minutes (based on start time)
+        minutes_late = calculate_late_minutes(in_time_str, active_shift["expected_start"])
+        
+        # 2. Overtime Hours (only if we worked more than expected)
+        if total_worked_mins > total_expected_mins:
+            overtime_mins = total_worked_mins - total_expected_mins
+            overtime_hours = int(overtime_mins // 60)
+
+    # 5. Insert Clock In
     in_log = base_log.copy()
     in_log.update({
         "event_type": "clock_in",
         "marked_at": in_dt.isoformat(),
+        "minutes_late": minutes_late
     })
-    if active_shift:
-        in_log["minutes_late"] = calculate_late_minutes(in_time_str, active_shift["expected_start"])
-        in_log["overtime_hours"] = calculate_overtime(in_time_str, active_shift["expected_start"], is_entry=True)
     
     db.table("attendance_logs").insert(in_log).execute()
 
-    # 5. Insert Clock Out
+    # 6. Insert Clock Out
     out_log = base_log.copy()
     out_log.update({
         "event_type": "clock_out",
         "marked_at": out_dt.isoformat(),
+        "overtime_hours": overtime_hours
     })
-    if active_shift:
-        out_log["overtime_hours"] = calculate_overtime(out_time_str, active_shift["expected_end"], is_entry=False)
     
     res = db.table("attendance_logs").insert(out_log).execute()
     
-    return {"ok": True, "count": 2}
+    return {"ok": True, "count": 2, "overtime_hours": overtime_hours, "minutes_late": minutes_late}
 
 @app.post("/attendance/requests")
 async def request_leave(body: LeaveRequest, current_user=Depends(get_current_user), db=Depends(get_db), _=Depends(require_permission("attendance.request_leave"))):
