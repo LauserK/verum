@@ -112,30 +112,49 @@ async def add_manual_attendance(body: ManualAttendanceRequest, current_user=Depe
             "expected_end": active_shift["expected_end"]
         })
 
-    # 4. Insert Clock In
+    # 4. Calculate Minutes Late and Overtime (New Logic)
+    # Overtime only if total_worked_minutes > total_expected_minutes
+    minutes_late = 0
+    overtime_hours = 0
+    
+    if active_shift:
+        # Expected duration in minutes
+        e_in = datetime.strptime(active_shift["expected_start"], "%H:%M:%S")
+        e_out = datetime.strptime(active_shift["expected_end"], "%H:%M:%S")
+        total_expected_mins = (e_out.hour * 60 + e_out.minute) - (e_in.hour * 60 + e_in.minute)
+        
+        # Real duration in minutes
+        total_worked_mins = (out_dt - in_dt).total_seconds() / 60
+        
+        # 1. Late Minutes (based on start time)
+        minutes_late = calculate_late_minutes(in_time_str, active_shift["expected_start"])
+        
+        # 2. Overtime Hours (only if we worked more than expected)
+        if total_worked_mins > total_expected_mins:
+            overtime_mins = total_worked_mins - total_expected_mins
+            overtime_hours = int(overtime_mins // 60)
+
+    # 5. Insert Clock In
     in_log = base_log.copy()
     in_log.update({
         "event_type": "clock_in",
         "marked_at": in_dt.isoformat(),
+        "minutes_late": minutes_late
     })
-    if active_shift:
-        in_log["minutes_late"] = calculate_late_minutes(in_time_str, active_shift["expected_start"])
-        in_log["overtime_hours"] = calculate_overtime(in_time_str, active_shift["expected_start"], is_entry=True)
     
     db.table("attendance_logs").insert(in_log).execute()
 
-    # 5. Insert Clock Out
+    # 6. Insert Clock Out
     out_log = base_log.copy()
     out_log.update({
         "event_type": "clock_out",
         "marked_at": out_dt.isoformat(),
+        "overtime_hours": overtime_hours
     })
-    if active_shift:
-        out_log["overtime_hours"] = calculate_overtime(out_time_str, active_shift["expected_end"], is_entry=False)
     
     res = db.table("attendance_logs").insert(out_log).execute()
     
-    return {"ok": True, "count": 2}
+    return {"ok": True, "count": 2, "overtime_hours": overtime_hours, "minutes_late": minutes_late}
 ```
 
 - [ ] **Step 2: Commit**
