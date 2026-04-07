@@ -15,6 +15,7 @@ export default function VenueSelectionPage() {
     const [loading, setLoading] = useState(true)
     const [organizations, setOrganizations] = useState<OrgInfo[]>([])
     const [selectedOrg, setSelectedOrg] = useState<OrgInfo | null>(null)
+    const [userRole, setUserRole] = useState<string | null>(null)
     const [step, setStep] = useState<'org' | 'venue'>('org')
     const [error, setError] = useState(false)
 
@@ -22,6 +23,7 @@ export default function VenueSelectionPage() {
         async function init() {
             try {
                 const profile = await getProfile()
+                setUserRole(profile.role)
                 if (profile.organizations && profile.organizations.length > 0) {
                     setOrganizations(profile.organizations)
                     
