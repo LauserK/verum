@@ -64,8 +64,14 @@ export default function VenueSelectionPage() {
 
     const handleOrgSelect = (org: OrgInfo) => {
         setActiveOrgId(org.id)
-        setSelectedOrg(org)
-        setStep('venue')
+        
+        if ((!org.venues || org.venues.length === 0) && userRole === 'admin') {
+            // Selected org has no venues and user is admin -> redirect to create venue
+            router.push('/admin/venues')
+        } else {
+            setSelectedOrg(org)
+            setStep('venue')
+        }
     }
 
     const handleVenueSelect = (venueId: string) => {
