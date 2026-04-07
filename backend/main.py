@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, Header
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
@@ -92,6 +92,30 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         )
 
 
+async def get_active_org_id(x_org_id: Optional[str] = Header(None), current_user=Depends(get_current_user), db=Depends(get_db)) -> str:
+    """
+    Resolves the active organization ID from the X-Org-ID header, 
+    or fallbacks to default/first organization.
+    """
+    # 1. If header exists, validate user belongs to it
+    if x_org_id:
+        res = db.table("profile_organizations").select("organization_id").eq("profile_id", current_user.id).eq("organization_id", x_org_id).execute()
+        if res.data:
+            return x_org_id
+    
+    # 2. Fallback: get default or first org
+    res = db.table("profile_organizations").select("organization_id").eq("profile_id", current_user.id).order("is_default", desc=True).limit(1).execute()
+    if res.data:
+        return res.data[0]["organization_id"]
+    
+    # 3. Final fallback: profile.organization_id (legacy)
+    profile = db.table("profiles").select("organization_id").eq("id", current_user.id).execute()
+    if profile.data and len(profile.data) > 0 and profile.data[0].get("organization_id"):
+        return profile.data[0]["organization_id"]
+        
+    raise HTTPException(400, "Organization context required")
+
+
 from permissions import resolve_permission
 
 
@@ -99,7 +123,7 @@ from permissions import resolve_permission, check_restriction
 from attendance_utils import is_clocked_in
 
 def require_permission(permission_key: str):
-    async def _check(current_user=Depends(get_current_user), db=Depends(get_db)):
+    async def _check(current_user=Depends(get_current_user), db=Depends(get_db), org_id: str = Depends(get_active_org_id)):
         # profile_id is current_user.id in Supabase Auth
         profile_id = current_user.id
         
@@ -111,7 +135,7 @@ def require_permission(permission_key: str):
         if not is_attendance_action and not is_admin_action:
             # We use check_restriction to ignore the admin bypass here
             # because force_clock_in is a restriction, not a capability.
-            force_check = await check_restriction(profile_id, "attendance.force_clock_in", db)
+            force_check = await check_restriction(profile_id, "attendance.force_clock_in", db, org_id=org_id)
             if force_check:
                 clocked_in = await is_clocked_in(profile_id, db)
                 if not clocked_in:
@@ -121,7 +145,7 @@ def require_permission(permission_key: str):
                     )
 
         # 2. Standard permission check
-        has_perm = await resolve_permission(profile_id, permission_key, db)
+        has_perm = await resolve_permission(profile_id, permission_key, db, org_id=org_id)
         if not has_perm:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -843,13 +867,9 @@ async def delete_venue(venue_id: str, user=Depends(require_permission("admin.man
 # ── Admin Users CRUD ────────────────────────────────────
 
 @app.get("/admin/users")
-async def list_users(user=Depends(require_permission("admin.manage_users"))):
+async def list_users(user=Depends(require_permission("admin.manage_users")), org_id: str = Depends(get_active_org_id)):
     """List all profiles in the admin's organization."""
     db = get_db()
-    admin_profile = db.table("profiles").select("organization_id").eq("id", user.id).single().execute()
-    org_id = admin_profile.data.get("organization_id")
-    if not org_id:
-        return []
     res = db.table("profiles").select("id, full_name, role, organization_id, venue_id, shift_id").eq("organization_id", org_id).execute()
     # Get emails from auth users
     profiles = res.data or []
@@ -1221,6 +1241,7 @@ async def get_compliance_report(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     user=Depends(require_permission("admin.view_reports")),
+    org_id: str = Depends(get_active_org_id)
 ):
     """
     Returns compliance metrics:
@@ -1231,12 +1252,6 @@ async def get_compliance_report(
     """
     try:
         db = get_db()
-        # Get organization of current admin
-        profile_res = db.table("profiles").select("organization_id").eq("id", user.id).single().execute()
-        if not profile_res.data:
-            raise HTTPException(404, "Profile not found")
-        org_id = profile_res.data["organization_id"]
-
         today = datetime.now(CARACAS_TZ).strftime("%Y-%m-%d")
         d_from = date_from or today
         d_to = date_to or today
@@ -1477,7 +1492,7 @@ async def get_effective_permissions(profile_id: str, db=Depends(get_db)):
 # ── Inventory: Assets Endpoints (M8) ─────────────────────
 
 @app.get("/asset-categories")
-async def list_asset_categories(org_id: str, db=Depends(get_db)):
+async def list_asset_categories(db=Depends(get_db), org_id: str = Depends(get_active_org_id)):
     res = db.table("asset_categories").select("*").eq("org_id", org_id).execute()
     return res.data or []
 
@@ -1495,8 +1510,8 @@ async def update_asset_category(category_id: str, body: UpdateAssetCategoryReque
     return res.data[0] if res.data else {}
 
 @app.get("/assets")
-async def list_assets(venue_id: Optional[str] = None, status: Optional[str] = None, category_id: Optional[str] = None, include_archived: bool = False, db=Depends(get_db), _=Depends(require_permission("inventory_assets.view"))):
-    query = db.table("assets").select("*, asset_categories(name)")
+async def list_assets(venue_id: Optional[str] = None, status: Optional[str] = None, category_id: Optional[str] = None, include_archived: bool = False, db=Depends(get_db), _=Depends(require_permission("inventory_assets.view")), org_id: str = Depends(get_active_org_id)):
+    query = db.table("assets").select("*, asset_categories(name)").eq("org_id", org_id)
     if venue_id:
         query = query.eq("venue_id", venue_id)
     if status:
@@ -1587,7 +1602,7 @@ async def review_asset(asset_id: str, body: AssetReviewRequest, current_user=Dep
 # ── Inventory: Utensils Endpoints (M10) ───────────────────
 
 @app.get("/utensil-categories")
-async def list_utensil_categories(org_id: str, db=Depends(get_db)):
+async def list_utensil_categories(db=Depends(get_db), org_id: str = Depends(get_active_org_id)):
     res = db.table("utensil_categories").select("*").eq("org_id", org_id).execute()
     return res.data or []
 
@@ -1605,10 +1620,8 @@ async def update_utensil_category(category_id: str, body: UpdateUtensilCategoryR
     return res.data[0] if res.data else {}
 
 @app.get("/utensils")
-async def list_utensils(org_id: Optional[str] = None, category_id: Optional[str] = None, include_archived: bool = False, db=Depends(get_db)):
-    query = db.table("utensils").select("*, utensil_categories(name)")
-    if org_id:
-        query = query.eq("org_id", org_id)
+async def list_utensils(category_id: Optional[str] = None, include_archived: bool = False, db=Depends(get_db), org_id: str = Depends(get_active_org_id)):
+    query = db.table("utensils").select("*, utensil_categories(name)").eq("org_id", org_id)
     if not include_archived:
         query = query.eq("is_active", True)
     if category_id:
@@ -2239,15 +2252,10 @@ async def get_admin_summary(
     venue_id: Optional[str] = None,
     db=Depends(get_db),
     current_user=Depends(get_current_user),
-    _=Depends(require_permission("admin.view_dashboard"))
+    _=Depends(require_permission("admin.view_dashboard")),
+    org_id: str = Depends(get_active_org_id)
 ):
     try:
-        # Get organization
-        profile_res = db.table("profiles").select("organization_id").eq("id", current_user.id).single().execute()
-        if not profile_res.data:
-            raise HTTPException(404, "Profile not found")
-        org_id = profile_res.data["organization_id"]
-
         # 1. Active Staff Count
         today_str = datetime.now(CARACAS_TZ).strftime("%Y-%m-%d")
         
@@ -2335,16 +2343,10 @@ async def get_inventory_dashboard_summary(
     venue_id: Optional[str] = None,
     db=Depends(get_db),
     current_user=Depends(get_current_user),
-    _=Depends(require_permission("inventory_assets.view"))
+    _=Depends(require_permission("inventory_assets.view")),
+    org_id: str = Depends(get_active_org_id)
 ):
     try:
-        # We need the org_id to filter correctly if venue_id is not provided
-        profile_res = db.table("profiles").select("organization_id").eq("id", current_user.id).single().execute()
-        if not profile_res.data:
-            raise HTTPException(404, "Profile not found")
-            
-        org_id = profile_res.data["organization_id"]
-
         # 1. Asset Status Scorecards
         assets_query = db.table("assets").select("id, status").eq("org_id", org_id)
         if venue_id:
@@ -2793,12 +2795,8 @@ async def get_my_requests(current_user=Depends(get_current_user), db=Depends(get
     return res.data or []
 
 @app.get("/admin/attendance/requests")
-async def get_pending_requests(venue_id: Optional[str] = None, current_user=Depends(get_current_user), db=Depends(get_db), _=Depends(require_permission("attendance.manage"))):
+async def get_pending_requests(venue_id: Optional[str] = None, current_user=Depends(get_current_user), db=Depends(get_db), _=Depends(require_permission("attendance.manage")), org_id: str = Depends(get_active_org_id)):
     """Admin lists pending leave requests for their organization/venue."""
-    # Get organization
-    profile_res = db.table("profiles").select("organization_id").eq("id", current_user.id).single().execute()
-    org_id = profile_res.data.get("organization_id")
-    
     # Get venue IDs for this org
     venues_res = db.table("venues").select("id").eq("org_id", org_id).execute()
     org_venue_ids = [v["id"] for v in (venues_res.data or [])]
@@ -2815,12 +2813,8 @@ async def get_pending_requests(venue_id: Optional[str] = None, current_user=Depe
     return res.data or []
 
 @app.get("/admin/attendance/absences")
-async def list_all_absences(venue_id: Optional[str] = None, current_user=Depends(get_current_user), db=Depends(get_db), _=Depends(require_permission("attendance.manage"))):
+async def list_all_absences(venue_id: Optional[str] = None, current_user=Depends(get_current_user), db=Depends(get_db), _=Depends(require_permission("attendance.manage")), org_id: str = Depends(get_active_org_id)):
     """Admin lists all absences (history) for their organization/venue."""
-    # Get organization
-    profile_res = db.table("profiles").select("organization_id").eq("id", current_user.id).single().execute()
-    org_id = profile_res.data.get("organization_id")
-    
     # Get venue IDs for this org
     venues_res = db.table("venues").select("id").eq("org_id", org_id).execute()
     org_venue_ids = [v["id"] for v in (venues_res.data or [])]

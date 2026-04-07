@@ -16,11 +16,14 @@ export async function fetchWithAuth<T = unknown>(path: string, options: RequestI
         throw new Error('Not authenticated')
     }
 
+    const activeOrgId = typeof window !== 'undefined' ? localStorage.getItem('activeOrgId') : null
+
     const res = await fetch(`${API_URL}${path}`, {
         ...options,
         headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${session.access_token}`,
+            ...(activeOrgId ? { 'X-Org-ID': activeOrgId } : {}),
             ...options.headers,
         },
     })

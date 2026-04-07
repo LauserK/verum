@@ -2,14 +2,27 @@
 from fastapi import Depends, HTTPException, status
 from database import get_db
 
-async def resolve_permission(profile_id: str, permission_key: str, db) -> bool:
-    # 1. Check admin bypass
-    # Fetch user's custom role
-    role_res = db.table('profile_roles').select('role_id, custom_roles(is_admin)').eq('profile_id', profile_id).execute()
-    if role_res.data and len(role_res.data) > 0:
-        custom_role = role_res.data[0].get('custom_roles', {})
-        if custom_role and custom_role.get('is_admin') is True:
-            return True
+async def resolve_permission(profile_id: str, permission_key: str, db, org_id: str = None) -> bool:
+    # 1. Fetch user's organization-specific role
+    role_id = None
+    is_admin = False
+
+    if org_id:
+        po_res = db.table('profile_organizations').select('role_id, custom_roles(is_admin)').eq('profile_id', profile_id).eq('organization_id', org_id).execute()
+        if po_res.data:
+            role_id = po_res.data[0].get('role_id')
+            is_admin = po_res.data[0].get('custom_roles', {}).get('is_admin') is True
+    
+    # Fallback to legacy profile_roles if no org_id or no record in profile_organizations
+    if not role_id:
+        role_res = db.table('profile_roles').select('role_id, custom_roles(is_admin)').eq('profile_id', profile_id).execute()
+        if role_res.data:
+            role_id = role_res.data[0].get('role_id')
+            is_admin = role_res.data[0].get('custom_roles', {}).get('is_admin') is True
+
+    # Check admin bypass
+    if is_admin:
+        return True
 
     # Fetch permission id
     perm_res = db.table('permissions').select('id').eq('key', permission_key).execute()
@@ -23,8 +36,7 @@ async def resolve_permission(profile_id: str, permission_key: str, db) -> bool:
         return override_res.data[0]['granted']
 
     # 3. Check role permissions
-    if role_res.data and len(role_res.data) > 0:
-        role_id = role_res.data[0]['role_id']
+    if role_id:
         rp_res = db.table('role_permissions').select('permission_id').eq('role_id', role_id).eq('permission_id', perm_id).execute()
         if rp_res.data and len(rp_res.data) > 0:
             return True
@@ -32,8 +44,22 @@ async def resolve_permission(profile_id: str, permission_key: str, db) -> bool:
     return False
 
 
-async def check_restriction(profile_id: str, permission_key: str, db) -> bool:
+async def check_restriction(profile_id: str, permission_key: str, db, org_id: str = None) -> bool:
     """ Checks for a permission without admin bypass. Useful for toggleable restrictions. """
+    # Fetch user's organization-specific role
+    role_id = None
+
+    if org_id:
+        po_res = db.table('profile_organizations').select('role_id').eq('profile_id', profile_id).eq('organization_id', org_id).execute()
+        if po_res.data:
+            role_id = po_res.data[0].get('role_id')
+    
+    # Fallback to legacy profile_roles
+    if not role_id:
+        role_res = db.table('profile_roles').select('role_id').eq('profile_id', profile_id).execute()
+        if role_res.data:
+            role_id = role_res.data[0].get('role_id')
+
     # Fetch permission id
     perm_res = db.table('permissions').select('id').eq('key', permission_key).execute()
     if not perm_res.data:
@@ -46,9 +72,7 @@ async def check_restriction(profile_id: str, permission_key: str, db) -> bool:
         return override_res.data[0]['granted']
 
     # 2. Check role permissions
-    role_res = db.table('profile_roles').select('role_id').eq('profile_id', profile_id).execute()
-    if role_res.data and len(role_res.data) > 0:
-        role_id = role_res.data[0]['role_id']
+    if role_id:
         rp_res = db.table('role_permissions').select('permission_id').eq('role_id', role_id).eq('permission_id', perm_id).execute()
         if rp_res.data and len(rp_res.data) > 0:
             return True
