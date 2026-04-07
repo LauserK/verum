@@ -323,8 +323,15 @@
   "venueSelection": {
     "title": "Selecciona tu sede",
     "subtitle": "Elige la sede donde trabajarás hoy",
+    "orgTitle": "Selecciona tu empresa",
+    "orgSubtitle": "Elige la organización con la que trabajarás",
+    "venuesCount": "{count} sedes",
+    "venueSubtitle": "Sede Operativa",
+    "back": "Volver",
+    "loading": "Cargando...",
     "noVenues": "No tienes sedes asignadas. Contacta a tu administrador.",
-    "backToLogin": "Volver al inicio de sesión"
+    "backToLogin": "Volver al inicio de sesión",
+    "logout": "Cerrar Sesión"
   },
   "attendance": {
     "title": "Asistencia",

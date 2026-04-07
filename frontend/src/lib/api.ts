@@ -64,6 +64,7 @@ export interface Profile {
     role: string
     organizations: OrgInfo[]
     // Keep legacy for now
+    venues: VenueInfo[]
     organization_id?: string
     venue_id?: string
     shift_id?: string
@@ -86,8 +87,13 @@ export interface ChecklistItem {
     submission_id: string | null
 }
 
-export function getProfile(): Promise<Profile> {
-    return fetchWithAuth('/me')
+export async function getProfile(): Promise<Profile> {
+    const profile = await fetchWithAuth<Profile>('/me')
+    // Compatibility layer: flatten all venues from all orgs into a top-level venues array
+    if (!profile.venues) {
+        profile.venues = profile.organizations?.flatMap(org => org.venues || []) || []
+    }
+    return profile
 }
 
 export function getChecklists(venueId: string): Promise<ChecklistItem[]> {

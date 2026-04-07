@@ -322,8 +322,15 @@
   "venueSelection": {
     "title": "Select your venue",
     "subtitle": "Choose the venue where you'll be working today",
+    "orgTitle": "Select your company",
+    "orgSubtitle": "Choose the organization you'll be working with",
+    "venuesCount": "{count} venues",
+    "venueSubtitle": "Operating Venue",
+    "back": "Back",
+    "loading": "Loading...",
     "noVenues": "You have no assigned venues. Contact your administrator.",
-    "backToLogin": "Back to login"
+    "backToLogin": "Back to login",
+    "logout": "Log Out"
   },
   "attendance": {
     "title": "Attendance",
