@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useTranslations } from '@/components/I18nProvider';
+import { useVenue } from '@/components/VenueContext';
 import { Loader2, Check, AlertCircle } from 'lucide-react';
 
 interface CustomRole {
@@ -12,6 +13,7 @@ interface CustomRole {
 
 export function UserPermissions({ userId }: { userId: string }) {
   const { t } = useTranslations('admin');
+  const { activeOrgId } = useVenue();
   const supabase = createClient();
   
   const [roles, setRoles] = useState<CustomRole[]>([]);
@@ -23,6 +25,7 @@ export function UserPermissions({ userId }: { userId: string }) {
 
   useEffect(() => {
     async function fetchData() {
+      if (!userId || !activeOrgId) return;
       setLoading(true);
       try {
         // 1. Fetch user profile
@@ -33,20 +36,33 @@ export function UserPermissions({ userId }: { userId: string }) {
           .single();
         if (profile) setUserName(profile.full_name);
 
-        // 2. Fetch all available roles
+        // 2. Fetch available roles for the active organization
         const { data: allRoles } = await supabase
           .from('custom_roles')
           .select('id, name')
+          .eq('org_id', activeOrgId)
           .order('name');
         if (allRoles) setRoles(allRoles);
 
-        // 3. Fetch current user role
-        const { data: userRole } = await supabase
-          .from('profile_roles')
+        // 3. Fetch current user role in THIS organization
+        const { data: orgRole } = await supabase
+          .from('profile_organizations')
           .select('role_id')
           .eq('profile_id', userId)
+          .eq('organization_id', activeOrgId)
           .single();
-        if (userRole) setSelectedRoleId(userRole.role_id);
+        
+        if (orgRole) {
+            setSelectedRoleId(orgRole.role_id || '');
+        } else {
+            // Fallback: check legacy profile_roles if no org-specific role yet
+            const { data: legacyRole } = await supabase
+              .from('profile_roles')
+              .select('role_id')
+              .eq('profile_id', userId)
+              .single();
+            if (legacyRole) setSelectedRoleId(legacyRole.role_id);
+        }
 
       } catch (err) {
         console.error('Error fetching permissions data:', err);
@@ -55,26 +71,36 @@ export function UserPermissions({ userId }: { userId: string }) {
       }
     }
 
-    if (userId) fetchData();
-  }, [userId, supabase]);
+    fetchData();
+  }, [userId, activeOrgId, supabase]);
 
   const handleRoleChange = async (roleId: string) => {
+    if (!activeOrgId) return;
+    
     setSelectedRoleId(roleId);
     setSaving(true);
     setSaveStatus('idle');
 
     try {
-      if (!roleId) {
-        // If empty selection, remove the role
-        await supabase.from('profile_roles').delete().eq('profile_id', userId);
-      } else {
-        // Upsert the role
-        const { error } = await supabase
-          .from('profile_roles')
-          .upsert({ profile_id: userId, role_id: roleId });
-        
-        if (error) throw error;
+      // Upsert the role in the multi-tenant table
+      const { error } = await supabase
+        .from('profile_organizations')
+        .upsert({ 
+            profile_id: userId, 
+            organization_id: activeOrgId,
+            role_id: roleId || null 
+        }, { onConflict: 'profile_id,organization_id' });
+      
+      if (error) throw error;
+
+      // For backward compatibility, also update legacy profile_roles if this is the only/default org
+      if (roleId) {
+          await supabase.from('profile_roles').upsert({
+              profile_id: userId,
+              role_id: roleId
+          });
       }
+
       setSaveStatus('success');
       setTimeout(() => setSaveStatus('idle'), 3000);
     } catch (err) {

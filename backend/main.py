@@ -6,6 +6,7 @@ import pytz
 from datetime import datetime, timezone, timedelta
 import io
 import csv
+from pydantic import BaseModel
 from typing import Optional, List
 
 from schemas import (
@@ -883,7 +884,7 @@ async def list_users(user=Depends(require_permission("admin.manage_users")), org
 
 
 @app.post("/admin/users")
-async def create_user(body: CreateUserRequest, user=Depends(require_permission("admin.manage_users"))):
+async def create_user(body: CreateUserRequest, user=Depends(require_permission("admin.manage_users")), org_id: str = Depends(get_active_org_id)):
     """Create a new user via Supabase Auth admin API + profile."""
     try:
         db = get_db()
@@ -916,6 +917,7 @@ async def create_user(body: CreateUserRequest, user=Depends(require_permission("
             db.table("profile_venues").insert(pv_data).execute()
 
         # Handle custom role assignment
+        role_id = None
         if body.role not in ["staff", "admin"]:
             # Find the role by name in custom_roles
             role_res = db.table("custom_roles").select("id").eq("name", body.role).eq("org_id", body.organization_id).execute()
@@ -926,6 +928,14 @@ async def create_user(body: CreateUserRequest, user=Depends(require_permission("
                     "role_id": role_id
                 }).execute()
 
+        # Multi-tenant: Assign to profile_organizations
+        db.table("profile_organizations").upsert({
+            "profile_id": new_user.id,
+            "organization_id": body.organization_id,
+            "role_id": role_id,
+            "is_default": True
+        }).execute()
+
         return {"id": new_user.id, "email": body.email, "full_name": body.full_name, "role": body.role, "venue_ids": v_ids, "venue_id": body.venue_id, "shift_id": body.shift_id, "organization_id": body.organization_id}
     except HTTPException:
         raise
@@ -934,7 +944,7 @@ async def create_user(body: CreateUserRequest, user=Depends(require_permission("
 
 
 @app.put("/admin/users/{user_id}")
-async def update_user(user_id: str, body: UpdateUserRequest, user=Depends(require_permission("admin.manage_users"))):
+async def update_user(user_id: str, body: UpdateUserRequest, user=Depends(require_permission("admin.manage_users")), org_id: str = Depends(get_active_org_id)):
     db = get_db()
     payload = {}
     if body.full_name is not None:
@@ -961,6 +971,27 @@ async def update_user(user_id: str, body: UpdateUserRequest, user=Depends(requir
     elif body.venue_id is not None:
          db.table("profile_venues").delete().eq("profile_id", user_id).execute()
          db.table("profile_venues").insert({"profile_id": user_id, "venue_id": body.venue_id}).execute()
+
+    # Multi-tenant: Update role in profile_organizations for the active org
+    if body.role is not None:
+        role_id = None
+        if body.role not in ["staff", "admin"]:
+            # We need the org_id for this user or from context
+            # Since this is an admin action, we use the active_org_id from the admin's context
+            role_res = db.table("custom_roles").select("id").eq("name", body.role).eq("org_id", org_id).execute()
+            if role_res.data:
+                role_id = role_res.data[0]["id"]
+                # Update legacy table too for compatibility
+                db.table("profile_roles").upsert({
+                    "profile_id": user_id,
+                    "role_id": role_id
+                }).execute()
+        
+        db.table("profile_organizations").upsert({
+            "profile_id": user_id,
+            "organization_id": org_id,
+            "role_id": role_id
+        }).execute()
          
     # Fetch and return the updated profile to ensure consistency
     updated_profile = db.table("profiles").select("*").eq("id", user_id).single().execute()
@@ -1448,6 +1479,38 @@ async def get_compliance_report(
 async def list_permissions(db=Depends(get_db), _=Depends(require_permission("admin.manage_users"))):
     res = db.table("permissions").select("*").execute()
     return res.data
+
+
+class RoleCreate(BaseModel):
+    org_id: str
+    name: str
+    description: Optional[str] = None
+    is_admin: bool = False
+
+
+@app.get("/roles")
+async def list_roles(org_id: Optional[str] = None, db=Depends(get_db), active_org_id: str = Depends(get_active_org_id)):
+    # Use provided org_id or the active one from context
+    target_org_id = org_id or active_org_id
+    res = db.table("custom_roles").select("*").eq("org_id", target_org_id).execute()
+    return res.data
+
+
+@app.post("/roles")
+async def create_role(role: RoleCreate, db=Depends(get_db), _=Depends(require_permission("admin.manage_roles"))):
+    res = db.table("custom_roles").insert(role.dict()).execute()
+    return res.data[0]
+
+
+@app.post("/roles/{role_id}/permissions")
+async def assign_role_permissions(role_id: str, permission_ids: List[str], db=Depends(get_db), _=Depends(require_permission("admin.manage_roles"))):
+    # delete old permissions
+    db.table("role_permissions").delete().eq("role_id", role_id).execute()
+    # insert new
+    inserts = [{"role_id": role_id, "permission_id": pid} for pid in permission_ids]
+    if inserts:
+        db.table("role_permissions").insert(inserts).execute()
+    return {"status": "success"}
 
 
 @app.post("/profiles/{profile_id}/overrides")

@@ -8,10 +8,12 @@ import {
 } from '@/lib/api'
 import { Plus, Trash2, Edit3, Save, X, Loader2, Shield, User, KeyRound, Fingerprint } from 'lucide-react'
 import { useTranslations } from '@/components/I18nProvider'
+import { useVenue } from '@/components/VenueContext'
 import Link from 'next/link'
 
 export default function TeamPage() {
     const { t } = useTranslations('admin')
+    const { activeOrgId } = useVenue()
     const router = useRouter()
     const [profile, setProfile] = useState<Profile | null>(null)
     const [users, setUsers] = useState<AdminUser[]>([])
@@ -50,15 +52,16 @@ export default function TeamPage() {
 
     useEffect(() => {
         async function load() {
+            if (!activeOrgId) return
             try {
                 const p = await getProfile()
                 setProfile(p)
                 const u = await adminApi.getUsers()
                 setUsers(u)
-                if (p.organization_id) {
-                    const r = await adminApi.getRoles(p.organization_id)
-                    setRoles(r)
-                }
+                
+                const r = await adminApi.getRoles(activeOrgId)
+                setRoles(r)
+                
                 // Load all shifts for all venues
                 const allS: Shift[] = []
                 for (const v of p.venues) {
@@ -72,10 +75,10 @@ export default function TeamPage() {
             setLoading(false)
         }
         load()
-    }, [])
+    }, [activeOrgId])
 
     const handleCreate = async () => {
-        if (!newEmail || !newPass || !newFirstName || !newLastName || !profile) return
+        if (!newEmail || !newPass || !newFirstName || !newLastName || !activeOrgId) return
         setSaving(true)
         setError('')
         try {
@@ -84,7 +87,7 @@ export default function TeamPage() {
                 password: newPass,
                 full_name: `${newFirstName.trim()} ${newLastName.trim()}`,
                 role: newRole,
-                organization_id: profile.organization_id || '',
+                organization_id: activeOrgId,
                 venue_ids: newVenues,
                 shift_id: newShift || undefined,
             })
