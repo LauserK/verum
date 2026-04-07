@@ -49,17 +49,25 @@ export async function fetchWithAuth<T = unknown>(path: string, options: RequestI
 export interface VenueInfo {
     id: string
     name: string
+    address?: string
+}
+
+export interface OrgInfo {
+    id: string
+    name: string
+    venues: VenueInfo[]
 }
 
 export interface Profile {
     id: string
-    full_name: string | null
+    full_name: string
     role: string
-    organization_id: string | null
-    venues: VenueInfo[]
-    venue_id?: string | null
-    shift_id?: string | null
-    shift_name?: string | null
+    organizations: OrgInfo[]
+    // Keep legacy for now
+    organization_id?: string
+    venue_id?: string
+    shift_id?: string
+    shift_name?: string
 }
 
 export interface ChecklistItem {
