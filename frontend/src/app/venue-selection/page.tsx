@@ -161,26 +161,33 @@ export default function VenueSelectionPage() {
                             </button>
                         ))
                     ) : (
-                        selectedOrg?.venues?.map((venue) => (
-                            <button
-                                key={venue.id}
-                                onClick={() => handleVenueSelect(venue.id)}
-                                className="group relative bg-surface border border-border rounded-3xl p-6 flex items-center justify-between hover:border-primary hover:shadow-xl hover:shadow-primary/5 transition-all duration-300 active:scale-[0.98] text-left"
-                            >
-                                <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 bg-primary/10 text-primary rounded-2xl flex items-center justify-center group-hover:bg-primary group-hover:text-text-inverse transition-colors duration-300">
-                                        <MapPin className="w-6 h-6" strokeWidth={2.5} />
+                        step === 'venue' && (!selectedOrg?.venues || selectedOrg.venues.length === 0) ? (
+                            <div className="text-center py-10">
+                                <MapPin className="w-12 h-12 text-text-disabled mx-auto mb-4" />
+                                <p className="text-text-secondary font-medium">{t('noVenues')}</p>
+                            </div>
+                        ) : (
+                            selectedOrg?.venues?.map((venue) => (
+                                <button
+                                    key={venue.id}
+                                    onClick={() => handleVenueSelect(venue.id)}
+                                    className="group relative bg-surface border border-border rounded-3xl p-6 flex items-center justify-between hover:border-primary hover:shadow-xl hover:shadow-primary/5 transition-all duration-300 active:scale-[0.98] text-left"
+                                >
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-12 h-12 bg-primary/10 text-primary rounded-2xl flex items-center justify-center group-hover:bg-primary group-hover:text-text-inverse transition-colors duration-300">
+                                            <MapPin className="w-6 h-6" strokeWidth={2.5} />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-lg font-bold text-text-primary group-hover:text-primary transition-colors">{venue.name}</h3>
+                                            <p className="text-xs font-bold text-text-secondary uppercase tracking-widest mt-0.5">{t('venueSubtitle')}</p>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <h3 className="text-lg font-bold text-text-primary group-hover:text-primary transition-colors">{venue.name}</h3>
-                                        <p className="text-xs font-bold text-text-secondary uppercase tracking-widest mt-0.5">{t('venueSubtitle')}</p>
+                                    <div className="w-10 h-10 rounded-full bg-surface-raised flex items-center justify-center text-text-disabled group-hover:bg-primary/10 group-hover:text-primary transition-all duration-300">
+                                        <ArrowRight className="w-5 h-5" />
                                     </div>
-                                </div>
-                                <div className="w-10 h-10 rounded-full bg-surface-raised flex items-center justify-center text-text-disabled group-hover:bg-primary/10 group-hover:text-primary transition-all duration-300">
-                                    <ArrowRight className="w-5 h-5" />
-                                </div>
-                            </button>
-                        ))
+                                </button>
+                            ))
+                        )
                     )}
                 </div>
 
