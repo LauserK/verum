@@ -5,12 +5,14 @@ import {
     adminApi, getProfile,
     type Profile, type Venue, type Shift
 } from '@/lib/api'
+import { useVenue } from '@/components/VenueContext'
 import {
     Plus, Trash2, Edit3, Save, X, Loader2, Clock,
     Building2, ChevronRight, MapPin
 } from 'lucide-react'
 
 export default function VenuesPage() {
+    const { activeOrgId, isLoading: venueContextLoading } = useVenue()
     const [profile, setProfile] = useState<Profile | null>(null)
     const [venues, setVenues] = useState<Venue[]>([])
     const [loading, setLoading] = useState(true)
@@ -48,15 +50,25 @@ export default function VenuesPage() {
             try {
                 const p = await getProfile()
                 setProfile(p)
-                if (p.organization_id) {
-                    const v = await adminApi.getVenues(p.organization_id)
+                
+                // Determine the correct organization ID
+                // Prefer context, then localStorage, then profile (as last resort)
+                const savedOrgId = localStorage.getItem('activeOrgId')
+                const orgId = activeOrgId || savedOrgId || p.organization_id
+                
+                if (orgId) {
+                    const v = await adminApi.getVenues(orgId)
                     setVenues(v)
                 }
-            } catch { }
+            } catch (err) {
+                console.error("Failed to load venues", err)
+            }
             setLoading(false)
         }
+        
+        // Wait for profile but also for venue context if possible
         load()
-    }, [])
+    }, [activeOrgId])
 
     const loadShifts = async (venue: Venue) => {
         setSelectedVenue(venue)
@@ -70,10 +82,13 @@ export default function VenuesPage() {
 
     // ── Venue CRUD ─────────────────────────────────────
     const handleCreateVenue = async () => {
-        if (!newVenueName.trim() || !profile?.organization_id) return
+        const savedOrgId = localStorage.getItem('activeOrgId')
+        const orgId = activeOrgId || savedOrgId || profile?.organization_id
+        
+        if (!newVenueName.trim() || !orgId) return
         setSaving(true)
         try {
-            const v = await adminApi.createVenue(profile.organization_id, newVenueName, newVenueAddr || undefined)
+            const v = await adminApi.createVenue(orgId, newVenueName, newVenueAddr || undefined)
             setVenues((prev) => [...prev, v])
             setShowNewVenue(false)
             setNewVenueName('')

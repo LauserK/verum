@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { adminApi, getProfile, type VenueInfo } from '@/lib/api'
+import { useVenue } from '@/components/VenueContext'
 import { Download, Loader2 } from 'lucide-react'
 import { format, subDays, parseISO } from 'date-fns'
 
@@ -17,7 +18,7 @@ interface AttendanceReportRow {
 }
 
 export default function AttendanceReportsPage() {
-    const [venues, setVenues] = useState<VenueInfo[]>([])
+    const { availableVenues, activeOrgId } = useVenue()
     const [venueId, setVenueId] = useState('')
     const [reportType, setReportType] = useState('daily')
     const [dateFrom, setDateFrom] = useState(format(subDays(new Date(), 7), 'yyyy-MM-dd'))
@@ -27,16 +28,17 @@ export default function AttendanceReportsPage() {
     const [exporting, setExporting] = useState(false)
 
     useEffect(() => {
-        getProfile().then(p => {
-            setVenues(p.venues || [])
-            if (p.venues?.[0]) {
-                setVenueId(p.venues[0].id)
-            }
-        })
-    }, [])
+        if (availableVenues.length > 0 && !venueId) {
+            setVenueId(availableVenues[0].id)
+        } else if (availableVenues.length === 0) {
+            setVenueId('')
+            setPreview([])
+            setLoading(false)
+        }
+    }, [availableVenues, venueId])
 
     const handlePreview = async () => {
-        if (!venueId) return
+        if (!venueId || !activeOrgId) return
         setLoading(true)
         try {
             const data = await adminApi.getAttendanceReport(venueId, dateFrom, dateTo)
@@ -48,7 +50,7 @@ export default function AttendanceReportsPage() {
     }
 
     const handleExport = async () => {
-        if (!venueId) return
+        if (!venueId || !activeOrgId) return
         setExporting(true)
         
         try {
@@ -90,7 +92,7 @@ export default function AttendanceReportsPage() {
                 <div className="flex-1 min-w-[200px]">
                     <label className="block text-xs font-bold text-text-secondary uppercase mb-1.5 tracking-wider">Sede</label>
                     <select value={venueId} onChange={e => setVenueId(e.target.value)} className="w-full bg-surface-raised border border-border rounded-xl px-3 h-11 text-sm text-text-primary focus:border-primary outline-none transition-all">
-                        {venues.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                        {availableVenues.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
                     </select>
                 </div>
                 <div className="flex-1 min-w-[150px]">

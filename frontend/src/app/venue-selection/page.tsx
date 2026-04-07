@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { getProfile, type OrgInfo } from '@/lib/api'
 import { useVenue } from '@/components/VenueContext'
@@ -18,8 +18,12 @@ export default function VenueSelectionPage() {
     const [userRole, setUserRole] = useState<string | null>(null)
     const [step, setStep] = useState<'org' | 'venue'>('org')
     const [error, setError] = useState(false)
+    const initRef = useRef(false)
 
     useEffect(() => {
+        if (initRef.current) return
+        initRef.current = true
+
         async function init() {
             try {
                 const profile = await getProfile()
@@ -27,7 +31,6 @@ export default function VenueSelectionPage() {
                 if (profile.organizations && profile.organizations.length > 0) {
                     setOrganizations(profile.organizations)
                     
-                    // Step 3: Redirection logic
                     if (profile.organizations.length === 1) {
                         const org = profile.organizations[0]
                         setActiveOrgId(org.id)
@@ -36,16 +39,13 @@ export default function VenueSelectionPage() {
                             setSelectedVenueId(org.venues[0].id)
                             router.replace('/dashboard')
                         } else if ((!org.venues || org.venues.length === 0) && profile.role === 'admin') {
-                            // Only 1 org, no venues, and is admin -> redirect to create venue
                             router.replace('/admin/venues')
                         } else {
-                            // 1 org but multiple venues (or 0 venues and not admin) -> show venue selection
                             setSelectedOrg(org)
                             setStep('venue')
                             setLoading(false)
                         }
                     } else {
-                        // Multiple organizations -> show organization selection
                         setStep('org')
                         setLoading(false)
                     }
@@ -66,7 +66,6 @@ export default function VenueSelectionPage() {
         setActiveOrgId(org.id)
         
         if ((!org.venues || org.venues.length === 0) && userRole === 'admin') {
-            // Selected org has no venues and user is admin -> redirect to create venue
             router.push('/admin/venues')
         } else {
             setSelectedOrg(org)

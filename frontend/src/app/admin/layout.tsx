@@ -7,11 +7,13 @@ import { logout } from '@/app/login/actions'
 import { LayoutDashboard, ClipboardCheck, Users, Building2, Box, Clock, LogOut, ChevronLeft, Moon, Sun } from 'lucide-react'
 import { useTranslations } from '@/components/I18nProvider'
 import { useTheme } from '@/components/ThemeProvider'
+import { useVenue } from '@/components/VenueContext'
 import { VenueSelector } from '@/components/VenueSelector'
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
     const { t } = useTranslations()
     const { theme, toggleTheme } = useTheme()
+    const { isMultiOrg, activeOrgName } = useVenue()
     const router = useRouter()
     const pathname = usePathname()
     const [profile, setProfile] = useState<Profile | null>(null)
@@ -64,6 +66,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     <VenueSelector />
                 </div>
                 <div className="flex items-center gap-3">
+                    {isMultiOrg && activeOrgName && (
+                        <button 
+                            onClick={() => router.push('/venue-selection')}
+                            className="text-xs font-bold text-primary hover:text-primary-hover bg-primary/5 px-3 py-1.5 rounded-lg border border-primary/10 transition-all flex items-center gap-2"
+                        >
+                            <Building2 className="w-3.5 h-3.5" />
+                            {activeOrgName}
+                        </button>
+                    )}
                     <span className="text-xs text-text-secondary hidden md:block">{profile?.full_name}</span>
                     <button 
                         onClick={toggleTheme}

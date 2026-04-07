@@ -13,7 +13,7 @@ import Link from 'next/link'
 
 export default function TeamPage() {
     const { t } = useTranslations('admin')
-    const { activeOrgId } = useVenue()
+    const { activeOrgId, availableVenues } = useVenue()
     const router = useRouter()
     const [profile, setProfile] = useState<Profile | null>(null)
     const [users, setUsers] = useState<AdminUser[]>([])
@@ -53,6 +53,7 @@ export default function TeamPage() {
     useEffect(() => {
         async function load() {
             if (!activeOrgId) return
+            setLoading(true)
             try {
                 const p = await getProfile()
                 setProfile(p)
@@ -62,9 +63,9 @@ export default function TeamPage() {
                 const r = await adminApi.getRoles(activeOrgId)
                 setRoles(r)
                 
-                // Load all shifts for all venues
+                // Load all shifts for all available venues in this org
                 const allS: Shift[] = []
-                for (const v of p.venues) {
+                for (const v of availableVenues) {
                     try {
                         const shifts = await adminApi.getShifts(v.id)
                         allS.push(...shifts)
@@ -75,7 +76,7 @@ export default function TeamPage() {
             setLoading(false)
         }
         load()
-    }, [activeOrgId])
+    }, [activeOrgId, availableVenues])
 
     const handleCreate = async () => {
         if (!newEmail || !newPass || !newFirstName || !newLastName || !activeOrgId) return
@@ -252,7 +253,7 @@ export default function TeamPage() {
                         <div className="col-span-1 sm:col-span-2 space-y-2">
                             <p className="text-xs font-bold text-text-secondary uppercase px-1">Sedes</p>
                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                                {profile?.venues.map((v) => (
+                                {availableVenues.map((v) => (
                                     <label key={v.id} className={`flex items-center gap-2 px-3 h-10 rounded-xl border transition-colors cursor-pointer
                                         ${newVenues.includes(v.id) ? 'bg-primary/5 border-primary' : 'bg-surface border-border hover:bg-surface-raised'}`}
                                     >
@@ -353,7 +354,7 @@ export default function TeamPage() {
                                     <div className="space-y-2">
                                         <p className="text-xs font-bold text-text-secondary uppercase px-1">Sedes</p>
                                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                                            {profile?.venues.map((v) => (
+                                            {availableVenues.map((v) => (
                                                 <label key={v.id} className={`flex items-center gap-2 px-3 h-10 rounded-xl border transition-colors cursor-pointer
                                                     ${editVenues.includes(v.id) ? 'bg-primary/5 border-primary' : 'bg-surface border-border hover:bg-surface-raised'}`}
                                                 >
@@ -466,7 +467,7 @@ export default function TeamPage() {
                                                 </span>
                                                 {(u.venue_ids || (u.venue_id ? [u.venue_id] : [])).map(vid => (
                                                     <span key={vid} className="text-[10px] text-text-secondary bg-surface-raised px-1.5 py-0.5 rounded-md">
-                                                        {profile?.venues.find(v => v.id === vid)?.name || 'Venue'}
+                                                        {availableVenues.find(v => v.id === vid)?.name || 'Venue'}
                                                     </span>
                                                 ))}
                                                 {u.shift_id && (

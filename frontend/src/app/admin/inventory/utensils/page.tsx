@@ -3,15 +3,16 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { adminApi, getProfile, type Utensil, type UtensilCategory, type VenueInfo } from '@/lib/api'
+import { useVenue } from '@/components/VenueContext'
 import { Plus, Edit3, Save, X, Loader2, Search, Filter, ArrowRightLeft } from 'lucide-react'
 import Link from 'next/link'
 import { useTranslations } from '@/components/I18nProvider'
 
 export default function UtensilsPage() {
   const { t } = useTranslations()
+  const { availableVenues, activeOrgId } = useVenue()
   const [utensils, setUtensils] = useState<Utensil[]>([])
   const [categories, setCategories] = useState<UtensilCategory[]>([])
-  const [venues, setVenues] = useState<VenueInfo[]>([])
   const [uniqueUnits, setUniqueUnits] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   
@@ -77,28 +78,25 @@ export default function UtensilsPage() {
   }
 
   const fetchData = useCallback(async () => {
+    if (!activeOrgId) return
     setLoading(true)
     try {
-      const profile = await getProfile()
-      if (profile.organization_id) {
-        const [utRes, catRes] = await Promise.all([
-          adminApi.getUtensils({ org_id: profile.organization_id }),
-          adminApi.getUtensilCategories(profile.organization_id)
-        ])
-        setUtensils(utRes)
-        setCategories(catRes)
-        setVenues(profile.venues || [])
-        
-        // Extract unique units for suggestions
-        const units = Array.from(new Set(utRes.map(u => u.unit))).filter(Boolean)
-        setUniqueUnits(units)
-      }
+      const [utRes, catRes] = await Promise.all([
+        adminApi.getUtensils({ org_id: activeOrgId }),
+        adminApi.getUtensilCategories(activeOrgId)
+      ])
+      setUtensils(utRes)
+      setCategories(catRes)
+      
+      // Extract unique units for suggestions
+      const units = Array.from(new Set(utRes.map(u => u.unit))).filter(Boolean)
+      setUniqueUnits(units)
     } catch (err) {
       console.error('Error fetching utensils data:', err)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [activeOrgId])
 
   useEffect(() => {
     fetchData()
@@ -113,11 +111,10 @@ export default function UtensilsPage() {
 
     setSaving(true)
     try {
-      const profile = await getProfile()
-      if (!profile.organization_id) throw new Error('No organization found')
+      if (!activeOrgId) throw new Error('No organization found')
       
       const payload = {
-        org_id: profile.organization_id,
+        org_id: activeOrgId,
         category_id: newCategoryId,
         name: newName,
         unit: newUnit || 'unidades',
@@ -402,7 +399,7 @@ export default function UtensilsPage() {
                       className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary focus:border-primary outline-none appearance-none"
                     >
                       <option value="">Seleccionar origen</option>
-                      {venues.map(v => (
+                      {availableVenues.map(v => (
                         <option key={v.id} value={v.id}>{v.name}</option>
                       ))}
                     </select>
@@ -415,7 +412,7 @@ export default function UtensilsPage() {
                       className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary focus:border-primary outline-none appearance-none"
                     >
                       <option value="">Seleccionar destino</option>
-                      {venues.map(v => (
+                      {availableVenues.map(v => (
                         <option key={v.id} value={v.id}>{v.name}</option>
                       ))}
                     </select>
