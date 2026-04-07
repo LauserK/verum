@@ -11,12 +11,17 @@ class VenueInfo(BaseModel):
     id: str
     name: str
 
+class OrgInfo(BaseModel):
+    id: str
+    name: str
+    venues: List[VenueInfo]
+
 class ProfileResponse(BaseModel):
     id: str
     full_name: Optional[str] = None
     role: str
+    organizations: List[OrgInfo] = []
     organization_id: Optional[str] = None
-    venues: List[VenueInfo] = []
     venue_id: Optional[str] = None
     shift_id: Optional[str] = None
     shift_name: Optional[str] = None

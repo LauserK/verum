@@ -163,7 +163,7 @@ async def sync_user(user=Depends(get_current_user)):
 
 @app.get("/me", response_model=ProfileResponse)
 async def get_profile(user=Depends(get_current_user)):
-    """Returns the authenticated user's profile with their venues."""
+    """Returns the authenticated user's profile with their venues grouped by organization."""
     try:
         db = get_db()
         result = db.table("profiles").select("*").eq("id", user.id).execute()
@@ -171,24 +171,59 @@ async def get_profile(user=Depends(get_current_user)):
             raise HTTPException(status_code=404, detail="Profile not found")
         
         profile = result.data[0]
-        org_id = profile.get("organization_id")
+        user_role = profile.get("role", "staff")
+        
+        # 1. Fetch user's organizations
+        orgs_res = db.table("profile_organizations").select("organization_id, organizations(name)").eq("profile_id", user.id).execute()
+        user_orgs = []
+        if orgs_res.data:
+            for po in orgs_res.data:
+                if po.get("organizations"):
+                    user_orgs.append({
+                        "id": po["organization_id"],
+                        "name": po["organizations"].get("name")
+                    })
 
-        # Fetch venues based on profile_venues table
-        venues = []
-        # Get assigned venues for staff or all for admin
-        if profile.get("role") == "admin":
-             if org_id:
-                venues_res = db.table("venues").select("id, name").eq("org_id", org_id).execute()
-                venues = venues_res.data or []
+        # 2. Fetch venues based on role
+        # We'll build a map of org_id -> List[VenueInfo]
+        org_venues_map = {}
+        for org in user_orgs:
+            org_venues_map[org["id"]] = []
+
+        if user_role == "admin":
+            # Admins see all venues for their organizations
+            if user_orgs:
+                org_ids = [org["id"] for org in user_orgs]
+                venues_res = db.table("venues").select("id, name, org_id").in_("org_id", org_ids).execute()
+                if venues_res.data:
+                    for v in venues_res.data:
+                        if v["org_id"] in org_venues_map:
+                            org_venues_map[v["org_id"]].append({
+                                "id": v["id"],
+                                "name": v["name"]
+                            })
         else:
-            pv_res = db.table("profile_venues").select("venue_id, venues(name)").eq("profile_id", user.id).execute()
+            # Staff see only assigned venues
+            pv_res = db.table("profile_venues").select("venue_id, venues(name, org_id)").eq("profile_id", user.id).execute()
             if pv_res.data:
                 for pv in pv_res.data:
-                    if pv.get("venues"):
-                        venues.append({
-                            "id": pv["venue_id"],
-                            "name": pv["venues"].get("name")
-                        })
+                    venue_data = pv.get("venues")
+                    if venue_data:
+                        v_org_id = venue_data.get("org_id")
+                        if v_org_id in org_venues_map:
+                            org_venues_map[v_org_id].append({
+                                "id": pv["venue_id"],
+                                "name": venue_data.get("name")
+                            })
+
+        # 3. Construct the organizations list for the response
+        organizations_response = []
+        for org in user_orgs:
+            organizations_response.append({
+                "id": org["id"],
+                "name": org["name"],
+                "venues": org_venues_map[org["id"]]
+            })
 
         # Fetch shift name if shift_id is present
         shift_name = None
@@ -201,9 +236,9 @@ async def get_profile(user=Depends(get_current_user)):
         return {
             "id": profile["id"],
             "full_name": profile.get("full_name"),
-            "role": profile.get("role", "staff"),
-            "organization_id": org_id,
-            "venues": venues,
+            "role": user_role,
+            "organizations": organizations_response,
+            "organization_id": profile.get("organization_id"),
             "venue_id": profile.get("venue_id"),
             "shift_id": shift_id,
             "shift_name": shift_name,
