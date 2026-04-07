@@ -35,8 +35,11 @@ export default function VenueSelectionPage() {
                         if (org.venues && org.venues.length === 1) {
                             setSelectedVenueId(org.venues[0].id)
                             router.replace('/dashboard')
+                        } else if ((!org.venues || org.venues.length === 0) && profile.role === 'admin') {
+                            // Only 1 org, no venues, and is admin -> redirect to create venue
+                            router.replace('/admin/venues')
                         } else {
-                            // 1 org but multiple venues -> show venue selection for that org
+                            // 1 org but multiple venues (or 0 venues and not admin) -> show venue selection
                             setSelectedOrg(org)
                             setStep('venue')
                             setLoading(false)
