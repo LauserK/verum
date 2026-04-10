@@ -1,6 +1,20 @@
 # backend/permissions.py
 from fastapi import Depends, HTTPException, status
 from database import get_db
+from auth_deps import get_current_user
+
+async def get_super_admin(current_user=Depends(get_current_user), db=Depends(get_db)):
+    """
+    Dependency that ensures the authenticated user is a Super Admin.
+    Checks the 'is_superadmin' flag in the user's profile.
+    """
+    result = db.table("profiles").select("is_superadmin").eq("id", current_user.id).execute()
+    if not result.data or not result.data[0].get("is_superadmin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Not authorized as Super Admin"
+        )
+    return current_user
 
 async def resolve_permission(profile_id: str, permission_key: str, db, org_id: str = None) -> bool:
     # 1. Fetch user's organization-specific role

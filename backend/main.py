@@ -46,51 +46,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-security = HTTPBearer()
-
-
-# ── Helpers ──────────────────────────────────────────────
-
-def get_current_shift() -> str:
-    """Returns the current shift based on local hour."""
-    hour = datetime.now(CARACAS_TZ).hour
-    if 6 <= hour < 14:
-        return "morning"
-    elif 14 <= hour < 20:
-        return "mid"
-    else:
-        return "closing"
-
-
-async def get_user_shift_identifier(user_id: str, venue_id: str, db) -> str:
-    """
-    Retorna el shift_id (UUID) del usuario para una sede específica desde employee_shifts.
-    En el modelo M:N, el shift es específico de la sede.
-    De lo contrario lanza un error 403.
-    """
-    res = db.table("employee_shifts").select("id").eq("profile_id", user_id).eq("venue_id", venue_id).eq("is_active", True).execute()
-    if not res.data:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="no_shift_assigned"
-        )
-    return str(res.data[0]["id"])
-
-
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    token = credentials.credentials
-    try:
-        res = supabase.auth.get_user(token)
-        if res and res.user:
-            return res.user
-        else:
-            raise HTTPException(status_code=401, detail="Invalid token")
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+from auth_deps import security, get_current_user
 
 
 async def get_active_org_id(x_org_id: Optional[str] = Header(None), current_user=Depends(get_current_user), db=Depends(get_db)) -> str:
