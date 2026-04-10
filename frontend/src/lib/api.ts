@@ -59,12 +59,14 @@ export interface OrgInfo {
     id: string
     name: string
     venues: VenueInfo[]
+    is_active?: boolean
 }
 
 export interface Profile {
     id: string
     full_name: string
     role: string
+    is_superadmin?: boolean
     organizations: OrgInfo[]
     // Keep legacy for now
     venues: VenueInfo[]
@@ -615,6 +617,46 @@ export const adminApi = {
     // Inventory Dashboard
     getInventoryDashboard: (venueId?: string): Promise<InventoryDashboardSummary> =>
         fetchWithAuth(`/inventory/dashboard/summary${venueId ? `?venue_id=${venueId}` : ''}`),
+}
+
+// Super Admin CRUD
+export interface SuperAdminUserOrg {
+    id: string
+    name: string
+    role_id: string | null
+    role_name: string
+    venues: VenueInfo[]
+}
+
+export interface SuperAdminUserDetail {
+    id: string
+    full_name: string | null
+    email: string | null
+    role: string
+    is_superadmin: boolean
+    organizations: SuperAdminUserOrg[]
+}
+
+export const superAdminApi = {
+    getOrganizations: (): Promise<any[]> => fetchWithAuth('/super-admin/organizations'),
+    updateOrganization: (id: string, data: any): Promise<any> => 
+        fetchWithAuth(`/super-admin/organizations/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    createOrganization: (name: string): Promise<any> =>
+        fetchWithAuth('/super-admin/organizations', { method: 'POST', body: JSON.stringify({ name }) }),
+    
+    getUsers: (): Promise<any[]> => fetchWithAuth('/super-admin/users'),
+    getUserDetail: (id: string): Promise<SuperAdminUserDetail> => fetchWithAuth(`/super-admin/users/${id}`),
+    addUserOrg: (userId: string, data: { organization_id: string, role_name?: string, venue_ids?: string[] }): Promise<any> =>
+        fetchWithAuth(`/super-admin/users/${userId}/organizations`, { method: 'POST', body: JSON.stringify(data) }),
+    updateUserOrg: (userId: string, orgId: string, data: { role_name?: string, venue_ids?: string[] }): Promise<any> =>
+        fetchWithAuth(`/super-admin/users/${userId}/organizations/${orgId}`, { method: 'PUT', body: JSON.stringify(data) }),
+    removeUserOrg: (userId: string, orgId: string): Promise<any> =>
+        fetchWithAuth(`/super-admin/users/${userId}/organizations/${orgId}`, { method: 'DELETE' }),
+    
+    promoteUser: (userId: string, isSuper: boolean): Promise<any> =>
+        fetchWithAuth(`/super-admin/users/${userId}/super-admin`, { method: 'PATCH', body: JSON.stringify({ is_superadmin: isSuper }) }),
+        
+    getMetrics: (): Promise<any> => fetchWithAuth('/super-admin/metrics'),
 }
 
 export function getDueSchedules(venueId: string): Promise<CountSchedule[]> {

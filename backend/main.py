@@ -27,7 +27,8 @@ from schemas import (
     CreateCountScheduleRequest, UpdateCountScheduleRequest,
     EmployeeShiftRequest, ShiftDayRequest, MarkAttendanceRequest,
     AbsenceRequest, LeaveRequest, AbsenceApprovalRequest,
-    ManualAttendanceRequest
+    ManualAttendanceRequest, SuperAdminUserDetail,
+    SuperAdminUserOrgAdd, SuperAdminUserOrgUpdate
 )
 
 CARACAS_TZ = pytz.timezone("America/Caracas")
@@ -96,9 +97,6 @@ async def get_active_org_id(x_org_id: Optional[str] = Header(None), current_user
         return profile.data[0]["organization_id"]
         
     raise HTTPException(400, "Organization context required")
-
-
-from permissions import resolve_permission
 
 
 from permissions import resolve_permission, check_restriction, get_super_admin
@@ -216,15 +214,19 @@ async def get_profile(x_org_id: Optional[str] = Header(None), user=Depends(get_c
                         user_role = "staff"
 
         # 1. Fetch user's organizations
-        orgs_res = db.table("profile_organizations").select("organization_id, organizations(name, is_active)").eq("profile_id", user.id).execute()
+        orgs_res = db.table("profile_organizations") \
+            .select("organization_id, organizations!profile_organizations_organization_id_fkey(name, is_active)") \
+            .eq("profile_id", user.id).execute()
+            
         user_orgs = []
         if orgs_res.data:
             for po in orgs_res.data:
-                if po.get("organizations"):
+                o_data = po.get("organizations")
+                if o_data:
                     user_orgs.append({
                         "id": po["organization_id"],
-                        "name": po["organizations"].get("name"),
-                        "is_active": po["organizations"].get("is_active", True)
+                        "name": o_data.get("name", "Unknown"),
+                        "is_active": o_data.get("is_active", True)
                     })
 
         # 2. Fetch venues based on role
@@ -265,7 +267,8 @@ async def get_profile(x_org_id: Optional[str] = Header(None), user=Depends(get_c
             organizations_response.append({
                 "id": org["id"],
                 "name": org["name"],
-                "venues": org_venues_map[org["id"]]
+                "venues": org_venues_map.get(org["id"], []),
+                "is_active": org.get("is_active", True)
             })
 
         # Fetch shift name if shift_id is present
@@ -280,6 +283,7 @@ async def get_profile(x_org_id: Optional[str] = Header(None), user=Depends(get_c
             "id": profile["id"],
             "full_name": profile.get("full_name"),
             "role": user_role,
+            "is_superadmin": is_superadmin,
             "organizations": organizations_response,
             "organization_id": profile.get("organization_id"),
             "venue_id": profile.get("venue_id"),
@@ -869,7 +873,8 @@ async def super_update_organization(org_id: str, body: dict, user=Depends(get_su
 async def super_list_users(user=Depends(get_super_admin)):
     db = get_db()
     # List all users with their primary organization info
-    res = db.table("profiles").select("*, organizations(name)").execute()
+    # Specify the relationship to avoid ambiguity
+    res = db.table("profiles").select("*, organizations!profiles_organization_id_fkey(name)").execute()
     return res.data or []
 
 @app.patch("/super-admin/users/{user_id}/super-admin")
@@ -878,6 +883,149 @@ async def super_promote_user(user_id: str, body: dict, user=Depends(get_super_ad
     is_super = body.get("is_superadmin", False)
     res = db.table("profiles").update({"is_superadmin": is_super}).eq("id", user_id).execute()
     return res.data[0] if res.data else {}
+
+@app.get("/super-admin/users/{user_id}", response_model=SuperAdminUserDetail)
+async def super_get_user_detail(user_id: str, user=Depends(get_super_admin)):
+    db = get_db()
+    # 1. Get profile
+    p_res = db.table("profiles").select("*").eq("id", user_id).single().execute()
+    if not p_res.data:
+        raise HTTPException(404, "Profile not found")
+    profile = p_res.data
+
+    # 2. Get email from Auth
+    email = None
+    try:
+        auth_user = db.auth.admin.get_user_by_id(user_id)
+        email = auth_user.user.email if auth_user.user else None
+    except Exception:
+        pass
+
+    # 3. Get organizations
+    orgs_res = db.table("profile_organizations") \
+        .select("organization_id, role_id, organizations(name), custom_roles(name)") \
+        .eq("profile_id", user_id).execute()
+    
+    # 4. Get venues
+    venues_res = db.table("profile_venues") \
+        .select("venue_id, venues(name, org_id)") \
+        .eq("profile_id", user_id).execute()
+    
+    org_venues_map = {}
+    for pv in (venues_res.data or []):
+        v_data = pv.get("venues")
+        if v_data:
+            o_id = v_data["org_id"]
+            if o_id not in org_venues_map: org_venues_map[o_id] = []
+            org_venues_map[o_id].append({"id": pv["venue_id"], "name": v_data["name"]})
+
+    orgs_detail = []
+    for po in (orgs_res.data or []):
+        o_id = po["organization_id"]
+        o_name = po["organizations"]["name"] if po.get("organizations") else "Unknown"
+        
+        role_name = "staff"
+        if po.get("custom_roles"):
+            role_name = po["custom_roles"]["name"]
+        elif profile.get("role") == "admin":
+            role_name = "admin"
+
+        orgs_detail.append({
+            "id": o_id,
+            "name": o_name,
+            "role_id": po.get("role_id"),
+            "role_name": role_name,
+            "venues": org_venues_map.get(o_id, [])
+        })
+
+    return {
+        "id": profile["id"],
+        "full_name": profile.get("full_name"),
+        "email": email,
+        "role": profile.get("role", "staff"),
+        "is_superadmin": profile.get("is_superadmin", False),
+        "organizations": orgs_detail
+    }
+
+@app.post("/super-admin/users/{user_id}/organizations")
+async def super_add_user_org(user_id: str, body: SuperAdminUserOrgAdd, user=Depends(get_super_admin)):
+    db = get_db()
+    
+    # 1. Update/Insert organization association
+    role_id = body.role_id
+    if not role_id and body.role_name and body.role_name not in ["admin", "staff"]:
+        # Try to find role_id by name
+        r_res = db.table("custom_roles").select("id").eq("org_id", body.organization_id).eq("name", body.role_name).execute()
+        if r_res.data:
+            role_id = r_res.data[0]["id"]
+
+    db.table("profile_organizations").upsert({
+        "profile_id": user_id,
+        "organization_id": body.organization_id,
+        "role_id": role_id
+    }).execute()
+
+    # 2. Update venues (remove old ones for THIS org and insert new)
+    # First, get all venues for this organization
+    ov_res = db.table("venues").select("id").eq("org_id", body.organization_id).execute()
+    org_venue_ids = [v["id"] for v in (ov_res.data or [])]
+    
+    if org_venue_ids:
+        # Delete user associations for THESE venues
+        db.table("profile_venues").delete().eq("profile_id", user_id).in_("venue_id", org_venue_ids).execute()
+        
+        # Insert new associations
+        if body.venue_ids:
+            # Only insert those that actually belong to the org
+            valid_ids = [vid for vid in body.venue_ids if vid in org_venue_ids]
+            if valid_ids:
+                db.table("profile_venues").insert([{"profile_id": user_id, "venue_id": vid} for vid in valid_ids]).execute()
+
+    return {"ok": True}
+
+@app.put("/super-admin/users/{user_id}/organizations/{org_id}")
+async def super_update_user_org(user_id: str, org_id: str, body: SuperAdminUserOrgUpdate, user=Depends(get_super_admin)):
+    db = get_db()
+    
+    # 1. Update role
+    role_id = body.role_id
+    if not role_id and body.role_name and body.role_name not in ["admin", "staff"]:
+        r_res = db.table("custom_roles").select("id").eq("org_id", org_id).eq("name", body.role_name).execute()
+        if r_res.data:
+            role_id = r_res.data[0]["id"]
+
+    db.table("profile_organizations").upsert({
+        "profile_id": user_id,
+        "organization_id": org_id,
+        "role_id": role_id
+    }).execute()
+
+    # 2. Update venues
+    if body.venue_ids is not None:
+        ov_res = db.table("venues").select("id").eq("org_id", org_id).execute()
+        org_venue_ids = [v["id"] for v in (ov_res.data or [])]
+        
+        if org_venue_ids:
+            db.table("profile_venues").delete().eq("profile_id", user_id).in_("venue_id", org_venue_ids).execute()
+            valid_ids = [vid for vid in body.venue_ids if vid in org_venue_ids]
+            if valid_ids:
+                db.table("profile_venues").insert([{"profile_id": user_id, "venue_id": vid} for vid in valid_ids]).execute()
+
+    return {"ok": True}
+
+@app.delete("/super-admin/users/{user_id}/organizations/{org_id}")
+async def super_remove_user_org(user_id: str, org_id: str, user=Depends(get_super_admin)):
+    db = get_db()
+    # 1. Delete org association
+    db.table("profile_organizations").delete().eq("profile_id", user_id).eq("organization_id", org_id).execute()
+    
+    # 2. Delete venue associations for venues in this org
+    ov_res = db.table("venues").select("id").eq("org_id", org_id).execute()
+    org_venue_ids = [v["id"] for v in (ov_res.data or [])]
+    if org_venue_ids:
+        db.table("profile_venues").delete().eq("profile_id", user_id).in_("venue_id", org_venue_ids).execute()
+        
+    return {"ok": True}
 
 @app.get("/super-admin/metrics")
 async def super_get_metrics(user=Depends(get_super_admin)):

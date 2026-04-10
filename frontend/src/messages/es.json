@@ -334,15 +334,33 @@
     "logout": "Cerrar Sesión"
   },
   "attendance": {
-    "title": "Asistencia",
-    "requiredTitle": "Entrada Requerida",
-    "requiredDesc": "Debes marcar tu entrada en el módulo de asistencia antes de acceder a otras funciones.",
-    "goToAttendance": "Ir a Asistencia",
-    "actions": {
-      "clock_in": "Entrada",
-      "clock_out": "Salida",
-      "break_start": "Iniciar Pausa",
-      "break_end": "Fin de Pausa"
-    }
+  "title": "Asistencia",
+  "requiredTitle": "Entrada Requerida",
+  "requiredDesc": "Debes marcar tu entrada en el módulo de asistencia antes de acceder a otras funciones.",
+  "goToAttendance": "Ir a Asistencia",
+  "actions": {
+    "clock_in": "Entrada",
+    "clock_out": "Salida",
+    "break_start": "Iniciar Pausa",
+    "break_end": "Fin de Pausa"
   }
-}
+  },
+  "superAdmin": {
+  "title": "Super Admin",
+  "metrics": "Métricas Globales",
+  "organizations": "Organizaciones",
+  "users": "Usuarios Globales",
+  "totalOrgs": "Organizaciones",
+  "totalVenues": "Locales (Venues)",
+  "totalUsers": "Usuarios Totales",
+  "systemStatus": "Estado Global",
+  "newOrg": "Nueva Organización",
+  "searchOrg": "Buscar organización...",
+  "active": "Activa",
+  "inactive": "Inactiva",
+  "promote": "Promover",
+  "demote": "Degradar",
+  "searchUser": "Buscar por nombre, email o empresa..."
+  }
+  }
+

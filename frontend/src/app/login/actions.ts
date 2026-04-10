@@ -32,7 +32,14 @@ export async function login(formData: FormData) {
             }
         });
 
-        if (!res.ok) {
+        if (res.ok) {
+            const syncData = await res.json();
+            if (syncData.organization_is_active === false) {
+                // Sign out immediately if org is inactive
+                await supabase.auth.signOut();
+                return { error: 'Su organización está inactiva. Contacte a soporte.' };
+            }
+        } else {
             console.warn('Failed to sync user with backend:', await res.text());
         }
     } catch (err) {

@@ -333,15 +333,33 @@
     "logout": "Log Out"
   },
   "attendance": {
-    "title": "Attendance",
-    "requiredTitle": "Clock-in Required",
-    "requiredDesc": "You must mark your clock-in in the attendance module before accessing other features.",
-    "goToAttendance": "Go to Attendance",
-    "actions": {
-      "clock_in": "Clock In",
-      "clock_out": "Clock Out",
-      "break_start": "Start Break",
-      "break_end": "End Break"
-    }
+  "title": "Attendance",
+  "requiredTitle": "Clock-in Required",
+  "requiredDesc": "You must mark your clock-in in the attendance module before accessing other features.",
+  "goToAttendance": "Go to Attendance",
+  "actions": {
+    "clock_in": "Clock In",
+    "clock_out": "Clock Out",
+    "break_start": "Start Break",
+    "break_end": "End Break"
   }
-}
+  },
+  "superAdmin": {
+  "title": "Super Admin",
+  "metrics": "Global Metrics",
+  "organizations": "Organizations",
+  "users": "Global Users",
+  "totalOrgs": "Organizations",
+  "totalVenues": "Venues",
+  "totalUsers": "Total Users",
+  "systemStatus": "Global Status",
+  "newOrg": "New Organization",
+  "searchOrg": "Search organization...",
+  "active": "Active",
+  "inactive": "Inactive",
+  "promote": "Promote",
+  "demote": "Demote",
+  "searchUser": "Search by name, email or company..."
+  }
+  }
+
