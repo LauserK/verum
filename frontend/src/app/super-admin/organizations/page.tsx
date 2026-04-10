@@ -5,6 +5,7 @@ import { superAdminApi } from '@/lib/api'
 import { Building2, Plus, Search, Power, PowerOff } from 'lucide-react'
 
 import { useTranslations } from '@/components/I18nProvider'
+import OrgManagementModal from '@/components/admin/OrgManagementModal'
 
 export default function OrganizationsManagement() {
     const { t } = useTranslations()
@@ -13,6 +14,7 @@ export default function OrganizationsManagement() {
     const [searchTerm, setSearchTerm] = useState('')
     const [showCreateModal, setShowCreateModal] = useState(false)
     const [newOrgName, setNewOrgName] = useState('')
+    const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null)
 
     useEffect(() => {
         loadOrgs()
@@ -30,7 +32,8 @@ export default function OrganizationsManagement() {
         }
     }
 
-    async function toggleOrgStatus(id: string, currentStatus: boolean) {
+    async function toggleOrgStatus(id: string, currentStatus: boolean, e: React.MouseEvent) {
+        e.stopPropagation()
         try {
             await superAdminApi.updateOrganization(id, { is_active: !currentStatus })
             setOrganizations(orgs => orgs.map(o => o.id === id ? { ...o, is_active: !currentStatus } : o))
@@ -87,10 +90,14 @@ export default function OrganizationsManagement() {
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {filtered.map((org) => (
-                        <div key={org.id} className="bg-surface p-5 rounded-2xl border border-border hover:border-border-strong transition-all flex flex-col justify-between">
+                        <div 
+                            key={org.id} 
+                            onClick={() => setSelectedOrgId(org.id)}
+                            className="bg-surface p-5 rounded-2xl border border-border hover:border-border-strong hover:shadow-lg hover:shadow-primary/5 transition-all flex flex-col justify-between cursor-pointer group"
+                        >
                             <div>
                                 <div className="flex items-center justify-between mb-2">
-                                    <h3 className="text-base font-bold text-text-primary">{org.name}</h3>
+                                    <h3 className="text-base font-bold text-text-primary group-hover:text-primary transition-colors">{org.name}</h3>
                                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${org.is_active ? 'bg-success/10 text-success' : 'bg-error/10 text-error'}`}>
                                         {org.is_active ? t('superAdmin.active') : t('superAdmin.inactive')}
                                     </span>
@@ -100,7 +107,7 @@ export default function OrganizationsManagement() {
                             
                             <div className="flex items-center justify-end gap-2">
                                 <button 
-                                    onClick={() => toggleOrgStatus(org.id, org.is_active)}
+                                    onClick={(e) => toggleOrgStatus(org.id, org.is_active, e)}
                                     className={`p-2 rounded-lg border transition-all ${org.is_active 
                                         ? 'bg-error/5 border-error/10 text-error hover:bg-error/10' 
                                         : 'bg-success/5 border-success/10 text-success hover:bg-success/10'}`}
@@ -112,6 +119,16 @@ export default function OrganizationsManagement() {
                         </div>
                     ))}
                 </div>
+            )}
+
+            {selectedOrgId && (
+                <OrgManagementModal 
+                    orgId={selectedOrgId}
+                    onClose={() => {
+                        setSelectedOrgId(null)
+                        loadOrgs()
+                    }}
+                />
             )}
 
             {/* Modal de creación simplificado */}

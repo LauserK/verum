@@ -28,7 +28,8 @@ from schemas import (
     EmployeeShiftRequest, ShiftDayRequest, MarkAttendanceRequest,
     AbsenceRequest, LeaveRequest, AbsenceApprovalRequest,
     ManualAttendanceRequest, SuperAdminUserDetail,
-    SuperAdminUserOrgAdd, SuperAdminUserOrgUpdate
+    SuperAdminUserOrgAdd, SuperAdminUserOrgUpdate,
+    SuperAdminUserInOrg, SuperAdminOrgDetail
 )
 
 CARACAS_TZ = pytz.timezone("America/Caracas")
@@ -868,6 +869,70 @@ async def super_update_organization(org_id: str, body: dict, user=Depends(get_su
     db = get_db()
     res = db.table("organizations").update(body).eq("id", org_id).execute()
     return res.data[0] if res.data else {}
+
+@app.get("/super-admin/organizations/{org_id}", response_model=SuperAdminOrgDetail)
+async def super_get_org_detail(org_id: str, user=Depends(get_super_admin)):
+    db = get_db()
+    # 1. Get organization
+    o_res = db.table("organizations").select("*").eq("id", org_id).single().execute()
+    if not o_res.data:
+        raise HTTPException(404, "Organization not found")
+    org = o_res.data
+
+    # 2. Get venues
+    v_res = db.table("venues").select("*").eq("org_id", org_id).execute()
+    venues = v_res.data or []
+
+    # 3. Get users associated with this organization
+    u_res = db.table("profile_organizations") \
+        .select("profile_id, profiles(full_name), custom_roles(name)") \
+        .eq("organization_id", org_id).execute()
+    
+    users_detail = []
+    for item in (u_res.data or []):
+        p_data = item.get("profiles")
+        if not p_data: continue
+        
+        role_name = "staff"
+        if item.get("custom_roles"):
+            role_name = item["custom_roles"]["name"]
+        
+        users_detail.append({
+            "id": item["profile_id"],
+            "full_name": p_data["full_name"],
+            "role_name": role_name
+        })
+
+    return {
+        "id": org["id"],
+        "name": org["name"],
+        "is_active": org.get("is_active", True),
+        "venues": venues,
+        "users": users_detail
+    }
+
+@app.post("/super-admin/organizations/{org_id}/venues")
+async def super_create_org_venue(org_id: str, body: CreateVenueRequest, user=Depends(get_super_admin)):
+    db = get_db()
+    # Force the org_id from the URL path
+    payload = {"org_id": org_id, "name": body.name, "address": body.address}
+    res = db.table("venues").insert(payload).execute()
+    return res.data[0]
+
+@app.patch("/super-admin/venues/{venue_id}")
+async def super_update_venue(venue_id: str, body: UpdateVenueRequest, user=Depends(get_super_admin)):
+    db = get_db()
+    payload = body.dict(exclude_none=True)
+    if not payload:
+        raise HTTPException(400, "No fields to update")
+    res = db.table("venues").update(payload).eq("id", venue_id).execute()
+    return res.data[0] if res.data else {}
+
+@app.delete("/super-admin/venues/{venue_id}")
+async def super_delete_venue(venue_id: str, user=Depends(get_super_admin)):
+    db = get_db()
+    db.table("venues").delete().eq("id", venue_id).execute()
+    return {"ok": True}
 
 @app.get("/super-admin/users")
 async def super_list_users(user=Depends(get_super_admin)):

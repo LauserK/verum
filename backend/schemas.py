@@ -382,3 +382,15 @@ class SuperAdminUserDetail(BaseModel):
     role: str
     is_superadmin: bool
     organizations: List[UserOrgDetail]
+
+class SuperAdminUserInOrg(BaseModel):
+    id: str
+    full_name: Optional[str] = None
+    role_name: str
+
+class SuperAdminOrgDetail(BaseModel):
+    id: str
+    name: str
+    is_active: bool
+    venues: List[VenueInfo]
+    users: List[SuperAdminUserInOrg]
