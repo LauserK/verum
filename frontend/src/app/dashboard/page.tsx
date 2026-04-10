@@ -86,6 +86,7 @@ export default function DashboardPage() {
                         if (errorMessage.includes('no_shift_assigned')) {
                             setError('no_shift_assigned')
                         } else {
+                            setError(errorMessage || 'Error loading checklists')
                             setChecklists([])
                         }
                     }

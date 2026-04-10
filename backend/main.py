@@ -48,6 +48,31 @@ app.add_middleware(
 
 from auth_deps import security, get_current_user
 
+# ── Helpers ──────────────────────────────────────────────
+
+def get_current_shift() -> str:
+    """Returns the current shift based on local hour."""
+    hour = datetime.now(CARACAS_TZ).hour
+    if 6 <= hour < 14:
+        return "morning"
+    elif 14 <= hour < 20:
+        return "mid"
+    else:
+        return "closing"
+
+
+async def get_user_shift_identifier(user_id: str, venue_id: str, db) -> str:
+    """
+    Retorna el shift_id (UUID) del usuario para una sede específica desde employee_shifts.
+    En el modelo M:N, el shift es específico de la sede.
+    Si no tiene uno asignado, hace fallback al bloque horario (morning/mid/closing).
+    """
+    res = db.table("employee_shifts").select("id").eq("profile_id", user_id).eq("venue_id", venue_id).eq("is_active", True).execute()
+    if res.data:
+        return str(res.data[0]["id"])
+    
+    return get_current_shift()
+
 
 async def get_active_org_id(x_org_id: Optional[str] = Header(None), current_user=Depends(get_current_user), db=Depends(get_db)) -> str:
     """
@@ -128,16 +153,31 @@ async def sync_user(user=Depends(get_current_user)):
         existing = db.table("profiles").select("*").eq("id", user.id).execute()
 
         if existing.data and len(existing.data) > 0:
-            return {"id": user.id, "role": existing.data[0].get("role")}
+            profile = existing.data[0]
+            
+            # Check if their primary organization is active
+            org_active = True
+            if profile.get("organization_id"):
+                org_res = db.table("organizations").select("is_active").eq("id", profile["organization_id"]).execute()
+                if org_res.data:
+                    org_active = org_res.data[0].get("is_active", True)
+            
+            return {
+                "id": user.id, 
+                "role": profile.get("role"),
+                "is_superadmin": profile.get("is_superadmin", False),
+                "organization_is_active": org_active
+            }
 
         new_profile = {
             "id": user.id,
             "role": "staff",
             "full_name": user.user_metadata.get("full_name", user.email) if user else "",
+            "is_superadmin": False
         }
         db.table("profiles").insert(new_profile).execute()
 
-        return {"id": user.id, "role": "staff"}
+        return {"id": user.id, "role": "staff", "is_superadmin": False, "organization_is_active": True}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -153,6 +193,7 @@ async def get_profile(x_org_id: Optional[str] = Header(None), user=Depends(get_c
         
         profile = result.data[0]
         user_role = profile.get("role", "staff")
+        is_superadmin = profile.get("is_superadmin", False)
         
         # If organization header is present, try to get the specific role for that org
         if x_org_id:
@@ -175,14 +216,15 @@ async def get_profile(x_org_id: Optional[str] = Header(None), user=Depends(get_c
                         user_role = "staff"
 
         # 1. Fetch user's organizations
-        orgs_res = db.table("profile_organizations").select("organization_id, organizations(name)").eq("profile_id", user.id).execute()
+        orgs_res = db.table("profile_organizations").select("organization_id, organizations(name, is_active)").eq("profile_id", user.id).execute()
         user_orgs = []
         if orgs_res.data:
             for po in orgs_res.data:
                 if po.get("organizations"):
                     user_orgs.append({
                         "id": po["organization_id"],
-                        "name": po["organizations"].get("name")
+                        "name": po["organizations"].get("name"),
+                        "is_active": po["organizations"].get("is_active", True)
                     })
 
         # 2. Fetch venues based on role
@@ -191,7 +233,7 @@ async def get_profile(x_org_id: Optional[str] = Header(None), user=Depends(get_c
         for org in user_orgs:
             org_venues_map[org["id"]] = []
 
-        if user_role == "admin":
+        if user_role == "admin" or is_superadmin:
             # Admins see all venues for their organizations
             if user_orgs:
                 org_ids = [org["id"] for org in user_orgs]
@@ -259,10 +301,21 @@ async def get_checklists(venue_id: str, user=Depends(require_permission("checkli
     try:
         db = get_db()
         
-        # Security: Verify user belongs to this venue
-        pv_check = db.table("profile_venues").select("venue_id").eq("profile_id", user.id).eq("venue_id", venue_id).execute()
-        if not pv_check.data:
-             raise HTTPException(status_code=403, detail="No tienes acceso a esta sede")
+        # Security: Verify user belongs to this venue OR is admin of the organization
+        # 1. Get venue's organization
+        venue_res = db.table("venues").select("org_id").eq("id", venue_id).execute()
+        if not venue_res.data:
+            raise HTTPException(404, "Sede no encontrada")
+        v_org_id = venue_res.data[0]["org_id"]
+
+        # 2. Check if user is Admin of this org OR Super Admin (resolve_permission handles Super Admin bypass)
+        is_org_admin = await resolve_permission(user.id, "admin.view_dashboard", db, org_id=v_org_id)
+        
+        if not is_org_admin:
+            # If not admin, must be assigned to venue via profile_venues
+            pv_check = db.table("profile_venues").select("venue_id").eq("profile_id", user.id).eq("venue_id", venue_id).execute()
+            if not pv_check.data:
+                 raise HTTPException(status_code=403, detail="No tienes acceso a esta sede")
 
         shift = await get_user_shift_identifier(user.id, venue_id, db)
         today = datetime.now(CARACAS_TZ).strftime("%Y-%m-%d")

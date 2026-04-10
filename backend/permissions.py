@@ -17,6 +17,11 @@ async def get_super_admin(current_user=Depends(get_current_user), db=Depends(get
     return current_user
 
 async def resolve_permission(profile_id: str, permission_key: str, db, org_id: str = None) -> bool:
+    # 0. Check global super admin
+    profile_res = db.table('profiles').select('is_superadmin').eq('id', profile_id).execute()
+    if profile_res.data and profile_res.data[0].get('is_superadmin'):
+        return True
+
     # 1. Fetch user's organization-specific role
     role_id = None
     is_admin = False
