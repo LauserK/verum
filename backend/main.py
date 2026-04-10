@@ -76,7 +76,7 @@ async def get_active_org_id(x_org_id: Optional[str] = Header(None), current_user
 from permissions import resolve_permission
 
 
-from permissions import resolve_permission, check_restriction
+from permissions import resolve_permission, check_restriction, get_super_admin
 from attendance_utils import is_clocked_in
 
 def require_permission(permission_key: str):
@@ -785,6 +785,60 @@ async def bulk_save_answers(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+
+# ── Super Admin Global Management ───────────────────────
+
+@app.get("/super-admin/organizations")
+async def super_list_organizations(user=Depends(get_super_admin)):
+    db = get_db()
+    res = db.table("organizations").select("*").execute()
+    return res.data or []
+
+@app.post("/super-admin/organizations")
+async def super_create_organization(body: CreateOrgRequest, user=Depends(get_super_admin)):
+    db = get_db()
+    res = db.table("organizations").insert({"name": body.name}).execute()
+    if res.data:
+        org = res.data[0]
+        # Seed default roles for this new organization
+        await seed_org_roles(org["id"], db)
+        return org
+    raise HTTPException(500, "Failed to create organization")
+
+@app.patch("/super-admin/organizations/{org_id}")
+async def super_update_organization(org_id: str, body: dict, user=Depends(get_super_admin)):
+    db = get_db()
+    res = db.table("organizations").update(body).eq("id", org_id).execute()
+    return res.data[0] if res.data else {}
+
+@app.get("/super-admin/users")
+async def super_list_users(user=Depends(get_super_admin)):
+    db = get_db()
+    # List all users with their primary organization info
+    res = db.table("profiles").select("*, organizations(name)").execute()
+    return res.data or []
+
+@app.patch("/super-admin/users/{user_id}/super-admin")
+async def super_promote_user(user_id: str, body: dict, user=Depends(get_super_admin)):
+    db = get_db()
+    is_super = body.get("is_superadmin", False)
+    res = db.table("profiles").update({"is_superadmin": is_super}).eq("id", user_id).execute()
+    return res.data[0] if res.data else {}
+
+@app.get("/super-admin/metrics")
+async def super_get_metrics(user=Depends(get_super_admin)):
+    db = get_db()
+    
+    orgs_res = db.table("organizations").select("id", count="exact").execute()
+    venues_res = db.table("venues").select("id", count="exact").execute()
+    users_res = db.table("profiles").select("id", count="exact").execute()
+    
+    return {
+        "total_organizations": orgs_res.count or 0,
+        "total_venues": venues_res.count or 0,
+        "total_users": users_res.count or 0,
+    }
 
 
 # ── Admin CRUD Routes ───────────────────────────────────
