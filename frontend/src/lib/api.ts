@@ -30,7 +30,7 @@ export async function fetchWithAuth<T = unknown>(path: string, options: RequestI
 
     if (!res.ok) {
         const errorData = await res.json().catch(() => ({}))
-        const errorDetail = errorData.detail?.detail || errorData.detail
+        let errorDetail = errorData.detail?.detail || errorData.detail
 
         if (errorDetail === 'CLOCK_IN_REQUIRED') {
             if (typeof window !== 'undefined') {
@@ -38,6 +38,11 @@ export async function fetchWithAuth<T = unknown>(path: string, options: RequestI
                 // Also set a flag in case the Guard hasn't mounted yet
                 window.__attendanceRequiredPending = true
             }
+        }
+
+        // If errorDetail is an object or array (like Pydantic validation errors), stringify it or pick a message
+        if (typeof errorDetail === 'object' && errorDetail !== null) {
+            errorDetail = JSON.stringify(errorDetail)
         }
 
         throw new Error(errorDetail || `API Error: ${res.status}`)

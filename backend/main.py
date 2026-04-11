@@ -3044,6 +3044,7 @@ async def get_attendance_status(venue_id: Optional[str] = None, current_user=Dep
     }
 @app.post("/attendance/mark")
 async def mark_attendance(body: MarkAttendanceRequest, current_user=Depends(get_current_user), db=Depends(get_db), _=Depends(require_permission("attendance.mark"))):
+    today_str = datetime.now(CARACAS_TZ).strftime("%Y-%m-%d")
     venue_id = body.venue_id
     if not venue_id:
         raise HTTPException(400, "venue_id is required")
