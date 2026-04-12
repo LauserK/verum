@@ -19,6 +19,7 @@ import { getProfile, type Profile } from '@/lib/api'
 import { useTranslations } from '@/components/I18nProvider'
 import BottomNav from '@/components/BottomNav'
 import { createClient } from '@/utils/supabase/client'
+import { useVenue } from '@/components/VenueContext'
 
 // ── Skeleton ────────────────────────────────────────
 function SettingsSkeleton() {
@@ -55,6 +56,7 @@ function SettingsSkeleton() {
 export default function SettingsPage() {
     const router = useRouter()
     const { t, language, setLanguage } = useTranslations('settings')
+    const { selectedVenueName, activeOrgName } = useVenue()
     const [profile, setProfile] = useState<Profile | null>(null)
     const [loading, setLoading] = useState(true)
     const [theme, setTheme] = useState<'light' | 'dark'>('light')
@@ -191,7 +193,7 @@ export default function SettingsPage() {
                                         <div>
                                             <span className="block text-xs text-text-secondary">{t('organization')}</span>
                                             <span className="text-sm font-medium text-text-primary">
-                                                Ragazza Padel
+                                                {activeOrgName || 'VERUM'}
                                             </span>
                                         </div>
                                     </div>
@@ -204,7 +206,7 @@ export default function SettingsPage() {
                                         <div>
                                             <span className="block text-xs text-text-secondary">{t('venue')}</span>
                                             <span className="text-sm font-medium text-text-primary">
-                                                {currentVenue?.name}
+                                                {selectedVenueName || currentVenue?.name}
                                             </span>
                                         </div>
                                     </div>

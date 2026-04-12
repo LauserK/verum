@@ -8,10 +8,12 @@ import { ArrowLeft, ClipboardList, Loader2, Calendar, Clock, AlertCircle } from 
 import { useTranslations } from '@/components/I18nProvider'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { useVenue } from '@/components/VenueContext'
 
 export default function StaffPendingCountsPage() {
   const { t } = useTranslations()
   const router = useRouter()
+  const { selectedVenueId, isLoading: isVenueLoading } = useVenue()
   const [schedules, setSchedules] = useState<CountSchedule[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -20,13 +22,20 @@ export default function StaffPendingCountsPage() {
     setLoading(true)
     setError('')
     try {
-      const profile = await getProfile()
-      if (!profile.venue_id) {
+      let venueId = selectedVenueId
+      
+      if (!venueId) {
+        const profile = await getProfile()
+        venueId = profile.venue_id
+      }
+
+      if (!venueId) {
         setError('No tienes una sede asignada para realizar conteos.')
+        setLoading(false)
         return
       }
 
-      const dueSchedules = await getDueSchedules(profile.venue_id)
+      const dueSchedules = await getDueSchedules(venueId)
       setSchedules(dueSchedules)
     } catch (err) {
       console.error('Error fetching due schedules:', err)
@@ -34,11 +43,13 @@ export default function StaffPendingCountsPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [selectedVenueId])
 
   useEffect(() => {
-    fetchDueSchedules()
-  }, [fetchDueSchedules])
+    if (!isVenueLoading) {
+      fetchDueSchedules()
+    }
+  }, [fetchDueSchedules, isVenueLoading])
 
   if (loading) {
     return (

@@ -6,12 +6,14 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { adminApi, getProfile, getDueSchedules, type Utensil, type UtensilCategory } from '@/lib/api'
 import { ArrowLeft, Save, Loader2, Minus, Plus, ClipboardList, Info } from 'lucide-react'
 import { useTranslations } from '@/components/I18nProvider'
+import { useVenue } from '@/components/VenueContext'
 
 function CountContent() {
   const { t } = useTranslations()
   const router = useRouter()
   const searchParams = useSearchParams()
   const scheduleId = searchParams.get('schedule_id')
+  const { selectedVenueId, activeOrgId } = useVenue()
   
   const [utensils, setUtensils] = useState<Utensil[]>([])
   const [categories, setCategories] = useState<UtensilCategory[]>([])
@@ -26,19 +28,28 @@ function CountContent() {
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const profile = await getProfile()
-      if (profile.organization_id) {
-        setVenueId(profile.venue_id || null)
+      let vId = selectedVenueId
+      let oId = activeOrgId
+
+      if (!vId || !oId) {
+        const profile = await getProfile()
+        vId = vId || profile.venue_id || null
+        oId = oId || profile.organization_id || null
+      }
+
+      setVenueId(vId)
+
+      if (oId && vId) {
         const [utRes, catRes] = await Promise.all([
-          adminApi.getUtensils({ org_id: profile.organization_id }),
-          adminApi.getUtensilCategories(profile.organization_id)
+          adminApi.getUtensils({ org_id: oId }),
+          adminApi.getUtensilCategories(oId)
         ])
         
         let activeUtensils = utRes.filter(u => u.is_active)
         
         if (scheduleId) {
           // Fetch schedule details to filter items
-          const schedules = await getDueSchedules(profile.venue_id || '')
+          const schedules = await getDueSchedules(vId)
           const sched = schedules.find(s => s.id === scheduleId)
           if (sched) {
             setScheduleName(sched.name)
@@ -66,7 +77,7 @@ function CountContent() {
     } finally {
       setLoading(false)
     }
-  }, [scheduleId])
+  }, [scheduleId, selectedVenueId, activeOrgId])
 
   useEffect(() => {
     fetchData()
