@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from 'react'
 import { adminApi, getProfile, type AdminUser, type VenueInfo, type EmployeeShift } from '@/lib/api'
+import { useVenue } from '@/components/VenueContext'
 import { Loader2, CalendarDays, X, Save } from 'lucide-react'
 import Link from 'next/link'
 
 export default function ShiftsManagementPage() {
-    const [venues, setVenues] = useState<VenueInfo[]>([])
+    const { availableVenues, activeOrgId } = useVenue()
     const [selectedVenue, setSelectedVenue] = useState('')
     const [users, setUsers] = useState<AdminUser[]>([])
     const [shifts, setShifts] = useState<EmployeeShift[]>([])
@@ -33,14 +34,18 @@ export default function ShiftsManagementPage() {
     const [saving, setSaving] = useState(false)
     
     useEffect(() => {
-        getProfile().then(p => {
-            setVenues(p.venues || [])
-            if (p.venues?.[0]) setSelectedVenue(p.venues[0].id)
-        })
-    }, [])
+        if (availableVenues.length > 0 && !selectedVenue) {
+            setSelectedVenue(availableVenues[0].id)
+        } else if (availableVenues.length === 0) {
+            setSelectedVenue('')
+            setUsers([])
+            setShifts([])
+            setLoading(false)
+        }
+    }, [availableVenues, selectedVenue])
 
     const fetchData = () => {
-        if (!selectedVenue) return
+        if (!selectedVenue || !activeOrgId) return
         setLoading(true)
         Promise.all([
             adminApi.getUsers(),
@@ -54,7 +59,7 @@ export default function ShiftsManagementPage() {
     useEffect(() => {
         fetchData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedVenue])
+    }, [selectedVenue, activeOrgId])
 
     const openShiftModal = (user: AdminUser) => {
         setSelectedUser(user)
@@ -153,7 +158,7 @@ export default function ShiftsManagementPage() {
                             className="bg-surface border border-border rounded-xl px-4 h-10 text-sm text-text-primary focus:border-primary outline-none"
                         >
                             <option value="" disabled>Selecciona una sede...</option>
-                            {venues.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                            {availableVenues.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
                         </select>
                         <Link href="/admin/attendance" className="text-sm font-bold text-primary hover:underline">
                             ← Volver a Live View

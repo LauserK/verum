@@ -5,6 +5,7 @@ import {
     adminApi, getProfile,
     type Profile, type TemplateDetail, type Question
 } from '@/lib/api'
+import { useVenue } from '@/components/VenueContext'
 import {
     Plus, Trash2, Edit3, ChevronRight, Save, X, Loader2,
     Clock
@@ -31,6 +32,7 @@ const QUESTION_TYPES = [
 
 export default function TemplatesPage() {
     const { t } = useTranslations()
+    const { availableVenues, activeOrgId } = useVenue()
     const [profile, setProfile] = useState<Profile | null>(null)
     const [venueId, setVenueId] = useState('')
     const [templates, setTemplates] = useState<TemplateDetail[]>([])
@@ -119,17 +121,26 @@ export default function TemplatesPage() {
             try {
                 const p = await getProfile()
                 setProfile(p)
-                if (p.venues.length > 0) setVenueId(p.venues[0].id)
             } catch { }
-            setLoading(false)
         }
         load()
     }, [])
 
     useEffect(() => {
-        if (!venueId) return
+        if (availableVenues.length > 0 && !venueId) {
+            setVenueId(availableVenues[0].id)
+        } else if (availableVenues.length === 0) {
+            setVenueId('')
+            setTemplates([])
+            setLoading(false)
+        }
+    }, [availableVenues, venueId])
+
+    useEffect(() => {
+        if (!venueId || !activeOrgId) return
         
         let mounted = true;
+        setLoading(true)
         adminApi.getTemplates(venueId)
             .then(res => {
                 if (mounted) setTemplates(res)
@@ -140,7 +151,7 @@ export default function TemplatesPage() {
             })
             
         return () => { mounted = false; }
-    }, [venueId])
+    }, [venueId, activeOrgId])
 
     const loadQuestions = async (tmpl: TemplateDetail) => {
         setSelectedTemplate(tmpl)
@@ -317,7 +328,7 @@ export default function TemplatesPage() {
                     onChange={(e) => { setVenueId(e.target.value); setSelectedTemplate(null); setQuestions([]) }}
                     className="bg-surface border border-border rounded-xl px-3 h-10 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
                 >
-                    {profile?.venues.map((v) => (
+                    {availableVenues.map((v) => (
                         <option key={v.id} value={v.id}>{v.name}</option>
                     ))}
                 </select>

@@ -3,42 +3,38 @@
 
 import { useEffect, useState } from 'react'
 import { adminApi, getProfile, type VenueInfo, type InventoryDashboardSummary } from '@/lib/api'
+import { useVenue } from '@/components/VenueContext'
 import { Box, Wrench, AlertTriangle, ClipboardList, Clock, ArrowRight } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
 export default function InventoryDashboardPage() {
+  const { availableVenues } = useVenue()
   const [data, setData] = useState<InventoryDashboardSummary | null>(null)
-  const [venues, setVenues] = useState<VenueInfo[]>([])
   const [selectedVenue, setSelectedVenue] = useState<string>('')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    getProfile().then(p => {
-      setVenues(p.venues || [])
-    })
-  }, [])
-
-  useEffect(() => {
     let active = true
     
-    if (selectedVenue || venues.length > 0) {
-        setTimeout(() => {
-          if (active) setLoading(true)
-        }, 0)
-        adminApi.getInventoryDashboard(selectedVenue || undefined)
-          .then(res => {
-            if (active) setData(res)
-          })
-          .catch(console.error)
-          .finally(() => {
-            if (active) setLoading(false)
-          })
+    // Reset selected venue if it's not in the available venues for the new org
+    if (selectedVenue && !availableVenues.find(v => v.id === selectedVenue)) {
+        setSelectedVenue('')
     }
+
+    if (active) setLoading(true)
+    adminApi.getInventoryDashboard(selectedVenue || undefined)
+        .then(res => {
+        if (active) setData(res)
+        })
+        .catch(console.error)
+        .finally(() => {
+        if (active) setLoading(false)
+        })
     
     return () => { active = false }
-  }, [selectedVenue, venues.length])
+  }, [selectedVenue, availableVenues])
 
   if (loading || !data) {
     return <div className="animate-pulse space-y-6 p-6"><div className="h-32 bg-surface rounded-2xl w-full"></div></div>
@@ -57,7 +53,7 @@ export default function InventoryDashboardPage() {
           className="bg-surface border border-border rounded-xl px-4 h-10 text-sm focus:border-primary outline-none"
         >
           <option value="">Todas las Sedes</option>
-          {venues.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+          {availableVenues.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
         </select>
       </div>
 
@@ -174,7 +170,7 @@ export default function InventoryDashboardPage() {
                     <div>
                       <p className="font-semibold text-sm text-text-primary">{s.name}</p>
                       <p className={`text-xs mt-1 ${isOverdue ? 'text-error' : 'text-warning-strong'}`}>
-                        {venues.find(v => v.id === s.venue_id)?.name || 'Sede'} - {isOverdue ? 'Vencida el' : 'Para hoy'}: {format(new Date(s.next_due + 'T00:00:00'), "dd MMM", { locale: es })}
+                        {availableVenues.find(v => v.id === s.venue_id)?.name || 'Sede'} - {isOverdue ? 'Vencida el' : 'Para hoy'}: {format(new Date(s.next_due + 'T00:00:00'), "dd MMM", { locale: es })}
                       </p>
                     </div>
                   </div>

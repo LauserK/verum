@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { adminApi, getProfile, type Profile, type ComplianceReport, type AdminSummary } from '@/lib/api'
+import { useVenue } from '@/components/VenueContext'
 import {
     ClipboardCheck, Box, 
     AlertTriangle, ArrowRight, Loader2, Users,
@@ -13,6 +14,7 @@ import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
 export default function GeneralAdminDashboard() {
+    const { availableVenues, activeOrgId } = useVenue()
     const [profile, setProfile] = useState<Profile | null>(null)
     const [summary, setSummary] = useState<AdminSummary | null>(null)
     const [compliance, setCompliance] = useState<ComplianceReport | null>(null)
@@ -22,12 +24,22 @@ export default function GeneralAdminDashboard() {
     useEffect(() => {
         getProfile().then(p => {
             setProfile(p)
-            if (p.venues.length > 0) setVenueId(p.venues[0].id)
         })
     }, [])
 
     useEffect(() => {
-        if (!venueId) return
+        if (availableVenues.length > 0 && !venueId) {
+            setVenueId(availableVenues[0].id)
+        } else if (availableVenues.length === 0) {
+            setVenueId('')
+            setSummary(null)
+            setCompliance(null)
+            setLoading(false)
+        }
+    }, [availableVenues, venueId])
+
+    useEffect(() => {
+        if (!venueId || !activeOrgId) return
         
         // Use a flag to avoid setting state on unmounted component
         let mounted = true;
@@ -95,7 +107,7 @@ export default function GeneralAdminDashboard() {
                     }}
                     className="bg-surface border border-border rounded-xl px-4 h-11 text-sm font-bold text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none shadow-sm transition-all"
                 >
-                    {profile.venues.map((v) => (
+                    {availableVenues.map((v) => (
                         <option key={v.id} value={v.id}>{v.name}</option>
                     ))}
                 </select>

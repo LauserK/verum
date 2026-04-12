@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { adminApi, getProfile, type Profile, type AdminSubmission } from '@/lib/api'
+import { useVenue } from '@/components/VenueContext'
 import { Loader2, Eye, Clock } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -10,6 +11,7 @@ import { useTranslations } from '@/components/I18nProvider'
 export default function SubmissionsPage() {
     const { t } = useTranslations()
     const router = useRouter()
+    const { availableVenues, activeOrgId } = useVenue()
     const [profile, setProfile] = useState<Profile | null>(null)
     const [submissions, setSubmissions] = useState<AdminSubmission[]>([])
     const [loading, setLoading] = useState(true)
@@ -21,16 +23,26 @@ export default function SubmissionsPage() {
             try {
                 const p = await getProfile()
                 setProfile(p)
-                if (p.venues.length > 0) setVenueId(p.venues[0].id)
             } catch { }
         }
         load()
     }, [])
 
     useEffect(() => {
-        if (!venueId) return
+        if (availableVenues.length > 0 && !venueId) {
+            setVenueId(availableVenues[0].id)
+        } else if (availableVenues.length === 0) {
+            setVenueId('')
+            setSubmissions([])
+            setLoading(false)
+        }
+    }, [availableVenues, venueId])
+
+    useEffect(() => {
+        if (!venueId || !activeOrgId) return
         
         let mounted = true;
+        setLoading(true)
         const filters: Record<string, string> = { venue_id: venueId }
         if (statusFilter) filters.status = statusFilter
         
@@ -78,10 +90,13 @@ export default function SubmissionsPage() {
             <div className="flex flex-wrap gap-3 items-center">
                 <select
                     value={venueId}
-                    onChange={(e) => setVenueId(e.target.value)}
+                    onChange={(e) => {
+                        setVenueId(e.target.value)
+                        setLoading(true)
+                    }}
                     className="bg-surface border border-border rounded-xl px-3 h-10 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
                 >
-                    {profile?.venues.map((v) => (
+                    {availableVenues.map((v) => (
                         <option key={v.id} value={v.id}>{v.name}</option>
                     ))}
                 </select>

@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from 'react'
 import { adminApi, getProfile, type Profile, type AdminUser } from '@/lib/api'
+import { useVenue } from '@/components/VenueContext'
 import { 
     ArrowLeft, CheckCircle2, XCircle, Clock, 
     Calendar, User, FileText, Loader2, Search,
@@ -28,6 +29,7 @@ interface LeaveRequest {
 
 export default function AdminAbsencesPage() {
     const router = useRouter()
+    const { availableVenues, activeOrgId } = useVenue()
     const [profile, setProfile] = useState<Profile | null>(null)
     const [users, setUsers] = useState<AdminUser[]>([])
     const [requests, setRequests] = useState<LeaveRequest[]>([])
@@ -51,18 +53,29 @@ export default function AdminAbsencesPage() {
     useEffect(() => {
         getProfile().then(p => {
             setProfile(p)
-            if (p.venue_id) setVenueId(p.venue_id)
         })
         adminApi.getUsers().then(setUsers)
     }, [])
 
     useEffect(() => {
-        if (venueId || (profile && !venueId)) {
+        if (availableVenues.length > 0 && !venueId) {
+            setVenueId(availableVenues[0].id)
+        } else if (availableVenues.length === 0) {
+            setVenueId('')
+            setRequests([])
+            setHistory([])
+            setLoading(false)
+        }
+    }, [availableVenues, venueId])
+
+    useEffect(() => {
+        if (venueId && activeOrgId) {
             loadData()
         }
-    }, [venueId, profile])
+    }, [venueId, activeOrgId])
 
     async function loadData() {
+        if (!venueId) return
         setLoading(true)
         console.log('Loading absences data for venue:', venueId)
         try {
@@ -157,7 +170,7 @@ export default function AdminAbsencesPage() {
                         className="flex-1 sm:flex-none bg-surface border border-border rounded-xl px-4 py-2 font-bold text-sm focus:border-primary outline-none"
                     >
                         <option value="">Todas las Sedes</option>
-                        {profile?.venues.map(v => (
+                        {availableVenues.map(v => (
                             <option key={v.id} value={v.id}>{v.name}</option>
                         ))}
                     </select>

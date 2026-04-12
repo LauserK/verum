@@ -27,7 +27,9 @@ from schemas import (
     CreateCountScheduleRequest, UpdateCountScheduleRequest,
     EmployeeShiftRequest, ShiftDayRequest, MarkAttendanceRequest,
     AbsenceRequest, LeaveRequest, AbsenceApprovalRequest,
-    ManualAttendanceRequest
+    ManualAttendanceRequest, SuperAdminUserDetail,
+    SuperAdminUserOrgAdd, SuperAdminUserOrgUpdate,
+    SuperAdminUserInOrg, SuperAdminOrgDetail
 )
 
 CARACAS_TZ = pytz.timezone("America/Caracas")
@@ -46,8 +48,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-security = HTTPBearer()
-
+from auth_deps import security, get_current_user
 
 # ── Helpers ──────────────────────────────────────────────
 
@@ -66,31 +67,13 @@ async def get_user_shift_identifier(user_id: str, venue_id: str, db) -> str:
     """
     Retorna el shift_id (UUID) del usuario para una sede específica desde employee_shifts.
     En el modelo M:N, el shift es específico de la sede.
-    De lo contrario lanza un error 403.
+    Si no tiene uno asignado, hace fallback al bloque horario (morning/mid/closing).
     """
     res = db.table("employee_shifts").select("id").eq("profile_id", user_id).eq("venue_id", venue_id).eq("is_active", True).execute()
-    if not res.data:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="no_shift_assigned"
-        )
-    return str(res.data[0]["id"])
-
-
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    token = credentials.credentials
-    try:
-        res = supabase.auth.get_user(token)
-        if res and res.user:
-            return res.user
-        else:
-            raise HTTPException(status_code=401, detail="Invalid token")
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    if res.data:
+        return str(res.data[0]["id"])
+    
+    return get_current_shift()
 
 
 async def get_active_org_id(x_org_id: Optional[str] = Header(None), current_user=Depends(get_current_user), db=Depends(get_db)) -> str:
@@ -117,10 +100,7 @@ async def get_active_org_id(x_org_id: Optional[str] = Header(None), current_user
     raise HTTPException(400, "Organization context required")
 
 
-from permissions import resolve_permission
-
-
-from permissions import resolve_permission, check_restriction
+from permissions import resolve_permission, check_restriction, get_super_admin
 from attendance_utils import is_clocked_in
 
 def require_permission(permission_key: str):
@@ -172,22 +152,37 @@ async def sync_user(user=Depends(get_current_user)):
         existing = db.table("profiles").select("*").eq("id", user.id).execute()
 
         if existing.data and len(existing.data) > 0:
-            return {"id": user.id, "role": existing.data[0].get("role")}
+            profile = existing.data[0]
+            
+            # Check if their primary organization is active
+            org_active = True
+            if profile.get("organization_id"):
+                org_res = db.table("organizations").select("is_active").eq("id", profile["organization_id"]).execute()
+                if org_res.data:
+                    org_active = org_res.data[0].get("is_active", True)
+            
+            return {
+                "id": user.id, 
+                "role": profile.get("role"),
+                "is_superadmin": profile.get("is_superadmin", False),
+                "organization_is_active": org_active
+            }
 
         new_profile = {
             "id": user.id,
             "role": "staff",
             "full_name": user.user_metadata.get("full_name", user.email) if user else "",
+            "is_superadmin": False
         }
         db.table("profiles").insert(new_profile).execute()
 
-        return {"id": user.id, "role": "staff"}
+        return {"id": user.id, "role": "staff", "is_superadmin": False, "organization_is_active": True}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/me", response_model=ProfileResponse)
-async def get_profile(user=Depends(get_current_user)):
+async def get_profile(x_org_id: Optional[str] = Header(None), user=Depends(get_current_user)):
     """Returns the authenticated user's profile with their venues grouped by organization."""
     try:
         db = get_db()
@@ -197,16 +192,42 @@ async def get_profile(user=Depends(get_current_user)):
         
         profile = result.data[0]
         user_role = profile.get("role", "staff")
+        is_superadmin = profile.get("is_superadmin", False)
         
+        # If organization header is present, try to get the specific role for that org
+        if x_org_id:
+            po_res = db.table("profile_organizations") \
+                .select("role_id, custom_roles(name, is_admin)") \
+                .eq("profile_id", user.id) \
+                .eq("organization_id", x_org_id) \
+                .execute()
+            
+            if po_res.data:
+                item = po_res.data[0]
+                if item.get("custom_roles"):
+                    user_role = item["custom_roles"]["name"]
+                    # If the custom role is an admin role, ensure user_role is 'admin' for frontend consistency
+                    if item["custom_roles"].get("is_admin"):
+                        user_role = "admin"
+                else:
+                    # No custom role, default to staff for this org UNLESS they are global admin
+                    if user_role != "admin":
+                        user_role = "staff"
+
         # 1. Fetch user's organizations
-        orgs_res = db.table("profile_organizations").select("organization_id, organizations(name)").eq("profile_id", user.id).execute()
+        orgs_res = db.table("profile_organizations") \
+            .select("organization_id, organizations!profile_organizations_organization_id_fkey(name, is_active)") \
+            .eq("profile_id", user.id).execute()
+            
         user_orgs = []
         if orgs_res.data:
             for po in orgs_res.data:
-                if po.get("organizations"):
+                o_data = po.get("organizations")
+                if o_data:
                     user_orgs.append({
                         "id": po["organization_id"],
-                        "name": po["organizations"].get("name")
+                        "name": o_data.get("name", "Unknown"),
+                        "is_active": o_data.get("is_active", True)
                     })
 
         # 2. Fetch venues based on role
@@ -215,7 +236,7 @@ async def get_profile(user=Depends(get_current_user)):
         for org in user_orgs:
             org_venues_map[org["id"]] = []
 
-        if user_role == "admin":
+        if user_role == "admin" or is_superadmin:
             # Admins see all venues for their organizations
             if user_orgs:
                 org_ids = [org["id"] for org in user_orgs]
@@ -247,7 +268,8 @@ async def get_profile(user=Depends(get_current_user)):
             organizations_response.append({
                 "id": org["id"],
                 "name": org["name"],
-                "venues": org_venues_map[org["id"]]
+                "venues": org_venues_map.get(org["id"], []),
+                "is_active": org.get("is_active", True)
             })
 
         # Fetch shift name if shift_id is present
@@ -262,6 +284,7 @@ async def get_profile(user=Depends(get_current_user)):
             "id": profile["id"],
             "full_name": profile.get("full_name"),
             "role": user_role,
+            "is_superadmin": is_superadmin,
             "organizations": organizations_response,
             "organization_id": profile.get("organization_id"),
             "venue_id": profile.get("venue_id"),
@@ -283,10 +306,21 @@ async def get_checklists(venue_id: str, user=Depends(require_permission("checkli
     try:
         db = get_db()
         
-        # Security: Verify user belongs to this venue
-        pv_check = db.table("profile_venues").select("venue_id").eq("profile_id", user.id).eq("venue_id", venue_id).execute()
-        if not pv_check.data:
-             raise HTTPException(status_code=403, detail="No tienes acceso a esta sede")
+        # Security: Verify user belongs to this venue OR is admin of the organization
+        # 1. Get venue's organization
+        venue_res = db.table("venues").select("org_id").eq("id", venue_id).execute()
+        if not venue_res.data:
+            raise HTTPException(404, "Sede no encontrada")
+        v_org_id = venue_res.data[0]["org_id"]
+
+        # 2. Check if user is Admin of this org OR Super Admin (resolve_permission handles Super Admin bypass)
+        is_org_admin = await resolve_permission(user.id, "admin.view_dashboard", db, org_id=v_org_id)
+        
+        if not is_org_admin:
+            # If not admin, must be assigned to venue via profile_venues
+            pv_check = db.table("profile_venues").select("venue_id").eq("profile_id", user.id).eq("venue_id", venue_id).execute()
+            if not pv_check.data:
+                 raise HTTPException(status_code=403, detail="No tienes acceso a esta sede")
 
         shift = await get_user_shift_identifier(user.id, venue_id, db)
         today = datetime.now(CARACAS_TZ).strftime("%Y-%m-%d")
@@ -811,6 +845,268 @@ async def bulk_save_answers(
 
 
 
+# ── Super Admin Global Management ───────────────────────
+
+@app.get("/super-admin/organizations")
+async def super_list_organizations(user=Depends(get_super_admin)):
+    db = get_db()
+    res = db.table("organizations").select("*").execute()
+    return res.data or []
+
+@app.post("/super-admin/organizations")
+async def super_create_organization(body: CreateOrgRequest, user=Depends(get_super_admin)):
+    db = get_db()
+    res = db.table("organizations").insert({"name": body.name}).execute()
+    if res.data:
+        org = res.data[0]
+        # Seed default roles for this new organization
+        await seed_org_roles(org["id"], db)
+        return org
+    raise HTTPException(500, "Failed to create organization")
+
+@app.patch("/super-admin/organizations/{org_id}")
+async def super_update_organization(org_id: str, body: dict, user=Depends(get_super_admin)):
+    db = get_db()
+    res = db.table("organizations").update(body).eq("id", org_id).execute()
+    return res.data[0] if res.data else {}
+
+@app.get("/super-admin/organizations/{org_id}", response_model=SuperAdminOrgDetail)
+async def super_get_org_detail(org_id: str, user=Depends(get_super_admin)):
+    db = get_db()
+    # 1. Get organization
+    o_res = db.table("organizations").select("*").eq("id", org_id).single().execute()
+    if not o_res.data:
+        raise HTTPException(404, "Organization not found")
+    org = o_res.data
+
+    # 2. Get venues
+    v_res = db.table("venues").select("*").eq("org_id", org_id).execute()
+    venues = v_res.data or []
+
+    # 3. Get users associated with this organization
+    u_res = db.table("profile_organizations") \
+        .select("profile_id, profiles(full_name), custom_roles(name)") \
+        .eq("organization_id", org_id).execute()
+    
+    users_detail = []
+    for item in (u_res.data or []):
+        p_data = item.get("profiles")
+        if not p_data: continue
+        
+        role_name = "staff"
+        if item.get("custom_roles"):
+            role_name = item["custom_roles"]["name"]
+        
+        users_detail.append({
+            "id": item["profile_id"],
+            "full_name": p_data["full_name"],
+            "role_name": role_name
+        })
+
+    return {
+        "id": org["id"],
+        "name": org["name"],
+        "is_active": org.get("is_active", True),
+        "venues": venues,
+        "users": users_detail
+    }
+
+@app.post("/super-admin/organizations/{org_id}/venues")
+async def super_create_org_venue(org_id: str, body: CreateVenueRequest, user=Depends(get_super_admin)):
+    db = get_db()
+    # Force the org_id from the URL path
+    payload = {"org_id": org_id, "name": body.name, "address": body.address}
+    res = db.table("venues").insert(payload).execute()
+    return res.data[0]
+
+@app.patch("/super-admin/venues/{venue_id}")
+async def super_update_venue(venue_id: str, body: UpdateVenueRequest, user=Depends(get_super_admin)):
+    db = get_db()
+    payload = body.dict(exclude_none=True)
+    if not payload:
+        raise HTTPException(400, "No fields to update")
+    res = db.table("venues").update(payload).eq("id", venue_id).execute()
+    return res.data[0] if res.data else {}
+
+@app.delete("/super-admin/venues/{venue_id}")
+async def super_delete_venue(venue_id: str, user=Depends(get_super_admin)):
+    db = get_db()
+    db.table("venues").delete().eq("id", venue_id).execute()
+    return {"ok": True}
+
+@app.get("/super-admin/users")
+async def super_list_users(user=Depends(get_super_admin)):
+    db = get_db()
+    # List all users with their primary organization info
+    # Specify the relationship to avoid ambiguity
+    res = db.table("profiles").select("*, organizations!profiles_organization_id_fkey(name)").execute()
+    return res.data or []
+
+@app.patch("/super-admin/users/{user_id}/super-admin")
+async def super_promote_user(user_id: str, body: dict, user=Depends(get_super_admin)):
+    db = get_db()
+    is_super = body.get("is_superadmin", False)
+    res = db.table("profiles").update({"is_superadmin": is_super}).eq("id", user_id).execute()
+    return res.data[0] if res.data else {}
+
+@app.get("/super-admin/users/{user_id}", response_model=SuperAdminUserDetail)
+async def super_get_user_detail(user_id: str, user=Depends(get_super_admin)):
+    db = get_db()
+    # 1. Get profile
+    p_res = db.table("profiles").select("*").eq("id", user_id).single().execute()
+    if not p_res.data:
+        raise HTTPException(404, "Profile not found")
+    profile = p_res.data
+
+    # 2. Get email from Auth
+    email = None
+    try:
+        auth_user = db.auth.admin.get_user_by_id(user_id)
+        email = auth_user.user.email if auth_user.user else None
+    except Exception:
+        pass
+
+    # 3. Get organizations
+    orgs_res = db.table("profile_organizations") \
+        .select("organization_id, role_id, organizations(name), custom_roles(name)") \
+        .eq("profile_id", user_id).execute()
+    
+    # 4. Get venues
+    venues_res = db.table("profile_venues") \
+        .select("venue_id, venues(name, org_id)") \
+        .eq("profile_id", user_id).execute()
+    
+    org_venues_map = {}
+    for pv in (venues_res.data or []):
+        v_data = pv.get("venues")
+        if v_data:
+            o_id = v_data["org_id"]
+            if o_id not in org_venues_map: org_venues_map[o_id] = []
+            org_venues_map[o_id].append({"id": pv["venue_id"], "name": v_data["name"]})
+
+    orgs_detail = []
+    for po in (orgs_res.data or []):
+        o_id = po["organization_id"]
+        o_name = po["organizations"]["name"] if po.get("organizations") else "Unknown"
+        
+        role_name = "staff"
+        if po.get("custom_roles"):
+            role_name = po["custom_roles"]["name"]
+        elif profile.get("role") == "admin":
+            role_name = "admin"
+
+        orgs_detail.append({
+            "id": o_id,
+            "name": o_name,
+            "role_id": po.get("role_id"),
+            "role_name": role_name,
+            "venues": org_venues_map.get(o_id, [])
+        })
+
+    return {
+        "id": profile["id"],
+        "full_name": profile.get("full_name"),
+        "email": email,
+        "role": profile.get("role", "staff"),
+        "is_superadmin": profile.get("is_superadmin", False),
+        "organizations": orgs_detail
+    }
+
+@app.post("/super-admin/users/{user_id}/organizations")
+async def super_add_user_org(user_id: str, body: SuperAdminUserOrgAdd, user=Depends(get_super_admin)):
+    db = get_db()
+    
+    # 1. Update/Insert organization association
+    role_id = body.role_id
+    if not role_id and body.role_name and body.role_name not in ["admin", "staff"]:
+        # Try to find role_id by name
+        r_res = db.table("custom_roles").select("id").eq("org_id", body.organization_id).eq("name", body.role_name).execute()
+        if r_res.data:
+            role_id = r_res.data[0]["id"]
+
+    db.table("profile_organizations").upsert({
+        "profile_id": user_id,
+        "organization_id": body.organization_id,
+        "role_id": role_id
+    }).execute()
+
+    # 2. Update venues (remove old ones for THIS org and insert new)
+    # First, get all venues for this organization
+    ov_res = db.table("venues").select("id").eq("org_id", body.organization_id).execute()
+    org_venue_ids = [v["id"] for v in (ov_res.data or [])]
+    
+    if org_venue_ids:
+        # Delete user associations for THESE venues
+        db.table("profile_venues").delete().eq("profile_id", user_id).in_("venue_id", org_venue_ids).execute()
+        
+        # Insert new associations
+        if body.venue_ids:
+            # Only insert those that actually belong to the org
+            valid_ids = [vid for vid in body.venue_ids if vid in org_venue_ids]
+            if valid_ids:
+                db.table("profile_venues").insert([{"profile_id": user_id, "venue_id": vid} for vid in valid_ids]).execute()
+
+    return {"ok": True}
+
+@app.put("/super-admin/users/{user_id}/organizations/{org_id}")
+async def super_update_user_org(user_id: str, org_id: str, body: SuperAdminUserOrgUpdate, user=Depends(get_super_admin)):
+    db = get_db()
+    
+    # 1. Update role
+    role_id = body.role_id
+    if not role_id and body.role_name and body.role_name not in ["admin", "staff"]:
+        r_res = db.table("custom_roles").select("id").eq("org_id", org_id).eq("name", body.role_name).execute()
+        if r_res.data:
+            role_id = r_res.data[0]["id"]
+
+    db.table("profile_organizations").upsert({
+        "profile_id": user_id,
+        "organization_id": org_id,
+        "role_id": role_id
+    }).execute()
+
+    # 2. Update venues
+    if body.venue_ids is not None:
+        ov_res = db.table("venues").select("id").eq("org_id", org_id).execute()
+        org_venue_ids = [v["id"] for v in (ov_res.data or [])]
+        
+        if org_venue_ids:
+            db.table("profile_venues").delete().eq("profile_id", user_id).in_("venue_id", org_venue_ids).execute()
+            valid_ids = [vid for vid in body.venue_ids if vid in org_venue_ids]
+            if valid_ids:
+                db.table("profile_venues").insert([{"profile_id": user_id, "venue_id": vid} for vid in valid_ids]).execute()
+
+    return {"ok": True}
+
+@app.delete("/super-admin/users/{user_id}/organizations/{org_id}")
+async def super_remove_user_org(user_id: str, org_id: str, user=Depends(get_super_admin)):
+    db = get_db()
+    # 1. Delete org association
+    db.table("profile_organizations").delete().eq("profile_id", user_id).eq("organization_id", org_id).execute()
+    
+    # 2. Delete venue associations for venues in this org
+    ov_res = db.table("venues").select("id").eq("org_id", org_id).execute()
+    org_venue_ids = [v["id"] for v in (ov_res.data or [])]
+    if org_venue_ids:
+        db.table("profile_venues").delete().eq("profile_id", user_id).in_("venue_id", org_venue_ids).execute()
+        
+    return {"ok": True}
+
+@app.get("/super-admin/metrics")
+async def super_get_metrics(user=Depends(get_super_admin)):
+    db = get_db()
+    
+    orgs_res = db.table("organizations").select("id", count="exact").execute()
+    venues_res = db.table("venues").select("id", count="exact").execute()
+    users_res = db.table("profiles").select("id", count="exact").execute()
+    
+    return {
+        "total_organizations": orgs_res.count or 0,
+        "total_venues": venues_res.count or 0,
+        "total_users": users_res.count or 0,
+    }
+
+
 # ── Admin CRUD Routes ───────────────────────────────────
 
 @app.get("/admin/organizations")
@@ -820,11 +1116,76 @@ async def list_organizations(user=Depends(require_permission("admin.manage_venue
     return res.data or []
 
 
+async def seed_org_roles(org_id: str, db):
+    """Seeds default roles and permissions for a new organization."""
+    try:
+        # 1. Create 'Gerente de Operaciones' (Admin level)
+        res_admin = db.table("custom_roles").insert({
+            "org_id": org_id,
+            "name": "Gerente de Operaciones",
+            "description": "Control total de la sede, usuarios y configuraciones.",
+            "is_admin": True
+        }).execute()
+        
+        # 2. Create 'Supervisor de Turno'
+        res_super = db.table("custom_roles").insert({
+            "org_id": org_id,
+            "name": "Supervisor de Turno",
+            "description": "Gestión de checklists, auditoría de otros turnos y control de inventario.",
+            "is_admin": False
+        }).execute()
+        
+        # 3. Create 'Personal de Línea'
+        res_staff = db.table("custom_roles").insert({
+            "org_id": org_id,
+            "name": "Personal de Línea",
+            "description": "Ejecución de checklists, reporte de fallas y conteos de inventario.",
+            "is_admin": False
+        }).execute()
+
+        if res_super.data and res_staff.data:
+            role_supervisor_id = res_super.data[0]["id"]
+            role_staff_id = res_staff.data[0]["id"]
+
+            # Fetch all permissions to map them
+            perms_res = db.table("permissions").select("id, key").execute()
+            perms = {p["key"]: p["id"] for p in (perms_res.data or [])}
+
+            # Associate Permissions to 'Supervisor de Turno'
+            super_keys = [
+                'checklists.view', 'checklists.execute', 'checklists.view_all', 'checklists.manage_templates',
+                'inventory_assets.view', 'inventory_assets.report_fault', 'inventory_assets.add_ticket_entry', 
+                'inventory_assets.close_ticket', 'inventory_assets.print_qr', 'inventory_assets.review',
+                'inventory_utensils.view', 'inventory_utensils.count', 'inventory_utensils.confirm_count',
+                'admin.view_dashboard', 'admin.view_reports'
+            ]
+            super_perms = [{"role_id": role_supervisor_id, "permission_id": perms[k]} for k in super_keys if k in perms]
+            if super_perms:
+                db.table("role_permissions").insert(super_perms).execute()
+
+            # Associate Permissions to 'Personal de Línea'
+            staff_keys = [
+                'checklists.view', 'checklists.execute',
+                'inventory_assets.view', 'inventory_assets.report_fault', 'inventory_assets.add_ticket_entry',
+                'inventory_utensils.view', 'inventory_utensils.count'
+            ]
+            staff_perms = [{"role_id": role_staff_id, "permission_id": perms[k]} for k in staff_keys if k in perms]
+            if staff_perms:
+                db.table("role_permissions").insert(staff_perms).execute()
+                
+    except Exception as e:
+        print(f"Error seeding roles for org {org_id}: {e}")
+
 @app.post("/admin/organizations")
 async def create_organization(body: CreateOrgRequest, user=Depends(require_permission("admin.manage_venues"))):
     db = get_db()
     res = db.table("organizations").insert({"name": body.name}).execute()
-    return res.data[0]
+    if res.data:
+        org = res.data[0]
+        # Seed default roles for this new organization
+        await seed_org_roles(org["id"], db)
+        return org
+    raise HTTPException(500, "Failed to create organization")
 
 
 @app.get("/admin/organizations/{org_id}/venues")
@@ -869,74 +1230,137 @@ async def delete_venue(venue_id: str, user=Depends(require_permission("admin.man
 
 @app.get("/admin/users")
 async def list_users(user=Depends(require_permission("admin.manage_users")), org_id: str = Depends(get_active_org_id)):
-    """List all profiles in the admin's organization."""
+    """List all profiles associated with the active organization context."""
     db = get_db()
-    res = db.table("profiles").select("id, full_name, role, organization_id, venue_id, shift_id").eq("organization_id", org_id).execute()
+    
+    # Query profile_organizations to find everyone who belongs to this org
+    # Join with profiles to get details and custom_roles to get org-specific roles
+    res = db.table("profile_organizations") \
+        .select("profile_id, role_id, profiles(id, full_name, role, organization_id, venue_id, shift_id), custom_roles(name)") \
+        .eq("organization_id", org_id) \
+        .execute()
+    
+    data = res.data or []
+    profiles = []
+    
+    for item in data:
+        p = item.get("profiles")
+        if not p:
+            continue
+            
+        # Determine the role for THIS organization
+        if item.get("custom_roles"):
+            # Use custom role name if defined for this org
+            p["role"] = item["custom_roles"]["name"]
+        elif p.get("role") == "admin":
+            # Keep global admin role
+            pass
+        else:
+            # Default to staff for this org context
+            p["role"] = "staff"
+            
+        profiles.append(p)
+
     # Get emails from auth users
-    profiles = res.data or []
     for p in profiles:
         try:
             auth_user = db.auth.admin.get_user_by_id(p["id"])
             p["email"] = auth_user.user.email if auth_user.user else None
         except Exception:
             p["email"] = None
+            
     return profiles
 
 
 @app.post("/admin/users")
 async def create_user(body: CreateUserRequest, user=Depends(require_permission("admin.manage_users")), org_id: str = Depends(get_active_org_id)):
-    """Create a new user via Supabase Auth admin API + profile."""
-    try:
-        db = get_db()
-        auth_res = db.auth.admin.create_user({
-            "email": body.email,
-            "password": body.password,
-            "email_confirm": True,
-        })
-        new_user = auth_res.user
-        if not new_user:
-            raise HTTPException(500, "Failed to create auth user")
+    """Create a new user or associate an existing one with this organization."""
+    db = get_db()
+    target_user_id = None
+    is_new_user = False
 
-        # Insert profile
+    try:
+        # 1. Try to create the user in Auth
+        try:
+            auth_res = db.auth.admin.create_user({
+                "email": body.email,
+                "password": body.password,
+                "email_confirm": True,
+            })
+            if auth_res.user:
+                target_user_id = auth_res.user.id
+                is_new_user = True
+        except Exception as e:
+            error_str = str(e).lower()
+            if "already registered" in error_str or "already exists" in error_str:
+                # 2. User exists, find their ID
+                # We list users and find the one with the matching email
+                all_users = db.auth.admin.list_users()
+                existing = next((u for u in all_users if u.email == body.email), None)
+                if existing:
+                    target_user_id = existing.id
+                else:
+                    raise HTTPException(400, "User found in Auth but could not retrieve details.")
+            else:
+                raise HTTPException(400, f"Auth error: {str(e)}")
+
+        if not target_user_id:
+            raise HTTPException(500, "Failed to identify user ID")
+
+        # 3. Insert/Update profile
         profile_data = {
-            "id": new_user.id,
+            "id": target_user_id,
             "full_name": body.full_name,
-            "role": body.role,
-            "organization_id": body.organization_id,
+            # We keep global role as 'staff' unless explicitly 'admin'
+            # The organization-specific role is handled in profile_organizations
+            "role": body.role if body.role == "admin" else "staff",
         }
+        
+        # Only set organization_id if it's a new user (legacy support)
+        if is_new_user:
+            profile_data["organization_id"] = body.organization_id
+            
         if body.venue_id:
             profile_data["venue_id"] = body.venue_id
         if body.shift_id:
             profile_data["shift_id"] = body.shift_id
+            
         db.table("profiles").upsert(profile_data).execute()
 
-        # Handle profile_venues
+        # 4. Handle profile_venues (Clean existing for THIS org then insert)
         v_ids = body.venue_ids if body.venue_ids is not None else ([body.venue_id] if body.venue_id else [])
         if v_ids:
-            pv_data = [{"profile_id": new_user.id, "venue_id": vid} for vid in v_ids]
-            db.table("profile_venues").insert(pv_data).execute()
+            # Remove existing venues for this user that belong to THIS organization to avoid duplicates/mess
+            # Note: This is simplified, in a full multi-tenant we'd filter by org venues
+            pv_data = [{"profile_id": target_user_id, "venue_id": vid} for vid in v_ids]
+            db.table("profile_venues").upsert(pv_data).execute()
 
-        # Handle custom role assignment
+        # 5. Handle custom role assignment for THIS organization
         role_id = None
         if body.role not in ["staff", "admin"]:
-            # Find the role by name in custom_roles
             role_res = db.table("custom_roles").select("id").eq("name", body.role).eq("org_id", body.organization_id).execute()
             if role_res.data:
                 role_id = role_res.data[0]["id"]
-                db.table("profile_roles").upsert({
-                    "profile_id": new_user.id,
-                    "role_id": role_id
-                }).execute()
 
-        # Multi-tenant: Assign to profile_organizations
+        # 6. Multi-tenant association: profile_organizations
+        # This is the key part: linking the user to the new company
         db.table("profile_organizations").upsert({
-            "profile_id": new_user.id,
+            "profile_id": target_user_id,
             "organization_id": body.organization_id,
             "role_id": role_id,
-            "is_default": True
+            "is_default": is_new_user # Make it default only if it's their first org
         }).execute()
 
-        return {"id": new_user.id, "email": body.email, "full_name": body.full_name, "role": body.role, "venue_ids": v_ids, "venue_id": body.venue_id, "shift_id": body.shift_id, "organization_id": body.organization_id}
+        return {
+            "id": target_user_id, 
+            "email": body.email, 
+            "full_name": body.full_name, 
+            "role": body.role, 
+            "venue_ids": v_ids, 
+            "organization_id": body.organization_id,
+            "is_associated": not is_new_user
+        }
+
     except HTTPException:
         raise
     except Exception as e:
@@ -2620,6 +3044,7 @@ async def get_attendance_status(venue_id: Optional[str] = None, current_user=Dep
     }
 @app.post("/attendance/mark")
 async def mark_attendance(body: MarkAttendanceRequest, current_user=Depends(get_current_user), db=Depends(get_db), _=Depends(require_permission("attendance.mark"))):
+    today_str = datetime.now(CARACAS_TZ).strftime("%Y-%m-%d")
     venue_id = body.venue_id
     if not venue_id:
         raise HTTPException(400, "venue_id is required")

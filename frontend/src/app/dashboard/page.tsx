@@ -8,7 +8,7 @@ import BottomNav from '@/components/BottomNav'
 import { VenueSelector } from '@/components/VenueSelector'
 import { useVenue } from '@/components/VenueContext'
 import ConfirmationModal from '@/components/ConfirmationModal'
-import { LogOut, Sun, Moon, Sunrise, CloudSun, Sunset, Shield, Clock } from 'lucide-react'
+import { LogOut, Sun, Moon, Sunrise, CloudSun, Sunset, Shield, Clock, Building2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from '@/components/I18nProvider'
 import { useTheme } from '@/components/ThemeProvider'
@@ -51,7 +51,7 @@ export default function DashboardPage() {
     const { t: attendanceT } = useTranslations('attendance')
     const { theme, toggleTheme } = useTheme()
     const router = useRouter()
-    const { selectedVenueId, isLoading: isVenueLoading } = useVenue()
+    const { selectedVenueId, isLoading: isVenueLoading, isMultiOrg, activeOrgName } = useVenue()
     const [profile, setProfile] = useState<Profile | null>(null)
     const [checklists, setChecklists] = useState<ChecklistItem[]>([])
     const [loading, setLoading] = useState(true)
@@ -68,7 +68,7 @@ export default function DashboardPage() {
     }, [])
 
     useEffect(() => {
-        if (isVenueLoading) return; // Wait for venue context to resolve to avoid double-fetching
+        if (isVenueLoading) return;
 
         async function loadData() {
             try {
@@ -76,22 +76,23 @@ export default function DashboardPage() {
                 const profileData = await getProfile()
                 setProfile(profileData)
 
-                // Fetch checklists for the user's assigned venue, fallback to first org venue
-                const targetVenueId = selectedVenueId || profileData.venue_id || (profileData.venues && profileData.venues.length > 0 ? profileData.venues[0].id : null)
-                if (targetVenueId) {
+                // STRIKT: Only use selectedVenueId which is already filtered by active organization in VenueContext
+                if (selectedVenueId) {
                     try {
-                        const checklistData = await getChecklists(targetVenueId)
+                        const checklistData = await getChecklists(selectedVenueId)
                         setChecklists(checklistData)
                     } catch (err: unknown) {
-                        // Check if it's the specific no_shift_assigned error
                         const errorMessage = (err as Error).message || ''
                         if (errorMessage.includes('no_shift_assigned')) {
                             setError('no_shift_assigned')
                         } else {
-                            // Venue might not have checklists yet or other error
+                            setError(errorMessage || 'Error loading checklists')
                             setChecklists([])
                         }
                     }
+                } else {
+                    // No venue selected or available for this organization
+                    setChecklists([])
                 }
             } catch (err: unknown) {
                 const errorMessage = (err as Error).message || ''
@@ -105,7 +106,7 @@ export default function DashboardPage() {
             }
         }
         loadData()
-    }, [selectedVenueId])
+    }, [selectedVenueId, isVenueLoading])
 
     const handleChecklistClick = (checklist: ChecklistItem) => {
         if (checklist.status === 'pending') {
@@ -116,8 +117,8 @@ export default function DashboardPage() {
     }
 
     const proceedToChecklist = (checklist: ChecklistItem) => {
-        const venueId = selectedVenueId || profile?.venue_id || profile?.venues?.[0]?.id || ''
-        router.push(`/checklist/${checklist.id}?venue=${venueId}&from=dashboard`)
+        if (!selectedVenueId) return
+        router.push(`/checklist/${checklist.id}?venue=${selectedVenueId}&from=dashboard`)
         setPendingChecklist(null)
     }
 
@@ -138,6 +139,16 @@ export default function DashboardPage() {
                     </div>
 
                     <div className="flex gap-1 items-center">
+                        {isMultiOrg && activeOrgName && (
+                            <button 
+                                onClick={() => router.push('/venue-selection')}
+                                className="text-[10px] font-bold text-primary hover:text-primary-hover bg-primary/5 px-2 py-1 rounded-lg border border-primary/10 transition-all flex items-center gap-1.5 mr-1"
+                            >
+                                <Building2 className="w-3 h-3" />
+                                <span className="max-w-[80px] truncate">{activeOrgName}</span>
+                            </button>
+                        )}
+
                         {mounted && (
                             <button
                                 onClick={toggleTheme}

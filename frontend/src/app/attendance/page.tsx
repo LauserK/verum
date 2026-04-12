@@ -36,8 +36,8 @@ export default function AttendancePage() {
         setConfirmModal(null)
         setMarking(type)
         try {
-            const data = type === 'clock_in' && clockInVenueId ? { venue_id: clockInVenueId } : {}
-            const res = await attendanceApi.mark(type, data)
+            const venue_id = type === 'clock_in' ? clockInVenueId : (status?.locked_to_venue || status?.effective_venue_id || selectedVenueId)
+            const res = await attendanceApi.mark(type, { venue_id })
             setResult({ type, data: res })
             setTimeout(() => {
                 router.push('/dashboard')

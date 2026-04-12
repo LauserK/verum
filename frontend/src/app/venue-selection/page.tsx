@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { getProfile, type OrgInfo } from '@/lib/api'
 import { useVenue } from '@/components/VenueContext'
@@ -15,17 +15,22 @@ export default function VenueSelectionPage() {
     const [loading, setLoading] = useState(true)
     const [organizations, setOrganizations] = useState<OrgInfo[]>([])
     const [selectedOrg, setSelectedOrg] = useState<OrgInfo | null>(null)
+    const [userRole, setUserRole] = useState<string | null>(null)
     const [step, setStep] = useState<'org' | 'venue'>('org')
     const [error, setError] = useState(false)
+    const initRef = useRef(false)
 
     useEffect(() => {
+        if (initRef.current) return
+        initRef.current = true
+
         async function init() {
             try {
                 const profile = await getProfile()
+                setUserRole(profile.role)
                 if (profile.organizations && profile.organizations.length > 0) {
                     setOrganizations(profile.organizations)
                     
-                    // Step 3: Redirection logic
                     if (profile.organizations.length === 1) {
                         const org = profile.organizations[0]
                         setActiveOrgId(org.id)
@@ -33,14 +38,14 @@ export default function VenueSelectionPage() {
                         if (org.venues && org.venues.length === 1) {
                             setSelectedVenueId(org.venues[0].id)
                             router.replace('/dashboard')
+                        } else if ((!org.venues || org.venues.length === 0) && profile.role === 'admin') {
+                            router.replace('/admin/venues')
                         } else {
-                            // 1 org but multiple venues -> show venue selection for that org
                             setSelectedOrg(org)
                             setStep('venue')
                             setLoading(false)
                         }
                     } else {
-                        // Multiple organizations -> show organization selection
                         setStep('org')
                         setLoading(false)
                     }
@@ -59,8 +64,13 @@ export default function VenueSelectionPage() {
 
     const handleOrgSelect = (org: OrgInfo) => {
         setActiveOrgId(org.id)
-        setSelectedOrg(org)
-        setStep('venue')
+        
+        if ((!org.venues || org.venues.length === 0) && userRole === 'admin') {
+            router.push('/admin/venues')
+        } else {
+            setSelectedOrg(org)
+            setStep('venue')
+        }
     }
 
     const handleVenueSelect = (venueId: string) => {
@@ -150,26 +160,33 @@ export default function VenueSelectionPage() {
                             </button>
                         ))
                     ) : (
-                        selectedOrg?.venues?.map((venue) => (
-                            <button
-                                key={venue.id}
-                                onClick={() => handleVenueSelect(venue.id)}
-                                className="group relative bg-surface border border-border rounded-3xl p-6 flex items-center justify-between hover:border-primary hover:shadow-xl hover:shadow-primary/5 transition-all duration-300 active:scale-[0.98] text-left"
-                            >
-                                <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 bg-primary/10 text-primary rounded-2xl flex items-center justify-center group-hover:bg-primary group-hover:text-text-inverse transition-colors duration-300">
-                                        <MapPin className="w-6 h-6" strokeWidth={2.5} />
+                        step === 'venue' && (!selectedOrg?.venues || selectedOrg.venues.length === 0) ? (
+                            <div className="text-center py-10">
+                                <MapPin className="w-12 h-12 text-text-disabled mx-auto mb-4" />
+                                <p className="text-text-secondary font-medium">{t('noVenues')}</p>
+                            </div>
+                        ) : (
+                            selectedOrg?.venues?.map((venue) => (
+                                <button
+                                    key={venue.id}
+                                    onClick={() => handleVenueSelect(venue.id)}
+                                    className="group relative bg-surface border border-border rounded-3xl p-6 flex items-center justify-between hover:border-primary hover:shadow-xl hover:shadow-primary/5 transition-all duration-300 active:scale-[0.98] text-left"
+                                >
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-12 h-12 bg-primary/10 text-primary rounded-2xl flex items-center justify-center group-hover:bg-primary group-hover:text-text-inverse transition-colors duration-300">
+                                            <MapPin className="w-6 h-6" strokeWidth={2.5} />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-lg font-bold text-text-primary group-hover:text-primary transition-colors">{venue.name}</h3>
+                                            <p className="text-xs font-bold text-text-secondary uppercase tracking-widest mt-0.5">{t('venueSubtitle')}</p>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <h3 className="text-lg font-bold text-text-primary group-hover:text-primary transition-colors">{venue.name}</h3>
-                                        <p className="text-xs font-bold text-text-secondary uppercase tracking-widest mt-0.5">{t('venueSubtitle')}</p>
+                                    <div className="w-10 h-10 rounded-full bg-surface-raised flex items-center justify-center text-text-disabled group-hover:bg-primary/10 group-hover:text-primary transition-all duration-300">
+                                        <ArrowRight className="w-5 h-5" />
                                     </div>
-                                </div>
-                                <div className="w-10 h-10 rounded-full bg-surface-raised flex items-center justify-center text-text-disabled group-hover:bg-primary/10 group-hover:text-primary transition-all duration-300">
-                                    <ArrowRight className="w-5 h-5" />
-                                </div>
-                            </button>
-                        ))
+                                </button>
+                            ))
+                        )
                     )}
                 </div>
 

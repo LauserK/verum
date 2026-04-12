@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from 'react'
 import { adminApi, getProfile, type ComplianceReport, type Profile } from '@/lib/api'
+import { useVenue } from '@/components/VenueContext'
 import {
     CheckCircle2, AlertTriangle, XCircle, Clock, TrendingUp,
     Loader2
@@ -16,6 +17,7 @@ import { useTranslations } from '@/components/I18nProvider'
 
 export default function ChecklistDashboard() {
     const { t } = useTranslations()
+    const { availableVenues, activeOrgId } = useVenue()
     const [profile, setProfile] = useState<Profile | null>(null)
     const [report, setReport] = useState<ComplianceReport | null>(null)
     const [loading, setLoading] = useState(true)
@@ -29,20 +31,27 @@ export default function ChecklistDashboard() {
             try {
                 const p = await getProfile()
                 setProfile(p)
-                if (p.venues.length > 0 && !venueId) {
-                    setVenueId(p.venues[0].id)
-                }
             } catch { }
         }
         load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
     useEffect(() => {
-        if (!venueId) return
+        if (availableVenues.length > 0 && !venueId) {
+            setVenueId(availableVenues[0].id)
+        } else if (availableVenues.length === 0) {
+            setVenueId('')
+            setReport(null)
+            setLoading(false)
+        }
+    }, [availableVenues, venueId])
+
+    useEffect(() => {
+        if (!venueId || !activeOrgId) return
         if (dateRange === 'custom' && (!customFrom || !customTo)) return
 
         let mounted = true;
+        setLoading(true)
         
         const getLocalDateString = (d: Date) => {
             const year = d.getFullYear()
@@ -113,7 +122,7 @@ export default function ChecklistDashboard() {
                     }}
                     className="bg-surface border border-border rounded-xl px-3 h-10 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
                 >
-                    {profile?.venues.map((v) => (
+                    {availableVenues.map((v) => (
                         <option key={v.id} value={v.id}>{v.name}</option>
                     ))}
                 </select>

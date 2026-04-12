@@ -8,11 +8,12 @@ import Link from 'next/link'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { useTranslations } from '@/components/I18nProvider'
+import { useVenue } from '@/components/VenueContext'
 
 export default function SchedulesPage() {
   const { t } = useTranslations()
+  const { availableVenues, activeOrgId } = useVenue()
   const [schedules, setSchedules] = useState<CountSchedule[]>([])
-  const [venues, setVenues] = useState<VenueInfo[]>([])
   const [users, setUsers] = useState<{ id: string, full_name: string }[]>([])
   const [categories, setCategories] = useState<UtensilCategory[]>([])
   const [utensils, setUtensils] = useState<Utensil[]>([])
@@ -39,7 +40,7 @@ export default function SchedulesPage() {
 
   const resetForm = () => {
     setNewName('')
-    setNewVenueId(venues.length > 0 ? venues[0].id : '')
+    setNewVenueId(availableVenues.length > 0 ? availableVenues[0].id : '')
     setNewAssignedTo('')
     setNewFrequency('weekly')
     setNewScope('all')
@@ -51,32 +52,29 @@ export default function SchedulesPage() {
   }
 
   const fetchData = useCallback(async () => {
+    if (!activeOrgId) return
     setLoading(true)
     try {
-      const profile = await getProfile()
-      if (profile.organization_id) {
-        setVenues(profile.venues || [])
-        const [schedRes, usersRes, catRes, utRes] = await Promise.all([
-          adminApi.getSchedules(),
-          adminApi.getUsers(), // Assuming we can list users in the org
-          adminApi.getUtensilCategories(profile.organization_id),
-          adminApi.getUtensils({ org_id: profile.organization_id })
-        ])
-        setSchedules(schedRes)
-        setUsers(usersRes)
-        setCategories(catRes)
-        setUtensils(utRes.filter(u => u.is_active))
-        
-        if (profile.venues && profile.venues.length > 0) {
-          setNewVenueId(profile.venues[0].id)
-        }
+      const [schedRes, usersRes, catRes, utRes] = await Promise.all([
+        adminApi.getSchedules(),
+        adminApi.getUsers(), // Assuming we can list users in the org
+        adminApi.getUtensilCategories(activeOrgId),
+        adminApi.getUtensils({ org_id: activeOrgId })
+      ])
+      setSchedules(schedRes)
+      setUsers(usersRes)
+      setCategories(catRes)
+      setUtensils(utRes.filter(u => u.is_active))
+      
+      if (availableVenues.length > 0 && !newVenueId) {
+        setNewVenueId(availableVenues[0].id)
       }
     } catch (err) {
       console.error('Error fetching schedules data:', err)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [activeOrgId, availableVenues, newVenueId])
 
   useEffect(() => {
     fetchData()
@@ -281,7 +279,7 @@ export default function SchedulesPage() {
                     className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all appearance-none"
                   >
                     <option value="">Seleccionar sede</option>
-                    {venues.map(v => (
+                    {availableVenues.map(v => (
                       <option key={v.id} value={v.id}>{v.name}</option>
                     ))}
                   </select>
