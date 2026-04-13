@@ -617,10 +617,11 @@ async def create_submission(body: CreateSubmissionRequest, user=Depends(require_
         if freq == "shift":
             query = query.eq("shift", shift)
             
-        existing = query.order("created_at", desc=True).limit(1).execute()
-
-        if existing.data and len(existing.data) > 0:
-            return existing.data[0]
+        # Bypass idempotency for on_demand to allow multiple instances
+        if freq != "on_demand":
+            existing = query.order("created_at", desc=True).limit(1).execute()
+            if existing.data and len(existing.data) > 0:
+                return existing.data[0]
 
         # Create new draft only if no submission exists
         new_sub = {
@@ -629,6 +630,8 @@ async def create_submission(body: CreateSubmissionRequest, user=Depends(require_
             "venue_id": body.venue_id,
             "shift": shift,
             "status": "draft",
+            "custom_title": body.custom_title,
+            "is_private": body.is_private
         }
         result = db.table("submissions").insert(new_sub).execute()
         return result.data[0]

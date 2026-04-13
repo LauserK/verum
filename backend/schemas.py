@@ -43,10 +43,14 @@ class ChecklistItem(BaseModel):
     total_questions: int
     answered_questions: int
     submission_id: Optional[str] = None
+    custom_title: Optional[str] = None
+    is_private: bool = False
 
 class CreateSubmissionRequest(BaseModel):
     template_id: str
     venue_id: str
+    custom_title: Optional[str] = None
+    is_private: bool = False
 
 class SubmissionQuestion(BaseModel):
     id: str
@@ -67,6 +71,8 @@ class SubmissionDetail(BaseModel):
     questions: List[SubmissionQuestion]
     auditor_notes: Optional[str] = None
     auditor_confirmed: bool = False
+    custom_title: Optional[str] = None
+    is_private: bool = False
 
 class PatchSubmissionRequest(BaseModel):
     status: Optional[str] = None
@@ -82,6 +88,8 @@ class HistoryItem(BaseModel):
     total_questions: int
     venue_name: Optional[str] = None
     started_at: Optional[str] = None
+    custom_title: Optional[str] = None
+    is_private: bool = False
 
 class BulkAnswersRequest(BaseModel):
     answers: List[dict]  # [{question_id, value, answered_at}]
