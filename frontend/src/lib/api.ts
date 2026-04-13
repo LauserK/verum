@@ -95,6 +95,15 @@ export interface ChecklistItem {
     total_questions: number
     answered_questions: number
     submission_id: string | null
+    custom_title?: string | null
+    is_private?: boolean
+}
+
+export interface LibraryTemplate {
+    id: string
+    title: string
+    description: string | null
+    frequency: string
 }
 
 export async function getProfile(): Promise<Profile> {
@@ -135,10 +144,14 @@ export interface SubmissionDetail {
     auditor_confirmed: boolean
 }
 
-export function createSubmission(templateId: string, venueId: string): Promise<{ id: string }> {
+export function getLibraryTemplates(venueId: string): Promise<LibraryTemplate[]> {
+    return fetchWithAuth(`/checklists/library/${venueId}`)
+}
+
+export function createSubmission(templateId: string, venueId: string, customTitle?: string | null, isPrivate: boolean = false): Promise<{ id: string }> {
     return fetchWithAuth('/submissions', {
         method: 'POST',
-        body: JSON.stringify({ template_id: templateId, venue_id: venueId }),
+        body: JSON.stringify({ template_id: templateId, venue_id: venueId, custom_title: customTitle, is_private: isPrivate }),
     })
 }
 
