@@ -83,8 +83,9 @@ export default function ChecklistCard({ checklist, onClick }: Props) {
             {/* Top row: title + badge */}
             <div className="flex items-start justify-between gap-3 mb-2">
                 <div className="flex-1 min-w-0">
-                    <h3 className="text-base font-semibold text-text-primary truncate">
-                        {checklist.title}
+                    <h3 className="text-base font-semibold text-text-primary truncate flex items-center gap-2">
+                        {checklist.custom_title ? `${checklist.title} - ${checklist.custom_title}` : checklist.title}
+                        {checklist.is_private && <Lock className="w-3.5 h-3.5 text-text-secondary shrink-0" />}
                     </h3>
                     {checklist.description && (
                         <p className="text-xs text-text-secondary mt-0.5 line-clamp-1">
