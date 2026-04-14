@@ -316,7 +316,31 @@
       "submitting": "Recording...",
       "success": "Attendance recorded successfully",
       "error": "Error recording attendance",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "reportTable": {
+        "employee": "Employee",
+        "date": "Date",
+        "clockIn": "Clock In",
+        "clockOut": "Clock Out",
+        "netHours": "Net Hours",
+        "overtime": "Overtime",
+        "late": "Late",
+        "absence": "Absence",
+        "actions": "Actions",
+        "modified": "Modified",
+        "noData": "Click \"Preview\" to load data for the selected period."
+      },
+      "editModal": {
+        "title": "Edit Record",
+        "employee": "Employee",
+        "clockIn": "Clock In Time",
+        "clockOut": "Clock Out Time",
+        "reason": "Change Reason (Required)",
+        "reasonPlaceholder": "E.g., Forgot to clock out...",
+        "save": "Save Changes",
+        "saving": "Saving...",
+        "error": "Error saving changes"
+      }
     }
   },
   "venueSelection": {

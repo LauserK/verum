@@ -317,7 +317,31 @@
       "submitting": "Registrando...",
       "success": "Asistencia registrada correctamente",
       "error": "Error al registrar asistencia",
-      "cancel": "Cancelar"
+      "cancel": "Cancelar",
+      "reportTable": {
+        "employee": "Empleado",
+        "date": "Fecha",
+        "clockIn": "Entrada",
+        "clockOut": "Salida",
+        "netHours": "Horas Netas",
+        "overtime": "Horas Extra",
+        "late": "Tardanza",
+        "absence": "Ausencia",
+        "actions": "Acciones",
+        "modified": "Modificado",
+        "noData": "Haz clic en \"Vista Previa\" para cargar los datos del período seleccionado."
+      },
+      "editModal": {
+        "title": "Editar Registro",
+        "employee": "Empleado",
+        "clockIn": "Hora de Entrada",
+        "clockOut": "Hora de Salida",
+        "reason": "Motivo del Cambio (Obligatorio)",
+        "reasonPlaceholder": "Ej: Se le olvidó marcar la salida...",
+        "save": "Guardar Cambios",
+        "saving": "Guardando...",
+        "error": "Error guardando los cambios"
+      }
     }
   },
   "venueSelection": {

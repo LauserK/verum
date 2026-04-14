@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { adminApi } from '@/lib/api'
 import { useVenue } from '@/components/VenueContext'
+import { useTranslations } from '@/components/I18nProvider'
 import { Download, Loader2, Pencil, X } from 'lucide-react'
 import { format, subDays, parseISO } from 'date-fns'
 
@@ -21,6 +22,7 @@ interface AttendanceReportRow {
 
 export default function AttendanceReportsPage() {
     const { availableVenues, activeOrgId } = useVenue()
+    const { t } = useTranslations('admin' as any)
     const [venueId, setVenueId] = useState('')
     const [reportType, setReportType] = useState('daily')
     const [dateFrom, setDateFrom] = useState(format(subDays(new Date(), 7), 'yyyy-MM-dd'))
@@ -71,7 +73,7 @@ export default function AttendanceReportsPage() {
         try {
             await adminApi.editAttendanceDay({
                 profile_id: editingRow.profile_id,
-                venue_id,
+                venue_id: venueId,
                 work_date: editingRow.work_date,
                 clock_in: editClockIn,
                 clock_out: editClockOut,
@@ -79,8 +81,9 @@ export default function AttendanceReportsPage() {
             })
             setEditingRow(null)
             await handlePreview() // Refresh
-        } catch (e) {
-            alert('Error guardando los cambios')
+        } catch (e: unknown) {
+            const error = e as Error
+            alert(t('editModal.error') + ': ' + (error.message || 'Error desconocido'))
         }
         setEditSaving(false)
     }
@@ -122,7 +125,7 @@ export default function AttendanceReportsPage() {
 
     return (
         <div className="space-y-6">
-            <h1 className="text-2xl font-bold text-text-primary">Reportes de Asistencia</h1>
+            <h1 className="text-2xl font-bold text-text-primary">{t('liveTitle')} - {t('reports')}</h1>
             
             <div className="bg-surface p-5 rounded-2xl border border-border flex flex-wrap gap-4 items-end shadow-sm">
                 <div className="flex-1 min-w-[200px]">
@@ -161,40 +164,40 @@ export default function AttendanceReportsPage() {
             {/* Preview Table */}
             <div className="bg-surface border border-border rounded-xl overflow-hidden shadow-sm">
                 <div className="overflow-x-auto">
-                    <table className="w-full text-left text-sm whitespace-nowrap">
+                    <table className="w-full text-left text-sm">
                         <thead className="bg-surface-raised text-text-secondary font-semibold border-b border-border">
                             <tr>
-                                <th className="px-6 py-4">Empleado</th>
-                                <th className="px-6 py-4">Fecha</th>
-                                <th className="px-6 py-4">Entrada</th>
-                                <th className="px-6 py-4">Salida</th>
-                                <th className="px-6 py-4">Horas Netas</th>
-                                <th className="px-6 py-4">Horas Extra</th>
-                                <th className="px-6 py-4">Tardanza</th>
-                                <th className="px-6 py-4">Ausencia</th>
-                                <th className="px-6 py-4">Acciones</th>
+                                <th className="px-4 py-4">{t('reportTable.employee')}</th>
+                                <th className="px-4 py-4">{t('reportTable.date')}</th>
+                                <th className="px-4 py-4">{t('reportTable.clockIn')}</th>
+                                <th className="px-4 py-4">{t('reportTable.clockOut')}</th>
+                                <th className="px-4 py-4">{t('reportTable.netHours')}</th>
+                                <th className="px-4 py-4">{t('reportTable.overtime')}</th>
+                                <th className="px-4 py-4">{t('reportTable.late')}</th>
+                                <th className="px-4 py-4">{t('reportTable.absence')}</th>
+                                <th className="px-4 py-4">{t('reportTable.actions')}</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border">
                             {preview.length === 0 ? (
                                 <tr>
-                                    <td colSpan={9} className="p-8 text-center text-text-secondary">Haz clic en &quot;Vista Previa&quot; para cargar los datos del período seleccionado.</td>
+                                    <td colSpan={9} className="p-8 text-center text-text-secondary">{t('reportTable.noData')}</td>
                                 </tr>
                             ) : (
                                 preview.map((row, idx) => (
                                     <tr key={idx} className="hover:bg-surface-raised/50 transition-colors">
-                                        <td className="px-6 py-4 font-bold text-text-primary">{row.full_name}</td>
-                                        <td className="px-6 py-4 text-text-secondary">{format(parseISO(row.work_date), 'dd/MMM/yyyy')}</td>
-                                        <td className="px-6 py-4 font-medium">{row.clock_in ? format(new Date(row.clock_in), 'HH:mm') : '—'}</td>
-                                        <td className="px-6 py-4 font-medium">{row.clock_out ? format(new Date(row.clock_out), 'HH:mm') : '—'}</td>
-                                        <td className="px-6 py-4 font-black text-primary">
+                                        <td className="px-4 py-4 font-bold text-text-primary whitespace-nowrap">{row.full_name}</td>
+                                        <td className="px-4 py-4 text-text-secondary whitespace-nowrap">{format(parseISO(row.work_date), 'dd/MMM/yyyy')}</td>
+                                        <td className="px-4 py-4 font-medium whitespace-nowrap">{row.clock_in ? format(new Date(row.clock_in), 'HH:mm') : '—'}</td>
+                                        <td className="px-4 py-4 font-medium whitespace-nowrap">{row.clock_out ? format(new Date(row.clock_out), 'HH:mm') : '—'}</td>
+                                        <td className="px-4 py-4 font-black text-primary">
                                             {row.net_hours}h
-                                            {row.is_edited && <span className="ml-2 bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider" title="Editado manualmente">Modificado</span>}
+                                            {row.is_edited && <span className="ml-2 bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider" title={t('reportTable.modified')}>{t('reportTable.modified')}</span>}
                                         </td>
-                                        <td className="px-6 py-4">{row.overtime_hours > 0 ? <span className="bg-success/10 text-success px-2 py-1 rounded-md font-bold text-xs">{row.overtime_hours}h</span> : '—'}</td>
-                                        <td className="px-6 py-4">{row.minutes_late > 0 ? <span className="bg-warning/10 text-warning px-2 py-1 rounded-md font-bold text-xs">{row.minutes_late}m</span> : '—'}</td>
-                                        <td className="px-6 py-4">{row.absence_type ? <span className="bg-error/10 text-error px-2 py-1 rounded-md font-bold text-[10px] uppercase tracking-wider">{row.absence_type}</span> : '—'}</td>
-                                        <td className="px-6 py-4">
+                                        <td className="px-4 py-4">{row.overtime_hours > 0 ? <span className="bg-success/10 text-success px-2 py-1 rounded-md font-bold text-xs">{row.overtime_hours}h</span> : '—'}</td>
+                                        <td className="px-4 py-4">{row.minutes_late > 0 ? <span className="bg-warning/10 text-warning px-2 py-1 rounded-md font-bold text-xs">{row.minutes_late}m</span> : '—'}</td>
+                                        <td className="px-4 py-4">{row.absence_type ? <span className="bg-error/10 text-error px-2 py-1 rounded-md font-bold text-[10px] uppercase tracking-wider">{row.absence_type}</span> : '—'}</td>
+                                        <td className="px-4 py-4">
                                             <button onClick={() => handleOpenEdit(row)} className="p-2 text-text-secondary hover:text-primary hover:bg-primary/10 rounded-lg transition-colors">
                                                 <Pencil className="w-4 h-4" />
                                             </button>
@@ -211,35 +214,35 @@ export default function AttendanceReportsPage() {
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
                     <div className="bg-surface rounded-2xl p-6 w-full max-w-md shadow-xl border border-border">
                         <div className="flex justify-between items-center mb-6">
-                            <h2 className="text-lg font-bold text-text-primary">Editar Registro</h2>
+                            <h2 className="text-lg font-bold text-text-primary">{t('editModal.title')}</h2>
                             <button onClick={() => setEditingRow(null)} className="text-text-secondary hover:text-text-primary"><X className="w-5 h-5"/></button>
                         </div>
                         
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-xs font-bold text-text-secondary uppercase mb-1">Empleado</label>
+                                <label className="block text-xs font-bold text-text-secondary uppercase mb-1">{t('editModal.employee')}</label>
                                 <div className="text-sm font-medium text-text-primary">{editingRow.full_name}</div>
                                 <div className="text-xs text-text-secondary">{format(parseISO(editingRow.work_date), 'dd MMM yyyy')}</div>
                             </div>
                             
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-xs font-bold text-text-secondary uppercase mb-1">Hora de Entrada</label>
+                                    <label className="block text-xs font-bold text-text-secondary uppercase mb-1">{t('editModal.clockIn')}</label>
                                     <input type="datetime-local" value={editClockIn} onChange={e => setEditClockIn(e.target.value)} className="w-full bg-surface-raised border border-border rounded-xl px-3 h-11 text-sm text-text-primary outline-none focus:border-primary" />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-text-secondary uppercase mb-1">Hora de Salida</label>
+                                    <label className="block text-xs font-bold text-text-secondary uppercase mb-1">{t('editModal.clockOut')}</label>
                                     <input type="datetime-local" value={editClockOut} onChange={e => setEditClockOut(e.target.value)} className="w-full bg-surface-raised border border-border rounded-xl px-3 h-11 text-sm text-text-primary outline-none focus:border-primary" />
                                 </div>
                             </div>
 
                             <div>
-                                <label className="block text-xs font-bold text-text-secondary uppercase mb-1">Motivo del Cambio (Obligatorio)</label>
-                                <textarea value={editReason} onChange={e => setEditReason(e.target.value)} placeholder="Ej: Se le olvidó marcar la salida..." className="w-full bg-surface-raised border border-border rounded-xl p-3 text-sm text-text-primary outline-none focus:border-primary h-24 resize-none" required></textarea>
+                                <label className="block text-xs font-bold text-text-secondary uppercase mb-1">{t('editModal.reason')}</label>
+                                <textarea value={editReason} onChange={e => setEditReason(e.target.value)} placeholder={t('editModal.reasonPlaceholder')} className="w-full bg-surface-raised border border-border rounded-xl p-3 text-sm text-text-primary outline-none focus:border-primary h-24 resize-none" required></textarea>
                             </div>
 
                             <button onClick={handleSaveEdit} disabled={editSaving || !editReason} className="w-full h-11 bg-primary text-text-inverse font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-primary-hover disabled:opacity-50 transition-colors">
-                                {editSaving ? <Loader2 className="w-5 h-5 animate-spin"/> : 'Guardar Cambios'}
+                                {editSaving ? <Loader2 className="w-5 h-5 animate-spin"/> : t('editModal.save')}
                             </button>
                         </div>
                     </div>
