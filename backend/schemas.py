@@ -363,6 +363,14 @@ class ManualAttendanceRequest(BaseModel):
     clock_out: str # ISO Format: YYYY-MM-DDTHH:MM:SS
     reason: str
 
+class EditAttendanceDayRequest(BaseModel):
+    profile_id: str
+    venue_id: str
+    work_date: str  # YYYY-MM-DD
+    clock_in: Optional[str] = None  # ISO Format: YYYY-MM-DDTHH:MM:SS or similar
+    clock_out: Optional[str] = None # ISO Format: YYYY-MM-DDTHH:MM:SS or similar
+    reason: str
+
 # ── Super Admin Models ──────────────────────────────────
 
 class SuperAdminUserOrgUpdate(BaseModel):
