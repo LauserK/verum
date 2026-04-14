@@ -29,7 +29,8 @@ from schemas import (
     AbsenceRequest, LeaveRequest, AbsenceApprovalRequest,
     ManualAttendanceRequest, SuperAdminUserDetail,
     SuperAdminUserOrgAdd, SuperAdminUserOrgUpdate,
-    SuperAdminUserInOrg, SuperAdminOrgDetail
+    SuperAdminUserInOrg, SuperAdminOrgDetail,
+    EditAttendanceDayRequest
 )
 
 CARACAS_TZ = pytz.timezone("America/Caracas")
@@ -3289,6 +3290,128 @@ async def add_manual_attendance(body: ManualAttendanceRequest, current_user=Depe
     res = db.table("attendance_logs").insert(out_log).execute()
     
     return {"ok": True, "count": 2, "overtime_hours": overtime_hours, "minutes_late": minutes_late}
+
+@app.post("/admin/attendance/edit-day")
+async def edit_attendance_day(body: EditAttendanceDayRequest, current_user=Depends(get_current_user), db=Depends(get_db), _=Depends(require_permission("attendance.manage"))):
+    """Admin explicitly edits a user's clock-in/out times for a specific day."""
+    
+    work_date_str = body.work_date
+    next_day_str = (datetime.strptime(work_date_str, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+
+    # Fetch existing logs for this day
+    logs_res = db.table("attendance_logs").select("*")\
+        .eq("profile_id", body.profile_id)\
+        .eq("venue_id", body.venue_id)\
+        .gte("marked_at", f"{work_date_str}T00:00:00-04:00")\
+        .lt("marked_at", f"{next_day_str}T00:00:00-04:00")\
+        .execute()
+        
+    logs = logs_res.data or []
+    
+    clock_in_log = next((l for l in logs if l["event_type"] == "clock_in"), None)
+    clock_out_log = next((l for l in logs if l["event_type"] == "clock_out"), None)
+
+    # 1. Parse dates and validate
+    in_dt = None
+    out_dt = None
+    try:
+        if body.clock_in:
+            in_str = body.clock_in if len(body.clock_in) > 16 else f"{body.clock_in}:00"
+            in_dt = CARACAS_TZ.localize(datetime.fromisoformat(in_str))
+        if body.clock_out:
+            out_str = body.clock_out if len(body.clock_out) > 16 else f"{body.clock_out}:00"
+            out_dt = CARACAS_TZ.localize(datetime.fromisoformat(out_str))
+    except ValueError:
+        raise HTTPException(400, "Formato de fecha inválido. Use ISO8601 (YYYY-MM-DDTHH:MM)")
+
+    if in_dt and out_dt and out_dt <= in_dt:
+        raise HTTPException(400, "La hora de salida debe ser posterior a la de entrada")
+
+    # 2. Get active shift for calculations
+    active_shift = None
+    iso_weekday = datetime.strptime(work_date_str, "%Y-%m-%d").isoweekday()
+    shift_res = db.table("employee_shifts").select("*").eq("profile_id", body.profile_id).eq("venue_id", body.venue_id).eq("is_active", True).execute()
+    
+    for s in shift_res.data or []:
+        if s["modality"] == "fixed" and s["weekdays"] and iso_weekday in s["weekdays"]:
+            active_shift = {
+                "id": s["id"],
+                "expected_start": s["start_time"],
+                "expected_end": s["end_time"]
+            }
+            break
+        elif s["modality"] == "rotating":
+            d_res = db.table("shift_days").select("*").eq("employee_shift_id", s["id"]).eq("weekday", iso_weekday).execute()
+            if d_res.data and not d_res.data[0].get("day_off"):
+                active_shift = {
+                    "id": s["id"],
+                    "expected_start": d_res.data[0]["start_time"],
+                    "expected_end": d_res.data[0]["end_time"]
+                }
+                break
+
+    base_log = {
+        "profile_id": body.profile_id,
+        "venue_id": body.venue_id,
+        "edited_by": current_user.id,
+        "edit_reason": body.reason,
+        "verification_status": "verified"
+    }
+    if active_shift:
+        base_log.update({
+            "employee_shift_id": active_shift["id"],
+            "expected_start": active_shift["expected_start"],
+            "expected_end": active_shift["expected_end"]
+        })
+
+    updates_count = 0
+    
+    # 3. Handle Clock In
+    if in_dt:
+        minutes_late = 0
+        if active_shift:
+            minutes_late = calculate_late_minutes(in_dt.strftime("%H:%M:%S"), active_shift["expected_start"])
+            
+        in_payload = base_log.copy()
+        in_payload.update({
+            "event_type": "clock_in",
+            "marked_at": in_dt.isoformat(),
+            "minutes_late": minutes_late
+        })
+        
+        if clock_in_log:
+            db.table("attendance_logs").update(in_payload).eq("id", clock_in_log["id"]).execute()
+        else:
+            db.table("attendance_logs").insert(in_payload).execute()
+        updates_count += 1
+
+    # 4. Handle Clock Out
+    if out_dt:
+        overtime_hours = 0
+        if active_shift and in_dt:
+            e_in = datetime.strptime(active_shift["expected_start"], "%H:%M:%S")
+            e_out = datetime.strptime(active_shift["expected_end"], "%H:%M:%S")
+            total_expected_mins = (e_out.hour * 60 + e_out.minute) - (e_in.hour * 60 + e_in.minute)
+            total_worked_mins = (out_dt - in_dt).total_seconds() / 60
+            
+            if total_worked_mins > total_expected_mins:
+                overtime_mins = total_worked_mins - total_expected_mins
+                overtime_hours = int(overtime_mins // 60)
+                
+        out_payload = base_log.copy()
+        out_payload.update({
+            "event_type": "clock_out",
+            "marked_at": out_dt.isoformat(),
+            "overtime_hours": overtime_hours
+        })
+        
+        if clock_out_log:
+            db.table("attendance_logs").update(out_payload).eq("id", clock_out_log["id"]).execute()
+        else:
+            db.table("attendance_logs").insert(out_payload).execute()
+        updates_count += 1
+
+    return {"ok": True, "updated": updates_count}
 
 @app.post("/attendance/requests")
 async def request_leave(body: LeaveRequest, current_user=Depends(get_current_user), db=Depends(get_db), _=Depends(require_permission("attendance.request_leave"))):
