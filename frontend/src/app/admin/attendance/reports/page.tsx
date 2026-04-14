@@ -1,12 +1,13 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { adminApi, getProfile, type VenueInfo } from '@/lib/api'
+import { adminApi } from '@/lib/api'
 import { useVenue } from '@/components/VenueContext'
-import { Download, Loader2 } from 'lucide-react'
+import { Download, Loader2, Pencil, X } from 'lucide-react'
 import { format, subDays, parseISO } from 'date-fns'
 
 interface AttendanceReportRow {
+    profile_id: string
     full_name: string
     work_date: string
     clock_in: string | null
@@ -15,6 +16,7 @@ interface AttendanceReportRow {
     overtime_hours: number
     minutes_late: number
     absence_type: string | null
+    is_edited?: boolean
 }
 
 export default function AttendanceReportsPage() {
@@ -26,6 +28,13 @@ export default function AttendanceReportsPage() {
     const [preview, setPreview] = useState<AttendanceReportRow[]>([])
     const [loading, setLoading] = useState(false)
     const [exporting, setExporting] = useState(false)
+
+    // Edit states
+    const [editingRow, setEditingRow] = useState<AttendanceReportRow | null>(null)
+    const [editClockIn, setEditClockIn] = useState('')
+    const [editClockOut, setEditClockOut] = useState('')
+    const [editReason, setEditReason] = useState('')
+    const [editSaving, setEditSaving] = useState(false)
 
     useEffect(() => {
         if (availableVenues.length > 0 && !venueId) {
@@ -47,6 +56,33 @@ export default function AttendanceReportsPage() {
             alert('Error cargando preview')
         }
         setLoading(false)
+    }
+
+    const handleOpenEdit = (row: AttendanceReportRow) => {
+        setEditingRow(row)
+        setEditClockIn(row.clock_in ? format(new Date(row.clock_in), "yyyy-MM-dd'T'HH:mm") : `${row.work_date}T09:00`)
+        setEditClockOut(row.clock_out ? format(new Date(row.clock_out), "yyyy-MM-dd'T'HH:mm") : `${row.work_date}T18:00`)
+        setEditReason('')
+    }
+
+    const handleSaveEdit = async () => {
+        if (!editingRow || !editReason) return
+        setEditSaving(true)
+        try {
+            await adminApi.editAttendanceDay({
+                profile_id: editingRow.profile_id,
+                venue_id,
+                work_date: editingRow.work_date,
+                clock_in: editClockIn,
+                clock_out: editClockOut,
+                reason: editReason
+            })
+            setEditingRow(null)
+            await handlePreview() // Refresh
+        } catch (e) {
+            alert('Error guardando los cambios')
+        }
+        setEditSaving(false)
     }
 
     const handleExport = async () => {
@@ -136,12 +172,13 @@ export default function AttendanceReportsPage() {
                                 <th className="px-6 py-4">Horas Extra</th>
                                 <th className="px-6 py-4">Tardanza</th>
                                 <th className="px-6 py-4">Ausencia</th>
+                                <th className="px-6 py-4">Acciones</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border">
                             {preview.length === 0 ? (
                                 <tr>
-                                    <td colSpan={8} className="p-8 text-center text-text-secondary">Haz clic en &quot;Vista Previa&quot; para cargar los datos del período seleccionado.</td>
+                                    <td colSpan={9} className="p-8 text-center text-text-secondary">Haz clic en &quot;Vista Previa&quot; para cargar los datos del período seleccionado.</td>
                                 </tr>
                             ) : (
                                 preview.map((row, idx) => (
@@ -150,10 +187,18 @@ export default function AttendanceReportsPage() {
                                         <td className="px-6 py-4 text-text-secondary">{format(parseISO(row.work_date), 'dd/MMM/yyyy')}</td>
                                         <td className="px-6 py-4 font-medium">{row.clock_in ? format(new Date(row.clock_in), 'HH:mm') : '—'}</td>
                                         <td className="px-6 py-4 font-medium">{row.clock_out ? format(new Date(row.clock_out), 'HH:mm') : '—'}</td>
-                                        <td className="px-6 py-4 font-black text-primary">{row.net_hours}h</td>
+                                        <td className="px-6 py-4 font-black text-primary">
+                                            {row.net_hours}h
+                                            {row.is_edited && <span className="ml-2 bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider" title="Editado manualmente">Modificado</span>}
+                                        </td>
                                         <td className="px-6 py-4">{row.overtime_hours > 0 ? <span className="bg-success/10 text-success px-2 py-1 rounded-md font-bold text-xs">{row.overtime_hours}h</span> : '—'}</td>
                                         <td className="px-6 py-4">{row.minutes_late > 0 ? <span className="bg-warning/10 text-warning px-2 py-1 rounded-md font-bold text-xs">{row.minutes_late}m</span> : '—'}</td>
                                         <td className="px-6 py-4">{row.absence_type ? <span className="bg-error/10 text-error px-2 py-1 rounded-md font-bold text-[10px] uppercase tracking-wider">{row.absence_type}</span> : '—'}</td>
+                                        <td className="px-6 py-4">
+                                            <button onClick={() => handleOpenEdit(row)} className="p-2 text-text-secondary hover:text-primary hover:bg-primary/10 rounded-lg transition-colors">
+                                                <Pencil className="w-4 h-4" />
+                                            </button>
+                                        </td>
                                     </tr>
                                 ))
                             )}
@@ -161,6 +206,45 @@ export default function AttendanceReportsPage() {
                     </table>
                 </div>
             </div>
+
+            {editingRow && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+                    <div className="bg-surface rounded-2xl p-6 w-full max-w-md shadow-xl border border-border">
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-lg font-bold text-text-primary">Editar Registro</h2>
+                            <button onClick={() => setEditingRow(null)} className="text-text-secondary hover:text-text-primary"><X className="w-5 h-5"/></button>
+                        </div>
+                        
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-text-secondary uppercase mb-1">Empleado</label>
+                                <div className="text-sm font-medium text-text-primary">{editingRow.full_name}</div>
+                                <div className="text-xs text-text-secondary">{format(parseISO(editingRow.work_date), 'dd MMM yyyy')}</div>
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-text-secondary uppercase mb-1">Hora de Entrada</label>
+                                    <input type="datetime-local" value={editClockIn} onChange={e => setEditClockIn(e.target.value)} className="w-full bg-surface-raised border border-border rounded-xl px-3 h-11 text-sm text-text-primary outline-none focus:border-primary" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-text-secondary uppercase mb-1">Hora de Salida</label>
+                                    <input type="datetime-local" value={editClockOut} onChange={e => setEditClockOut(e.target.value)} className="w-full bg-surface-raised border border-border rounded-xl px-3 h-11 text-sm text-text-primary outline-none focus:border-primary" />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-text-secondary uppercase mb-1">Motivo del Cambio (Obligatorio)</label>
+                                <textarea value={editReason} onChange={e => setEditReason(e.target.value)} placeholder="Ej: Se le olvidó marcar la salida..." className="w-full bg-surface-raised border border-border rounded-xl p-3 text-sm text-text-primary outline-none focus:border-primary h-24 resize-none" required></textarea>
+                            </div>
+
+                            <button onClick={handleSaveEdit} disabled={editSaving || !editReason} className="w-full h-11 bg-primary text-text-inverse font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-primary-hover disabled:opacity-50 transition-colors">
+                                {editSaving ? <Loader2 className="w-5 h-5 animate-spin"/> : 'Guardar Cambios'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

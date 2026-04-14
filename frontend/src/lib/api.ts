@@ -635,6 +635,13 @@ export const adminApi = {
     // Inventory Dashboard
     getInventoryDashboard: (venueId?: string): Promise<InventoryDashboardSummary> =>
         fetchWithAuth(`/inventory/dashboard/summary${venueId ? `?venue_id=${venueId}` : ''}`),
+
+    editAttendanceDay: async (payload: { profile_id: string, venue_id: string, work_date: string, clock_in?: string, clock_out?: string, reason: string }) => {
+        return await fetchWithAuth('/admin/attendance/edit-day', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        })
+    },
 }
 
 // Super Admin CRUD
