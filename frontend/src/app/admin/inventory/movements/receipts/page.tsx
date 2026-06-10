@@ -1,13 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { adminApi, Warehouse, InventoryItem, UOMPresentation, PurchaseReceiptLine } from '@/lib/api';
 import { Plus, Trash2, Save, Loader2, ArrowLeft, ClipboardList, Printer } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import ConfirmationModal from '@/components/ConfirmationModal';
 import { createClient } from '@/utils/supabase/client';
-import { useRef } from 'react';
 import { useReactToPrint } from 'react-to-print';
 import { MovementPrint } from '@/components/inventory/MovementPrint';
 
@@ -28,20 +27,25 @@ export default function ReceiptsPage() {
 
   // Printing state
   const printRef = useRef<HTMLDivElement>(null);
+  const [lastSavedData, setLastSavedData] = useState<any>(null);
+
   const handlePrint = useReactToPrint({
     contentRef: printRef,
     documentTitle: `Ingreso-${receiptNumber || 'S-N'}`,
     onAfterPrint: () => router.push('/admin/inventory/kardex')
   });
 
-  const [lastSavedData, setLastSavedData] = useState<any>(null);
-
   // Error modal state
-  // ... rest of state
   const [errorModal, setErrorModal] = useState<{ isOpen: boolean; message: string }>({
     isOpen: false,
     message: ''
   });
+
+  useEffect(() => {
+    if (lastSavedData && printRef.current) {
+        handlePrint();
+    }
+  }, [lastSavedData]);
 
   useEffect(() => {
     loadData();
@@ -56,12 +60,6 @@ export default function ReceiptsPage() {
       setWarehouses(whData);
       setItems(itemsData);
 
-      // Fetch presentations for all items (simplified for M17)
-      // In a real app we'd have a specific endpoint or filter
-      // For now, let's use the supabase client directly or a new api method if it existed
-      // Since we don't have getPresentations, we'll try to fetch some or use a fallback
-      // Actually, let's just make sure we don't send empty strings for UUIDs.
-      
       if (whData.length > 0) setWarehouseId(whData[0].id);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -74,13 +72,8 @@ export default function ReceiptsPage() {
     const newLines = [...lines];
     newLines[index].item_id = itemId;
     
-    // Attempt to find a default presentation for this item
-    // Since we don't have the list yet, we'll use the item's base_uom_id as a presentation fallback
-    // (In our schema, presentations are separate, but for the sake of the demo...)
     const item = items.find(i => i.id === itemId);
     if (item) {
-        // We'll need the actual presentation UUID. 
-        // For M17, let's assume the user must select it or we fetch it.
         try {
             const supabase = createClient();
             const { data } = await supabase.from('uom_presentations').select('*').eq('base_uom_id', item.base_uom_id);
@@ -101,7 +94,7 @@ export default function ReceiptsPage() {
     setLines(lines.filter((_, i) => i !== index));
   }
 
-  async function handleSave() {
+  async function handleSave(shouldPrint = false) {
     if (!warehouseId || lines.some(l => !l.item_id || !l.qty_presentation)) {
         setErrorModal({
             isOpen: true,
@@ -112,7 +105,6 @@ export default function ReceiptsPage() {
 
     setSaving(true);
     try {
-      // Clean lines to remove empty UUIDs and ensure valid types
       const cleanedLines = lines.map(line => ({
         ...line,
         presentation_id: line.presentation_id === '' ? null : line.presentation_id,
@@ -120,13 +112,31 @@ export default function ReceiptsPage() {
         unit_cost_presentation: Number(line.unit_cost_presentation)
       }));
 
-      await adminApi.createPurchaseReceipt({
+      const res = await adminApi.createPurchaseReceipt({
         warehouse_id: warehouseId,
         supplier,
         receipt_number: receiptNumber,
         lines: cleanedLines as PurchaseReceiptLine[]
       });
-      router.push('/admin/inventory/kardex');
+
+      if (shouldPrint) {
+        const warehouse = warehouses.find(w => w.id === warehouseId);
+        setLastSavedData({
+            id: res.id,
+            warehouseName: warehouse?.name || 'Almacén',
+            supplier,
+            receiptNumber,
+            createdAt: new Date().toISOString(),
+            lines: cleanedLines.map(l => ({
+                itemName: items.find(i => i.id === l.item_id)?.name || 'Artículo',
+                qty: l.qty_presentation,
+                cost: l.unit_cost_presentation,
+                lot: l.lot_number
+            }))
+        });
+      } else {
+        router.push('/admin/inventory/kardex');
+      }
     } catch (error: any) {
       setErrorModal({
         isOpen: true,
@@ -141,7 +151,6 @@ export default function ReceiptsPage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-20">
-      {/* ... previous content ... */}
       <div className="flex items-center gap-4">
         <Link href="/admin/inventory" className="p-2 hover:bg-surface-raised rounded-full transition-colors">
             <ArrowLeft className="w-5 h-5 text-text-secondary" />
@@ -153,7 +162,6 @@ export default function ReceiptsPage() {
       </div>
 
       <div className="bg-surface rounded-2xl border border-border p-6 shadow-sm space-y-6">
-        {/* ... (rest of the form stays same until end of div) ... */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div>
             <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Almacén de Destino</label>
@@ -279,12 +287,20 @@ export default function ReceiptsPage() {
                 Cancelar
             </button>
             <button 
-                onClick={handleSave}
+                onClick={() => handleSave(false)}
                 disabled={saving}
-                className="px-8 h-11 bg-primary text-text-inverse rounded-xl font-bold text-sm hover:bg-primary-hover transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                className="px-6 h-11 border border-primary text-primary rounded-xl font-bold text-sm hover:bg-primary/5 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
             >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 Confirmar Ingreso
+            </button>
+            <button 
+                onClick={() => handleSave(true)}
+                disabled={saving}
+                className="px-8 h-11 bg-primary text-text-inverse rounded-xl font-bold text-sm hover:bg-primary-hover transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
+                Confirmar e Imprimir
             </button>
         </div>
       </div>
@@ -298,6 +314,17 @@ export default function ReceiptsPage() {
         onConfirm={() => setErrorModal({ ...errorModal, isOpen: false })}
         onCancel={() => setErrorModal({ ...errorModal, isOpen: false })}
       />
+
+      {/* Hidden print container */}
+      <div className="hidden">
+        {lastSavedData && (
+          <MovementPrint 
+            ref={printRef}
+            type="receipt"
+            data={lastSavedData}
+          />
+        )}
+      </div>
     </div>
   );
 }
