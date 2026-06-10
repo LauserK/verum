@@ -30,7 +30,9 @@ from schemas import (
     ManualAttendanceRequest, SuperAdminUserDetail,
     SuperAdminUserOrgAdd, SuperAdminUserOrgUpdate,
     SuperAdminUserInOrg, SuperAdminOrgDetail,
-    EditAttendanceDayRequest
+    EditAttendanceDayRequest,
+    WarehouseCreate, WarehouseResponse, ItemCreate, ItemResponse,
+    UOMBase, UOMPresentationCreate, UOMPresentationResponse
 )
 
 CARACAS_TZ = pytz.timezone("America/Caracas")
@@ -3652,5 +3654,54 @@ async def export_attendance_csv(venue_id: str, report_type: str, date_from: str,
         media_type="text/csv", 
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
+
+# ── Production & Inventory Endpoints (M16) ───────────────
+
+@app.post("/inventory/warehouses", response_model=WarehouseResponse, tags=["Inventory"])
+async def create_warehouse(warehouse: WarehouseCreate, org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.manage_warehouses"))):
+    data = {
+        "org_id": org_id,
+        "venue_id": str(warehouse.venue_id) if warehouse.venue_id else None,
+        "name": warehouse.name,
+        "type": warehouse.type
+    }
+    
+    res = db.table("warehouses").insert(data).execute()
+    if not res.data:
+        raise HTTPException(status_code=400, detail="Error creating warehouse")
+    return res.data[0]
+
+@app.get("/inventory/warehouses", response_model=List[WarehouseResponse], tags=["Inventory"])
+async def list_warehouses(org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
+    res = db.table("warehouses").select("*").eq("org_id", org_id).execute()
+    return res.data
+
+@app.post("/inventory/items", response_model=ItemResponse, tags=["Inventory"])
+async def create_item(item: ItemCreate, org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.manage_items"))):
+    data = {
+        "org_id": org_id,
+        "code": item.code,
+        "name": item.name,
+        "type": item.type,
+        "base_uom_id": str(item.base_uom_id),
+        "yield_alert_enabled": item.yield_alert_enabled,
+        "yield_alert_threshold_pct": item.yield_alert_threshold_pct,
+        "shelf_life_days": item.shelf_life_days
+    }
+    
+    res = db.table("items").insert(data).execute()
+    if not res.data:
+        raise HTTPException(status_code=400, detail="Error creating item")
+    return res.data[0]
+
+@app.get("/inventory/items", response_model=List[ItemResponse], tags=["Inventory"])
+async def list_items(org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
+    res = db.table("items").select("*").eq("org_id", org_id).execute()
+    return res.data
+
+@app.get("/inventory/uom-base", response_model=List[UOMBase], tags=["Inventory"])
+async def list_uom_base(db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
+    res = db.table("uom_base").select("*").execute()
+    return res.data
 
 

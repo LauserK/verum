@@ -642,6 +642,21 @@ export const adminApi = {
             body: JSON.stringify(payload)
         })
     },
+    // M16: Production & Inventory
+    getInventoryItems: (): Promise<InventoryItem[]> =>
+        fetchWithAuth('/inventory/items'),
+
+    createInventoryItem: (data: Partial<InventoryItem>): Promise<InventoryItem> =>
+        fetchWithAuth('/inventory/items', { method: 'POST', body: JSON.stringify(data) }),
+
+    getInventoryWarehouses: (): Promise<Warehouse[]> =>
+        fetchWithAuth('/inventory/warehouses'),
+
+    createInventoryWarehouse: (data: Partial<Warehouse>): Promise<Warehouse> =>
+        fetchWithAuth('/inventory/warehouses', { method: 'POST', body: JSON.stringify(data) }),
+
+    getUOMBase: (): Promise<UOMBase[]> =>
+        fetchWithAuth('/inventory/uom-base'),
 }
 
 // Super Admin CRUD
@@ -752,4 +767,39 @@ export interface Utensil {
     is_active: boolean
     created_at: string
     utensil_categories?: { name: string }
+}
+
+export interface UOMBase {
+    id: string
+    code: string
+    name: string
+}
+
+export interface UOMPresentation {
+    id: string
+    org_id: string
+    name: string
+    base_uom_id: string
+    conversion_factor: number
+    is_default: boolean
+}
+
+export interface InventoryItem {
+    id: string
+    org_id: string
+    code: string | null
+    name: string
+    type: 'raw_material' | 'semi_finished' | 'finished' | 'packaging' | 'supply'
+    base_uom_id: string
+    is_active: boolean
+    created_at: string
+}
+
+export interface Warehouse {
+    id: string
+    org_id: string
+    venue_id: string | null
+    name: string
+    type: 'production' | 'storage' | 'point_of_sale' | 'transit'
+    is_active: boolean
 }

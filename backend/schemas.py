@@ -1,5 +1,7 @@
 from pydantic import BaseModel
 from typing import Optional, List
+from uuid import UUID
+from datetime import datetime
 
 # ── Models ───────────────────────────────────────────────
 
@@ -410,3 +412,50 @@ class SuperAdminOrgDetail(BaseModel):
     is_active: bool
     venues: List[VenueInfo]
     users: List[SuperAdminUserInOrg]
+
+# ── Production & Inventory Models (M16) ──────────────────
+
+class UOMBase(BaseModel):
+    id: UUID
+    code: str
+    name: str
+
+class UOMPresentationCreate(BaseModel):
+    name: str
+    base_uom_id: UUID
+    conversion_factor: float
+    is_default: bool = False
+
+class UOMPresentationResponse(UOMPresentationCreate):
+    id: UUID
+    org_id: UUID
+
+class ItemCreate(BaseModel):
+    code: Optional[str] = None
+    name: str
+    type: str
+    base_uom_id: UUID
+    yield_alert_enabled: bool = False
+    yield_alert_threshold_pct: Optional[float] = None
+    shelf_life_days: Optional[int] = None
+    presentations: List[UOMPresentationCreate] = []
+
+class ItemResponse(BaseModel):
+    id: UUID
+    org_id: UUID
+    code: Optional[str]
+    name: str
+    type: str
+    base_uom_id: UUID
+    is_active: bool
+    created_at: datetime
+
+class WarehouseCreate(BaseModel):
+    name: str
+    venue_id: Optional[UUID] = None
+    type: str
+
+class WarehouseResponse(WarehouseCreate):
+    id: UUID
+    org_id: UUID
+    is_active: bool
