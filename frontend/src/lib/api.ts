@@ -657,6 +657,21 @@ export const adminApi = {
 
     getUOMBase: (): Promise<UOMBase[]> =>
         fetchWithAuth('/inventory/uom-base'),
+
+    // M17: Movements & Kardex
+    getKardex: (filters?: { item_id?: string; warehouse_id?: string }): Promise<StockMovement[]> => {
+        const params = new URLSearchParams()
+        if (filters?.item_id) params.set('item_id', filters.item_id)
+        if (filters?.warehouse_id) params.set('warehouse_id', filters.warehouse_id)
+        const qs = params.toString()
+        return fetchWithAuth(`/inventory/kardex${qs ? `?${qs}` : ''}`)
+    },
+
+    createPurchaseReceipt: (data: Partial<PurchaseReceipt>): Promise<PurchaseReceipt> =>
+        fetchWithAuth('/inventory/purchase-receipts', { method: 'POST', body: JSON.stringify(data) }),
+
+    createIssueDocument: (data: Partial<IssueDocument>): Promise<IssueDocument> =>
+        fetchWithAuth('/inventory/issue-documents', { method: 'POST', body: JSON.stringify(data) }),
 }
 
 // Super Admin CRUD
@@ -802,4 +817,51 @@ export interface Warehouse {
     name: string
     type: 'production' | 'storage' | 'point_of_sale' | 'transit'
     is_active: boolean
+}
+
+export interface StockMovement {
+    id: string
+    movement_type: string
+    warehouse_id: string
+    item_id: string
+    qty_base: number
+    unit_cost_base: number | null
+    total_cost: number | null
+    reference_id: string | null
+    reference_type: string | null
+    notes: string | null
+    created_at: string
+}
+
+export interface PurchaseReceiptLine {
+    item_id: string
+    qty_presentation: number
+    presentation_id: string
+    unit_cost_presentation: number
+    expiry_date?: string
+    lot_number?: string
+}
+
+export interface PurchaseReceipt {
+    id: string
+    warehouse_id: string
+    supplier: string | null
+    receipt_number: string | null
+    status: string
+    lines: PurchaseReceiptLine[]
+    created_at: string
+}
+
+export interface IssueDocument {
+    id: string
+    warehouse_id: string
+    reason: string
+    notes: string | null
+    status: string
+    lines: Array<{
+        item_id: string
+        qty_presentation: number
+        presentation_id: string
+    }>
+    created_at: string
 }

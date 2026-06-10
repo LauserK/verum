@@ -71,6 +71,9 @@ export default function InventoryDashboardPage() {
         <Link href="/admin/inventory/warehouses" className="px-4 py-2 bg-surface border border-border rounded-xl text-sm font-semibold hover:border-primary transition-colors flex items-center gap-2">
           <Warehouse className="w-4 h-4 text-primary" /> Almacenes
         </Link>
+        <Link href="/admin/inventory/kardex" className="px-4 py-2 bg-surface border border-border rounded-xl text-sm font-semibold hover:border-primary transition-colors flex items-center gap-2">
+          <History className="w-4 h-4 text-primary" /> Kardex
+        </Link>
       </div>
 
       {/* Block 1: Assets Status */}
