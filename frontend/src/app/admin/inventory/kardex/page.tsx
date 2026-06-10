@@ -74,10 +74,17 @@ export default function KardexPage() {
         <div className="flex gap-2">
             <Link 
                 href="/admin/inventory/movements/receipts"
-                className="flex items-center gap-2 bg-primary text-text-inverse px-4 h-10 rounded-xl text-sm font-medium hover:bg-primary-hover transition-colors"
+                className="flex items-center gap-2 border border-border text-text-primary px-4 h-10 rounded-xl text-sm font-medium hover:bg-surface-raised transition-colors"
             >
-                <ArrowUpRight className="w-4 h-4" />
+                <ArrowUpRight className="w-4 h-4 text-success" />
                 Registrar Ingreso
+            </Link>
+            <Link 
+                href="/admin/inventory/movements/issues"
+                className="flex items-center gap-2 border border-border text-text-primary px-4 h-10 rounded-xl text-sm font-medium hover:bg-surface-raised transition-colors"
+            >
+                <ArrowDownRight className="w-4 h-4 text-error" />
+                Registrar Egreso
             </Link>
         </div>
       </div>
