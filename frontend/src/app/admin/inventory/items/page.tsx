@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { adminApi, InventoryItem, UOMBase, ItemCategory } from '@/lib/api';
-import { Plus, Archive, X, Save, Loader2, Search, Filter, Tag } from 'lucide-react';
+import { Plus, Archive, X, Save, Loader2, Search, Filter, Tag, Pencil, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 
 export default function ItemsPage() {
@@ -13,7 +13,9 @@ export default function ItemsPage() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [newItem, setNewItem] = useState({ 
+  const [editingId, setEditingId] = useState<string | null>(null);
+  
+  const [formData, setFormData] = useState({ 
     name: '', 
     code: '', 
     type: 'raw_material', 
@@ -36,8 +38,8 @@ export default function ItemsPage() {
       setUoms(uomsData);
       setCategories(catsData);
       
-      if (uomsData.length > 0 && !newItem.base_uom_id) {
-        setNewItem(prev => ({ ...prev, base_uom_id: uomsData[0].id }));
+      if (uomsData.length > 0 && !formData.base_uom_id) {
+        setFormData(prev => ({ ...prev, base_uom_id: uomsData[0].id }));
       }
     } catch (error) {
       console.error('Error loading data:', error);
@@ -46,28 +48,62 @@ export default function ItemsPage() {
     }
   }
 
-  async function handleCreate() {
-    if (!newItem.name.trim() || !newItem.base_uom_id) return;
-    setSaving(true);
-    try {
-      await adminApi.createInventoryItem({
-          ...newItem,
-          category_id: newItem.category_id || null
-      });
-      setShowModal(false);
-      setNewItem({ 
+  function openCreate() {
+      setEditingId(null);
+      setFormData({ 
           name: '', 
           code: '', 
           type: 'raw_material', 
           base_uom_id: uoms[0]?.id || '',
           category_id: ''
       });
+      setShowModal(true);
+  }
+
+  function openEdit(item: InventoryItem) {
+      setEditingId(item.id);
+      setFormData({
+          name: item.name,
+          code: item.code || '',
+          type: item.type,
+          base_uom_id: item.base_uom_id,
+          category_id: item.category_id || ''
+      });
+      setShowModal(true);
+  }
+
+  async function handleSave() {
+    if (!formData.name.trim() || !formData.base_uom_id) return;
+    setSaving(true);
+    try {
+      const payload = {
+          ...formData,
+          category_id: formData.category_id || null
+      };
+
+      if (editingId) {
+          await adminApi.updateInventoryItem(editingId, payload as any);
+      } else {
+          await adminApi.createInventoryItem(payload as any);
+      }
+      
+      setShowModal(false);
       await loadData();
     } catch (error) {
-      alert('Error al crear artículo');
+      alert('Error al guardar artículo');
     } finally {
       setSaving(false);
     }
+  }
+
+  async function handleDelete(id: string) {
+      if (!confirm('¿Estás seguro de eliminar este artículo?')) return;
+      try {
+          await adminApi.deleteInventoryItem(id);
+          await loadData();
+      } catch (error) {
+          alert('Error al eliminar artículo');
+      }
   }
 
   if (loading) return <div className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-primary" /></div>;
@@ -88,7 +124,7 @@ export default function ItemsPage() {
                 Gestionar Categorías
             </Link>
             <button 
-                onClick={() => setShowModal(true)}
+                onClick={openCreate}
                 className="flex items-center gap-2 bg-primary text-text-inverse px-4 h-10 rounded-xl text-sm font-medium hover:bg-primary-hover transition-colors"
             >
                 <Plus className="w-4 h-4" />
@@ -107,7 +143,7 @@ export default function ItemsPage() {
                 <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest">Categoría</th>
                 <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest">Tipo</th>
                 <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest">UOM Base</th>
-                <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest text-right">Estado</th>
+                <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest text-right">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -135,9 +171,22 @@ export default function ItemsPage() {
                     {uoms.find(u => u.id === item.base_uom_id)?.code || '---'}
                   </td>
                   <td className="p-4 text-right">
-                    <span className={`text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wider ${item.is_active ? 'bg-success/10 text-success' : 'bg-error/10 text-error'}`}>
-                      {item.is_active ? 'Activo' : 'Inactivo'}
-                    </span>
+                    <div className="flex justify-end gap-2">
+                        <button 
+                            onClick={() => openEdit(item)}
+                            className="p-2 text-text-secondary hover:text-primary transition-all"
+                            title="Editar artículo"
+                        >
+                            <Pencil className="w-4 h-4" />
+                        </button>
+                        <button 
+                            onClick={() => handleDelete(item.id)}
+                            className="p-2 text-text-disabled hover:text-error transition-all"
+                            title="Eliminar artículo"
+                        >
+                            <Trash2 className="w-4 h-4" />
+                        </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -158,7 +207,7 @@ export default function ItemsPage() {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in">
           <div className="bg-surface rounded-3xl p-6 w-full max-w-md shadow-2xl border border-border animate-in zoom-in-95 duration-200">
             <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-bold text-text-primary">Nuevo Artículo</h2>
+                <h2 className="text-xl font-bold text-text-primary">{editingId ? 'Editar Artículo' : 'Nuevo Artículo'}</h2>
                 <button onClick={() => setShowModal(false)} className="text-text-secondary hover:text-text-primary transition-colors">
                     <X className="w-5 h-5" />
                 </button>
@@ -169,8 +218,8 @@ export default function ItemsPage() {
                 <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Nombre del Artículo</label>
                 <input 
                   type="text" 
-                  value={newItem.name}
-                  onChange={e => setNewItem({...newItem, name: e.target.value})}
+                  value={formData.name}
+                  onChange={e => setFormData({...formData, name: e.target.value})}
                   className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                   placeholder="Ej: Harina de Trigo"
                 />
@@ -179,8 +228,8 @@ export default function ItemsPage() {
                 <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Código Interno</label>
                 <input 
                   type="text" 
-                  value={newItem.code}
-                  onChange={e => setNewItem({...newItem, code: e.target.value})}
+                  value={formData.code}
+                  onChange={e => setFormData({...formData, code: e.target.value})}
                   className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                   placeholder="Ej: MAT-001"
                 />
@@ -189,8 +238,8 @@ export default function ItemsPage() {
                   <div>
                     <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Categoría</label>
                     <select 
-                      value={newItem.category_id}
-                      onChange={e => setNewItem({...newItem, category_id: e.target.value})}
+                      value={formData.category_id}
+                      onChange={e => setFormData({...formData, category_id: e.target.value})}
                       className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all appearance-none cursor-pointer"
                     >
                       <option value="">Sin categoría</option>
@@ -202,8 +251,8 @@ export default function ItemsPage() {
                   <div>
                     <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Tipo Técnico</label>
                     <select 
-                      value={newItem.type}
-                      onChange={e => setNewItem({...newItem, type: e.target.value})}
+                      value={formData.type}
+                      onChange={e => setFormData({...formData, type: e.target.value})}
                       className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all appearance-none cursor-pointer"
                     >
                       <option value="raw_material">Materia Prima</option>
@@ -217,14 +266,16 @@ export default function ItemsPage() {
               <div>
                 <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Unidad de Medida Base</label>
                 <select 
-                  value={newItem.base_uom_id}
-                  onChange={e => setNewItem({...newItem, base_uom_id: e.target.value})}
-                  className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all appearance-none cursor-pointer"
+                  value={formData.base_uom_id}
+                  disabled={!!editingId}
+                  onChange={e => setFormData({...formData, base_uom_id: e.target.value})}
+                  className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all appearance-none cursor-pointer disabled:bg-surface-raised disabled:text-text-disabled"
                 >
                   {uoms.map(u => (
                     <option key={u.id} value={u.id}>{u.name} ({u.code})</option>
                   ))}
                 </select>
+                {editingId && <p className="text-[10px] text-text-disabled mt-1">* La unidad base no se puede cambiar después de crear el artículo.</p>}
               </div>
             </div>
 
@@ -236,12 +287,12 @@ export default function ItemsPage() {
                 Cancelar
               </button>
               <button 
-                onClick={handleCreate}
-                disabled={saving || !newItem.name.trim() || !newItem.base_uom_id}
+                onClick={handleSave}
+                disabled={saving || !formData.name.trim() || !formData.base_uom_id}
                 className="flex-1 px-4 h-11 bg-primary text-text-inverse rounded-xl font-bold text-sm hover:bg-primary-hover transition-all flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                Guardar Artículo
+                {editingId ? 'Guardar Cambios' : 'Crear Artículo'}
               </button>
             </div>
           </div>

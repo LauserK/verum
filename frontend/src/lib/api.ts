@@ -687,6 +687,12 @@ export const adminApi = {
 
     deleteItemCategory: (id: string): Promise<{ ok: boolean }> =>
         fetchWithAuth(`/inventory/item-categories/${id}`, { method: 'DELETE' }),
+
+    updateItemCategory: (id: string, data: Partial<ItemCategory>): Promise<ItemCategory> =>
+        fetchWithAuth(`/inventory/item-categories/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+
+    updateInventoryItem: (id: string, data: Partial<InventoryItem>): Promise<InventoryItem> =>
+        fetchWithAuth(`/inventory/items/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
 }
 
 // Super Admin CRUD

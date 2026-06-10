@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { adminApi, ItemCategory } from '@/lib/api';
-import { Plus, Tag, X, Save, Loader2, ArrowLeft, Trash2 } from 'lucide-react';
+import { Plus, Tag, X, Save, Loader2, ArrowLeft, Trash2, Pencil } from 'lucide-react';
 import Link from 'next/link';
 import ConfirmationModal from '@/components/ConfirmationModal';
 
@@ -11,7 +11,8 @@ export default function ItemCategoriesPage() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [newCategory, setNewCategory] = useState({ name: '', description: '' });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [formData, setFormData] = useState({ name: '', description: '' });
 
   const [errorModal, setErrorModal] = useState<{ isOpen: boolean; message: string }>({
     isOpen: false,
@@ -33,18 +34,34 @@ export default function ItemCategoriesPage() {
     }
   }
 
-  async function handleCreate() {
-    if (!newCategory.name.trim()) return;
+  function openCreate() {
+      setEditingId(null);
+      setFormData({ name: '', description: '' });
+      setShowModal(true);
+  }
+
+  function openEdit(category: ItemCategory) {
+      setEditingId(category.id);
+      setFormData({ name: category.name, description: category.description || '' });
+      setShowModal(true);
+  }
+
+  async function handleSave() {
+    if (!formData.name.trim()) return;
     setSaving(true);
     try {
-      await adminApi.createItemCategory(newCategory);
+      if (editingId) {
+          await adminApi.updateItemCategory(editingId, formData);
+      } else {
+          await adminApi.createItemCategory(formData);
+      }
       setShowModal(false);
-      setNewCategory({ name: '', description: '' });
+      setFormData({ name: '', description: '' });
       await loadCategories();
     } catch (error: any) {
       setErrorModal({
         isOpen: true,
-        message: error.message || 'Error al crear la categoría'
+        message: error.message || 'Error al guardar la categoría'
       });
     } finally {
       setSaving(false);
@@ -76,7 +93,7 @@ export default function ItemCategoriesPage() {
             </div>
         </div>
         <button 
-          onClick={() => setShowModal(true)}
+          onClick={openCreate}
           className="flex items-center gap-2 bg-primary text-text-inverse px-4 h-10 rounded-xl text-sm font-medium hover:bg-primary-hover transition-colors"
         >
           <Plus className="w-4 h-4" />
@@ -116,13 +133,22 @@ export default function ItemCategoriesPage() {
                     </span>
                   </td>
                   <td className="p-4 text-right">
-                    <button 
-                        onClick={() => handleDelete(cat.id)}
-                        className="p-2 text-text-disabled hover:text-error transition-all"
-                        title="Eliminar categoría"
-                    >
-                        <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex justify-end gap-2">
+                        <button 
+                            onClick={() => openEdit(cat)}
+                            className="p-2 text-text-secondary hover:text-primary transition-all"
+                            title="Editar categoría"
+                        >
+                            <Pencil className="w-4 h-4" />
+                        </button>
+                        <button 
+                            onClick={() => handleDelete(cat.id)}
+                            className="p-2 text-text-disabled hover:text-error transition-all"
+                            title="Eliminar categoría"
+                        >
+                            <Trash2 className="w-4 h-4" />
+                        </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -143,7 +169,7 @@ export default function ItemCategoriesPage() {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in">
           <div className="bg-surface rounded-3xl p-6 w-full max-w-md shadow-2xl border border-border animate-in zoom-in-95 duration-200">
             <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-bold text-text-primary">Nueva Categoría</h2>
+                <h2 className="text-xl font-bold text-text-primary">{editingId ? 'Editar Categoría' : 'Nueva Categoría'}</h2>
                 <button onClick={() => setShowModal(false)} className="text-text-secondary hover:text-text-primary">
                     <X className="w-5 h-5" />
                 </button>
@@ -154,8 +180,8 @@ export default function ItemCategoriesPage() {
                 <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Nombre</label>
                 <input 
                   type="text" 
-                  value={newCategory.name}
-                  onChange={e => setNewCategory({...newCategory, name: e.target.value})}
+                  value={formData.name}
+                  onChange={e => setFormData({...formData, name: e.target.value})}
                   className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                   placeholder="Ej: Harinas"
                 />
@@ -163,8 +189,8 @@ export default function ItemCategoriesPage() {
               <div>
                 <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Descripción</label>
                 <textarea 
-                  value={newCategory.description}
-                  onChange={e => setNewCategory({...newCategory, description: e.target.value})}
+                  value={formData.description}
+                  onChange={e => setFormData({...formData, description: e.target.value})}
                   className="w-full bg-surface border border-border rounded-xl px-4 py-3 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all min-h-[100px]"
                   placeholder="Opcional..."
                 />
@@ -179,12 +205,12 @@ export default function ItemCategoriesPage() {
                 Cancelar
               </button>
               <button 
-                onClick={handleCreate}
-                disabled={saving || !newCategory.name.trim()}
+                onClick={handleSave}
+                disabled={saving || !formData.name.trim()}
                 className="flex-1 px-4 h-11 bg-primary text-text-inverse rounded-xl font-bold text-sm hover:bg-primary-hover transition-all flex items-center justify-center gap-2"
               >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                Guardar
+                {editingId ? 'Guardar Cambios' : 'Crear Categoría'}
               </button>
             </div>
           </div>

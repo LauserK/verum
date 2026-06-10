@@ -3705,6 +3705,18 @@ async def list_items(org_id: str = Depends(get_active_org_id), db=Depends(get_db
     res = db.table("items").select("*").eq("org_id", org_id).execute()
     return res.data
 
+@app.patch("/inventory/items/{item_id}", response_model=ItemResponse, tags=["Inventory"])
+async def update_item(item_id: UUID, item: ItemCreate, db=Depends(get_db), _=Depends(require_permission("inventory.manage_items"))):
+    res = db.table("items").update(item.dict(exclude_none=True)).eq("id", str(item_id)).execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Item not found")
+    return res.data[0]
+
+@app.delete("/inventory/items/{item_id}", tags=["Inventory"])
+async def delete_item(item_id: UUID, db=Depends(get_db), _=Depends(require_permission("inventory.manage_items"))):
+    db.table("items").delete().eq("id", str(item_id)).execute()
+    return {"ok": True}
+
 @app.get("/inventory/item-categories", response_model=List[ItemCategoryResponse], tags=["Inventory"])
 async def list_item_categories(org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
     res = db.table("item_categories").select("*").eq("org_id", org_id).execute()
@@ -3721,6 +3733,13 @@ async def create_item_category(category: ItemCategoryCreate, org_id: str = Depen
     res = db.table("item_categories").insert(data).execute()
     if not res.data or len(res.data) == 0:
         raise HTTPException(status_code=400, detail="Error creating category in database")
+    return res.data[0]
+
+@app.patch("/inventory/item-categories/{category_id}", response_model=ItemCategoryResponse, tags=["Inventory"])
+async def update_item_category(category_id: UUID, category: ItemCategoryCreate, db=Depends(get_db), _=Depends(require_permission("inventory.manage_categories"))):
+    res = db.table("item_categories").update(category.dict(exclude_none=True)).eq("id", str(category_id)).execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Category not found")
     return res.data[0]
 
 @app.delete("/inventory/item-categories/{category_id}", tags=["Inventory"])
