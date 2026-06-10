@@ -836,6 +836,8 @@ export interface InventoryItem {
     type: 'raw_material' | 'semi_finished' | 'finished' | 'packaging' | 'supply'
     category_id: string | null
     base_uom_id: string
+    last_purchase_cost: number | null
+    last_purchase_cost_updated_at: string | null
     is_active: boolean
     created_at: string
 }

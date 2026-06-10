@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { adminApi, InventoryItem, UOMBase, ItemCategory } from '@/lib/api';
-import { Plus, Archive, X, Save, Loader2, Search, Filter, Tag, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Archive, X, Save, Loader2, Search, Filter, Tag, Pencil, Trash2, DollarSign } from 'lucide-react';
 import Link from 'next/link';
 import { useTranslations } from '@/components/I18nProvider';
 import ConfirmationModal from '@/components/ConfirmationModal';
@@ -153,6 +153,7 @@ export default function ItemsPage() {
                 <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest">{t('table.name')}</th>
                 <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest">Categoría</th>
                 <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest">{t('table.type')}</th>
+                <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest">Último Costo</th>
                 <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest">{t('table.uom')}</th>
                 <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest text-right">Acciones</th>
               </tr>
@@ -177,6 +178,16 @@ export default function ItemsPage() {
                     <span className="text-[10px] font-bold px-2 py-1 rounded-md bg-primary/5 text-primary uppercase tracking-wider border border-primary/10">
                       {t(`types.${item.type}`)}
                     </span>
+                  </td>
+                  <td className="p-4">
+                      {item.last_purchase_cost ? (
+                          <div className="flex items-center gap-1 text-sm font-bold text-text-primary">
+                              <DollarSign className="w-3 h-3 text-text-secondary" />
+                              {item.last_purchase_cost.toFixed(2)}
+                          </div>
+                      ) : (
+                          <span className="text-xs text-text-disabled italic">Sin costo</span>
+                      )}
                   </td>
                   <td className="p-4 text-sm text-text-secondary font-medium">
                     {uoms.find(u => u.id === item.base_uom_id)?.code || '---'}
@@ -203,7 +214,7 @@ export default function ItemsPage() {
               ))}
               {items.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="p-12 text-center">
+                  <td colSpan={7} className="p-12 text-center">
                       <Archive className="w-10 h-10 text-text-disabled mx-auto mb-3" />
                       <p className="text-text-secondary font-medium">{t('empty')}</p>
                   </td>
