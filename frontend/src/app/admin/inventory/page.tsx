@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react'
 import { adminApi, getProfile, type VenueInfo, type InventoryDashboardSummary } from '@/lib/api'
 import { useVenue } from '@/components/VenueContext'
-import { Box, Wrench, AlertTriangle, ClipboardList, Clock, ArrowRight, Archive, Warehouse } from 'lucide-react'
+import { Box, Wrench, AlertTriangle, ClipboardList, Clock, ArrowRight, Archive, Warehouse, History } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
