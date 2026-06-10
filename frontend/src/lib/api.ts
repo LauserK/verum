@@ -688,11 +688,32 @@ export const adminApi = {
     deleteItemCategory: (id: string): Promise<{ ok: boolean }> =>
         fetchWithAuth(`/inventory/item-categories/${id}`, { method: 'DELETE' }),
 
-    updateItemCategory: (id: string, data: Partial<ItemCategory>): Promise<ItemCategory> =>
-        fetchWithAuth(`/inventory/item-categories/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-
     updateInventoryItem: (id: string, data: Partial<InventoryItem>): Promise<InventoryItem> =>
         fetchWithAuth(`/inventory/items/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+
+    deleteInventoryItem: (id: string): Promise<{ ok: boolean }> =>
+        fetchWithAuth(`/inventory/items/${id}`, { method: 'DELETE' }),
+
+    getUOMPresentations: (): Promise<UOMPresentation[]> =>
+        fetchWithAuth('/inventory/uom-presentations'),
+
+    createUOMPresentation: (data: Partial<UOMPresentation>): Promise<UOMPresentation> =>
+        fetchWithAuth('/inventory/uom-presentations', { method: 'POST', body: JSON.stringify(data) }),
+
+    deleteUOMPresentation: (id: string): Promise<{ ok: boolean }> =>
+        fetchWithAuth(`/inventory/uom-presentations/${id}`, { method: 'DELETE' }),
+
+    getItemPresentations: (itemId: string): Promise<UOMPresentation[]> =>
+        fetchWithAuth(`/inventory/items/${itemId}/presentations`),
+
+    enableItemPresentation: (itemId: string, presId: string): Promise<{ ok: boolean }> =>
+        fetchWithAuth(`/inventory/items/${itemId}/presentations/${presId}`, { method: 'POST' }),
+
+    disableItemPresentation: (itemId: string, presId: string): Promise<{ ok: boolean }> =>
+        fetchWithAuth(`/inventory/items/${itemId}/presentations/${presId}`, { method: 'DELETE' }),
+
+    updateItemCategory: (id: string, data: Partial<ItemCategory>): Promise<ItemCategory> =>
+        fetchWithAuth(`/inventory/item-categories/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
 }
 
 // Super Admin CRUD
