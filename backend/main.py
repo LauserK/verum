@@ -3702,8 +3702,8 @@ async def create_item(item: ItemCreate, org_id: str = Depends(get_active_org_id)
 
 @app.get("/inventory/items", response_model=List[ItemResponse], tags=["Inventory"])
 async def list_items(org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
-    res = db.table("items").select("*").eq("org_id", org_id).execute()
-    return res.data
+    res = db.table("items").select("*").eq("org_id", org_id).eq("is_active", True).execute()
+    return res.data or []
 
 @app.patch("/inventory/items/{item_id}", response_model=ItemResponse, tags=["Inventory"])
 async def update_item(item_id: UUID, item: ItemCreate, db=Depends(get_db), _=Depends(require_permission("inventory.manage_items"))):
@@ -3767,6 +3767,56 @@ async def delete_item_category(category_id: UUID, db=Depends(get_db), _=Depends(
 async def list_uom_base(db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
     res = db.table("uom_base").select("*").execute()
     return res.data
+
+@app.get("/inventory/uom-presentations", response_model=List[UOMPresentationResponse], tags=["Inventory"])
+async def list_uom_presentations(org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
+    res = db.table("uom_presentations").select("*").eq("org_id", org_id).execute()
+    return res.data or []
+
+@app.post("/inventory/uom-presentations", response_model=UOMPresentationResponse, tags=["Inventory"])
+async def create_uom_presentation(pres: UOMPresentationCreate, org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.manage_items"))):
+    data = {
+        "org_id": org_id,
+        "name": pres.name,
+        "base_uom_id": str(pres.base_uom_id),
+        "conversion_factor": pres.conversion_factor,
+        "is_default": pres.is_default
+    }
+    res = db.table("uom_presentations").insert(data).execute()
+    if not res.data:
+        raise HTTPException(status_code=400, detail="Error creating presentation")
+    return res.data[0]
+
+@app.delete("/inventory/uom-presentations/{pres_id}", tags=["Inventory"])
+async def delete_uom_presentation(pres_id: UUID, db=Depends(get_db), _=Depends(require_permission("inventory.manage_items"))):
+    db.table("uom_presentations").delete().eq("id", str(pres_id)).execute()
+    return {"ok": True}
+
+@app.get("/inventory/items/{item_id}/presentations", tags=["Inventory"])
+async def get_item_presentations(item_id: UUID, db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
+    # Get enabled presentations for this item via the junction table
+    res = db.table("item_uom_presentations") \
+        .select("presentation_id, uom_presentations(*)") \
+        .eq("item_id", str(item_id)) \
+        .execute()
+    return [r["uom_presentations"] for r in res.data if r.get("uom_presentations")]
+
+@app.post("/inventory/items/{item_id}/presentations/{pres_id}", tags=["Inventory"])
+async def enable_item_presentation(item_id: UUID, pres_id: UUID, db=Depends(get_db), _=Depends(require_permission("inventory.manage_items"))):
+    db.table("item_uom_presentations").upsert({
+        "item_id": str(item_id),
+        "presentation_id": str(pres_id)
+    }).execute()
+    return {"ok": True}
+
+@app.delete("/inventory/items/{item_id}/presentations/{pres_id}", tags=["Inventory"])
+async def disable_item_presentation(item_id: UUID, pres_id: UUID, db=Depends(get_db), _=Depends(require_permission("inventory.manage_items"))):
+    db.table("item_uom_presentations") \
+        .delete() \
+        .eq("item_id", str(item_id)) \
+        .eq("presentation_id", str(pres_id)) \
+        .execute()
+    return {"ok": True}
 
 # ── Production & Inventory Endpoints (M17) ───────────────
 
