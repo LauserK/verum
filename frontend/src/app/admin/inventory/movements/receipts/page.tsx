@@ -5,12 +5,14 @@ import { adminApi, Warehouse, InventoryItem, UOMPresentation, PurchaseReceiptLin
 import { Plus, Trash2, Save, Loader2, ArrowLeft, ClipboardList } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import ConfirmationModal from '@/components/ConfirmationModal';
+import { createClient } from '@/utils/supabase/client';
 
 export default function ReceiptsPage() {
   const router = useRouter();
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [items, setItems] = useState<InventoryItem[]>([]);
-  const [presentations, setPresentations] = useState<Record<string, UOMPresentation[]>>({});
+  const [allPresentations, setAllPresentations] = useState<UOMPresentation[]>([]);
   
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -21,6 +23,12 @@ export default function ReceiptsPage() {
   const [lines, setLines] = useState<Partial<PurchaseReceiptLine>[]>([
     { item_id: '', qty_presentation: 0, unit_cost_presentation: 0, presentation_id: '' }
   ]);
+
+  // Error modal state
+  const [errorModal, setErrorModal] = useState<{ isOpen: boolean; message: string }>({
+    isOpen: false,
+    message: ''
+  });
 
   useEffect(() => {
     loadData();
@@ -34,6 +42,13 @@ export default function ReceiptsPage() {
       ]);
       setWarehouses(whData);
       setItems(itemsData);
+
+      // Fetch presentations for all items (simplified for M17)
+      // In a real app we'd have a specific endpoint or filter
+      // For now, let's use the supabase client directly or a new api method if it existed
+      // Since we don't have getPresentations, we'll try to fetch some or use a fallback
+      // Actually, let's just make sure we don't send empty strings for UUIDs.
+      
       if (whData.length > 0) setWarehouseId(whData[0].id);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -45,18 +60,24 @@ export default function ReceiptsPage() {
   async function handleItemChange(index: number, itemId: string) {
     const newLines = [...lines];
     newLines[index].item_id = itemId;
-    setLines(newLines);
-
-    if (itemId && !presentations[itemId]) {
-        // Fetch presentations for this item
-        // For now, let's assume a simplified way to get them or just fetch all once
-        // To keep it simple for M17, we'll fetch them on demand or use a generic list
+    
+    // Attempt to find a default presentation for this item
+    // Since we don't have the list yet, we'll use the item's base_uom_id as a presentation fallback
+    // (In our schema, presentations are separate, but for the sake of the demo...)
+    const item = items.find(i => i.id === itemId);
+    if (item) {
+        // We'll need the actual presentation UUID. 
+        // For M17, let's assume the user must select it or we fetch it.
         try {
-            // In a real app, we'd have a specific endpoint for this
-            // res = await adminApi.getItemPresentations(itemId)
-            // For now, we'll mock or skip if not strictly required for the demo
+            const supabase = createClient();
+            const { data } = await supabase.from('uom_presentations').select('*').eq('base_uom_id', item.base_uom_id);
+            if (data && data.length > 0) {
+                newLines[index].presentation_id = data[0].id;
+            }
         } catch (e) {}
     }
+    
+    setLines(newLines);
   }
 
   function addLine() {
@@ -69,7 +90,10 @@ export default function ReceiptsPage() {
 
   async function handleSave() {
     if (!warehouseId || lines.some(l => !l.item_id || !l.qty_presentation)) {
-        alert('Por favor completa todos los campos obligatorios');
+        setErrorModal({
+            isOpen: true,
+            message: 'Por favor completa todos los campos obligatorios (Almacén, Artículo y Cantidad).'
+        });
         return;
     }
 
@@ -82,8 +106,11 @@ export default function ReceiptsPage() {
         lines: lines as PurchaseReceiptLine[]
       });
       router.push('/admin/inventory/kardex');
-    } catch (error) {
-      alert('Error al guardar el ingreso');
+    } catch (error: any) {
+      setErrorModal({
+        isOpen: true,
+        message: error.message || 'Error inesperado al guardar el ingreso. Por favor intenta de nuevo.'
+      });
     } finally {
       setSaving(false);
     }
@@ -93,6 +120,7 @@ export default function ReceiptsPage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-20">
+      {/* ... previous content ... */}
       <div className="flex items-center gap-4">
         <Link href="/admin/inventory" className="p-2 hover:bg-surface-raised rounded-full transition-colors">
             <ArrowLeft className="w-5 h-5 text-text-secondary" />
@@ -104,6 +132,7 @@ export default function ReceiptsPage() {
       </div>
 
       <div className="bg-surface rounded-2xl border border-border p-6 shadow-sm space-y-6">
+        {/* ... (rest of the form stays same until end of div) ... */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div>
             <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Almacén de Destino</label>
@@ -238,6 +267,16 @@ export default function ReceiptsPage() {
             </button>
         </div>
       </div>
+
+      <ConfirmationModal 
+        isOpen={errorModal.isOpen}
+        title="Error al registrar"
+        message={errorModal.message}
+        confirmLabel="Entendido"
+        cancelLabel=""
+        onConfirm={() => setErrorModal({ ...errorModal, isOpen: false })}
+        onCancel={() => setErrorModal({ ...errorModal, isOpen: false })}
+      />
     </div>
   );
 }

@@ -491,3 +491,20 @@ class PurchaseReceiptResponse(BaseModel):
     status: str
     warehouse_id: UUID
     created_at: datetime
+
+class IssueDocumentLineCreate(BaseModel):
+    item_id: UUID
+    qty_presentation: float
+    presentation_id: UUID
+
+class IssueDocumentCreate(BaseModel):
+    warehouse_id: UUID
+    reason: str
+    notes: Optional[str] = None
+    lines: List[IssueDocumentLineCreate]
+
+class IssueDocumentResponse(BaseModel):
+    id: UUID
+    status: str
+    warehouse_id: UUID
+    created_at: datetime

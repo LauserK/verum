@@ -1,5 +1,12 @@
 -- backend/migrations/030_stock_movements_peps.sql
 
+-- Permisos adicionales
+INSERT INTO permissions (module, action, key, description) VALUES
+  ('inventory', 'receive', 'inventory.receive', 'Registrar ingresos de mercancía'),
+  ('inventory', 'issue', 'inventory.issue', 'Registrar salidas y mermas'),
+  ('inventory', 'view_kardex', 'inventory.view_kardex', 'Ver historial detallado de movimientos (Kardex)')
+ON CONFLICT (key) DO NOTHING;
+
 -- Lotes de inventario (para PEPS/FIFO y trazabilidad)
 create table if not exists stock_lots (
   id              uuid default uuid_generate_v4() primary key,
