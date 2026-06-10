@@ -2,17 +2,19 @@
 
 import { useState, useEffect } from 'react';
 import { adminApi, Warehouse, InventoryItem, UOMPresentation, PurchaseReceiptLine } from '@/lib/api';
-import { Plus, Trash2, Save, Loader2, ArrowLeft, ClipboardList } from 'lucide-react';
+import { Plus, Trash2, Save, Loader2, ArrowLeft, ClipboardList, Printer } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import ConfirmationModal from '@/components/ConfirmationModal';
 import { createClient } from '@/utils/supabase/client';
+import { useRef } from 'react';
+import { useReactToPrint } from 'react-to-print';
+import { MovementPrint } from '@/components/inventory/MovementPrint';
 
 export default function ReceiptsPage() {
   const router = useRouter();
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [items, setItems] = useState<InventoryItem[]>([]);
-  const [allPresentations, setAllPresentations] = useState<UOMPresentation[]>([]);
   
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -24,7 +26,18 @@ export default function ReceiptsPage() {
     { item_id: '', qty_presentation: 0, unit_cost_presentation: 0, presentation_id: '' }
   ]);
 
+  // Printing state
+  const printRef = useRef<HTMLDivElement>(null);
+  const handlePrint = useReactToPrint({
+    contentRef: printRef,
+    documentTitle: `Ingreso-${receiptNumber || 'S-N'}`,
+    onAfterPrint: () => router.push('/admin/inventory/kardex')
+  });
+
+  const [lastSavedData, setLastSavedData] = useState<any>(null);
+
   // Error modal state
+  // ... rest of state
   const [errorModal, setErrorModal] = useState<{ isOpen: boolean; message: string }>({
     isOpen: false,
     message: ''

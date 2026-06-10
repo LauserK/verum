@@ -1,11 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { adminApi, Warehouse, InventoryItem, IssueDocument } from '@/lib/api';
-import { Plus, Trash2, Save, Loader2, ArrowLeft, ClipboardList, ArrowDownRight } from 'lucide-react';
+import { Plus, Trash2, Save, Loader2, ArrowLeft, ClipboardList, ArrowDownRight, Printer } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import ConfirmationModal from '@/components/ConfirmationModal';
+import { useReactToPrint } from 'react-to-print';
+import { MovementPrint } from '@/components/inventory/MovementPrint';
 
 export default function IssuesPage() {
   const router = useRouter();
@@ -22,11 +24,27 @@ export default function IssuesPage() {
     { item_id: '', qty_presentation: 0, presentation_id: null }
   ]);
 
+  // Printing state
+  const printRef = useRef<HTMLDivElement>(null);
+  const handlePrint = useReactToPrint({
+    contentRef: printRef,
+    documentTitle: `Egreso-${new Date().getTime()}`,
+    onAfterPrint: () => router.push('/admin/inventory/kardex')
+  });
+
+  const [lastSavedData, setLastSavedData] = useState<any>(null);
+
   // Error modal state
   const [errorModal, setErrorModal] = useState<{ isOpen: boolean; message: string }>({
     isOpen: false,
     message: ''
   });
+
+  useEffect(() => {
+    if (lastSavedData && printRef.current) {
+        handlePrint();
+    }
+  }, [lastSavedData]);
 
   useEffect(() => {
     loadData();
@@ -56,7 +74,7 @@ export default function IssuesPage() {
     setLines(lines.filter((_, i) => i !== index));
   }
 
-  async function handleSave() {
+  async function handleSave(shouldPrint = false) {
     if (!warehouseId || lines.some(l => !l.item_id || !l.qty_presentation)) {
         setErrorModal({
             isOpen: true,
@@ -67,7 +85,7 @@ export default function IssuesPage() {
 
     setSaving(true);
     try {
-      await adminApi.createIssueDocument({
+      const res = await adminApi.createIssueDocument({
         warehouse_id: warehouseId,
         reason,
         notes,
@@ -77,7 +95,26 @@ export default function IssuesPage() {
             qty_presentation: Number(line.qty_presentation)
         }))
       });
-      router.push('/admin/inventory/kardex');
+
+      if (shouldPrint) {
+          const warehouse = warehouses.find(w => w.id === warehouseId);
+          const reasonLabels: any = { waste: 'Merma', sale: 'Venta', adjustment: 'Ajuste', sample: 'Muestra', other: 'Otro' };
+          
+          setLastSavedData({
+              id: res.id,
+              warehouseName: warehouse?.name || 'Almacén',
+              reason: reasonLabels[reason] || reason,
+              notes,
+              createdAt: new Date().toISOString(),
+              lines: lines.map(l => ({
+                  itemName: items.find(i => i.id === l.item_id)?.name || 'Artículo',
+                  qty: l.qty_presentation,
+                  uom: 'Unidad'
+              }))
+          });
+      } else {
+          router.push('/admin/inventory/kardex');
+      }
     } catch (error: any) {
       setErrorModal({
         isOpen: true,
@@ -209,12 +246,20 @@ export default function IssuesPage() {
                 Cancelar
             </button>
             <button 
-                onClick={handleSave}
+                onClick={() => handleSave(false)}
+                disabled={saving}
+                className="px-6 h-11 border border-primary text-primary rounded-xl font-bold text-sm hover:bg-primary/5 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                Registrar Egreso
+            </button>
+            <button 
+                onClick={() => handleSave(true)}
                 disabled={saving}
                 className="px-8 h-11 bg-primary text-text-inverse rounded-xl font-bold text-sm hover:bg-primary-hover transition-all flex items-center justify-center gap-2 disabled:opacity-50"
             >
-                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowDownRight className="w-4 h-4" />}
-                Registrar Egreso
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
+                Confirmar e Imprimir
             </button>
         </div>
       </div>
@@ -228,6 +273,17 @@ export default function IssuesPage() {
         onConfirm={() => setErrorModal({ ...errorModal, isOpen: false })}
         onCancel={() => setErrorModal({ ...errorModal, isOpen: false })}
       />
+
+      {/* Hidden print container */}
+      <div className="hidden">
+        {lastSavedData && (
+          <MovementPrint 
+            ref={printRef}
+            type="issue"
+            data={lastSavedData}
+          />
+        )}
+      </div>
     </div>
   );
 }
