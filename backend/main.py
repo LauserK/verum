@@ -7,6 +7,7 @@ from datetime import datetime, timezone, timedelta
 import io
 import csv
 import uuid
+from uuid import UUID
 from pydantic import BaseModel
 from typing import Optional, List
 
