@@ -73,6 +73,7 @@ export default function IssuesPage() {
         notes,
         lines: lines.map(line => ({
             ...line,
+            presentation_id: line.presentation_id === '' ? null : line.presentation_id,
             qty_presentation: Number(line.qty_presentation)
         }))
       });

@@ -3810,13 +3810,13 @@ async def create_issue_document(doc: IssueDocumentCreate, org_id: str = Depends(
     # Process lines with FIFO logic
     for line in doc.lines:
         # Get presentation for conversion
-        pres_res = db.table("uom_presentations").select("conversion_factor").eq("id", str(line.presentation_id)).execute()
         factor = 1.0
-        if pres_res.data:
-            factor = float(pres_res.data[0]["conversion_factor"])
-        
+        if line.presentation_id:
+            pres_res = db.table("uom_presentations").select("conversion_factor").eq("id", str(line.presentation_id)).execute()
+            if pres_res.data:
+                factor = float(pres_res.data[0]["conversion_factor"])
+
         total_to_consume = float(line.qty_presentation) * factor
-        
         # FIFO logic: get oldest non-exhausted lots
         lots_res = db.table("stock_lots") \
             .select("*") \
