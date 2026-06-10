@@ -672,6 +672,12 @@ export const adminApi = {
 
     createIssueDocument: (data: Partial<IssueDocument>): Promise<IssueDocument> =>
         fetchWithAuth('/inventory/issue-documents', { method: 'POST', body: JSON.stringify(data) }),
+
+    getPurchaseReceipt: (id: string): Promise<{ header: any; lines: any[] }> =>
+        fetchWithAuth(`/inventory/purchase-receipts/${id}`),
+
+    getMovementsByReference: (referenceId: string): Promise<StockMovement[]> =>
+        fetchWithAuth(`/inventory/movements/reference/${referenceId}`),
 }
 
 // Super Admin CRUD

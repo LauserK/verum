@@ -1,9 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { adminApi, StockMovement, InventoryItem, Warehouse } from '@/lib/api';
-import { Loader2, ArrowLeft, Search, Filter, ArrowUpRight, ArrowDownRight, History } from 'lucide-react';
+import { Loader2, ArrowLeft, Printer, ArrowUpRight, ArrowDownRight, History } from 'lucide-react';
 import Link from 'next/link';
+import { useReactToPrint } from 'react-to-print';
+import { MovementPrint } from '@/components/inventory/MovementPrint';
 
 export default function KardexPage() {
   const [movements, setMovements] = useState<StockMovement[]>([]);
@@ -11,7 +13,27 @@ export default function KardexPage() {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   
   const [loading, setLoading] = useState(true);
+  const [printing, setPrinting] = useState(false);
   const [filters, setFilters] = useState({ item_id: '', warehouse_id: '' });
+
+  // Printing state
+  const printRef = useRef<HTMLDivElement>(null);
+  const [printData, setPrintData] = useState<any>(null);
+  
+  const handlePrintTrigger = useReactToPrint({
+    contentRef: printRef,
+    documentTitle: `Documento-${printData?.receiptNumber || 'Ref'}`,
+    onAfterPrint: () => {
+        setPrintData(null);
+        setPrinting(false);
+    }
+  });
+
+  useEffect(() => {
+    if (printData && printRef.current) {
+        handlePrintTrigger();
+    }
+  }, [printData]);
 
   useEffect(() => {
     loadInitialData();
@@ -43,6 +65,56 @@ export default function KardexPage() {
       console.error('Error loading movements:', error);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleRePrint(movement: StockMovement) {
+    if (!movement.reference_id) return;
+    
+    setPrinting(true);
+    try {
+        if (movement.reference_type === 'purchase_receipt') {
+            const detail = await adminApi.getPurchaseReceipt(movement.reference_id);
+            setPrintData({
+                type: 'receipt',
+                id: detail.header.id,
+                warehouseName: detail.header.warehouses?.name || 'Almacén',
+                supplier: detail.header.supplier,
+                receiptNumber: detail.header.receipt_number,
+                createdAt: detail.header.confirmed_at || detail.header.created_at,
+                notes: detail.header.notes,
+                lines: detail.lines.map((l: any) => ({
+                    itemName: l.items?.name || 'Artículo',
+                    qty: l.qty_presentation,
+                    uom: l.uom_presentations?.name || 'Unidad',
+                    cost: l.unit_cost_base * (l.qty_base / l.qty_presentation), // Re-calculate presentation cost
+                    lot: l.lot_number
+                }))
+            });
+        } else {
+            // It's an issue document or other type tracked in movements
+            const lines = await adminApi.getMovementsByReference(movement.reference_id);
+            if (lines.length > 0) {
+                const first = lines[0];
+                setPrintData({
+                    type: 'issue',
+                    id: movement.reference_id,
+                    warehouseName: (first as any).warehouses?.name || 'Almacén',
+                    reason: movement.movement_type === 'sale' ? 'Venta' : 'Ajuste / Salida',
+                    notes: movement.notes,
+                    createdAt: movement.created_at,
+                    lines: lines.map(l => ({
+                        itemName: (l as any).items?.name || 'Artículo',
+                        qty: Math.abs(l.qty_base), // For issues it was negative in DB
+                        uom: 'Unidad Base',
+                        lot: (l as any).stock_lots?.lot_number
+                    }))
+                });
+            }
+        }
+    } catch (error) {
+        alert('Error al cargar datos para impresión');
+        setPrinting(false);
     }
   }
 
@@ -81,7 +153,7 @@ export default function KardexPage() {
             </Link>
             <Link 
                 href="/admin/inventory/movements/issues"
-                className="flex items-center gap-2 border border-border text-text-primary px-4 h-10 rounded-xl text-sm font-medium hover:bg-surface-raised transition-colors"
+                className="flex items-center gap-2 border border-border text-text-primary px-4 h-10 rounded-xl text-sm font-medium hover:bg-surface-raised transition-all"
             >
                 <ArrowDownRight className="w-4 h-4 text-error" />
                 Registrar Egreso
@@ -89,6 +161,7 @@ export default function KardexPage() {
         </div>
       </div>
 
+      {/* Filters */}
       <div className="bg-surface rounded-2xl border border-border p-4 shadow-sm flex flex-wrap gap-4">
           <div className="flex-1 min-w-[200px]">
               <label className="block text-[10px] font-bold text-text-secondary uppercase tracking-widest mb-1.5 ml-1">Filtrar por Artículo</label>
@@ -127,8 +200,8 @@ export default function KardexPage() {
                 <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest">Tipo</th>
                 <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest">Almacén / Artículo</th>
                 <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest text-right">Cantidad</th>
-                <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest text-right">Costo Unit.</th>
                 <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest text-right">Total</th>
+                <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest text-center">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -175,14 +248,21 @@ export default function KardexPage() {
                       </span>
                   </td>
                   <td className="p-4 text-right">
-                      <span className="text-sm text-text-secondary font-mono">
-                          ${m.unit_cost_base?.toFixed(2) || '0.00'}
-                      </span>
-                  </td>
-                  <td className="p-4 text-right">
                       <span className="text-sm font-bold text-text-primary font-mono">
                           ${Math.abs(m.total_cost || 0).toFixed(2)}
                       </span>
+                  </td>
+                  <td className="p-4 text-center">
+                      {m.reference_id && (
+                        <button 
+                            onClick={() => handleRePrint(m)}
+                            disabled={printing}
+                            className="p-2 text-text-secondary hover:text-primary hover:bg-primary/5 rounded-lg transition-all"
+                            title="Re-imprimir comprobante original"
+                        >
+                            {printing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
+                        </button>
+                      )}
                   </td>
                 </tr>
               ))}
@@ -197,6 +277,17 @@ export default function KardexPage() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Hidden print container */}
+      <div className="hidden">
+        {printData && (
+          <MovementPrint 
+            ref={printRef}
+            type={printData.type}
+            data={printData}
+          />
+        )}
       </div>
     </div>
   );
