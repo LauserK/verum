@@ -678,6 +678,15 @@ export const adminApi = {
 
     getMovementsByReference: (referenceId: string): Promise<StockMovement[]> =>
         fetchWithAuth(`/inventory/movements/reference/${referenceId}`),
+
+    getItemCategories: (): Promise<ItemCategory[]> =>
+        fetchWithAuth('/inventory/item-categories'),
+
+    createItemCategory: (data: Partial<ItemCategory>): Promise<ItemCategory> =>
+        fetchWithAuth('/inventory/item-categories', { method: 'POST', body: JSON.stringify(data) }),
+
+    deleteItemCategory: (id: string): Promise<{ ok: boolean }> =>
+        fetchWithAuth(`/inventory/item-categories/${id}`, { method: 'DELETE' }),
 }
 
 // Super Admin CRUD
