@@ -6,6 +6,7 @@ import { Loader2, ArrowLeft, Printer, ArrowUpRight, ArrowDownRight, History } fr
 import Link from 'next/link';
 import { useReactToPrint } from 'react-to-print';
 import { MovementPrint } from '@/components/inventory/MovementPrint';
+import ConfirmationModal from '@/components/ConfirmationModal';
 
 export default function KardexPage() {
   const [movements, setMovements] = useState<StockMovement[]>([]);
@@ -15,6 +16,12 @@ export default function KardexPage() {
   const [loading, setLoading] = useState(true);
   const [printing, setPrinting] = useState(false);
   const [filters, setFilters] = useState({ item_id: '', warehouse_id: '' });
+
+  // Error modal state
+  const [errorModal, setErrorModal] = useState<{ isOpen: boolean; message: string }>({
+    isOpen: false,
+    message: ''
+  });
 
   // Printing state
   const printRef = useRef<HTMLDivElement>(null);
@@ -92,7 +99,6 @@ export default function KardexPage() {
                 }))
             });
         } else {
-            // It's an issue document or other type tracked in movements
             const lines = await adminApi.getMovementsByReference(movement.reference_id);
             if (lines.length > 0) {
                 const first = lines[0];
@@ -105,15 +111,19 @@ export default function KardexPage() {
                     createdAt: movement.created_at,
                     lines: lines.map(l => ({
                         itemName: (l as any).items?.name || 'Artículo',
-                        qty: Math.abs(l.qty_base), // For issues it was negative in DB
+                        qty: Math.abs(l.qty_base),
                         uom: 'Unidad Base',
                         lot: (l as any).stock_lots?.lot_number
                     }))
                 });
             }
         }
-    } catch (error) {
-        alert('Error al cargar datos para impresión');
+    } catch (error: any) {
+        console.error('Print error:', error);
+        setErrorModal({
+            isOpen: true,
+            message: `No se pudo obtener el documento original: ${error.message || 'Error de conexión'}`
+        });
         setPrinting(false);
     }
   }
@@ -289,6 +299,16 @@ export default function KardexPage() {
           />
         )}
       </div>
+
+      <ConfirmationModal 
+        isOpen={errorModal.isOpen}
+        title="Error al imprimir"
+        message={errorModal.message}
+        confirmLabel="Entendido"
+        cancelLabel=""
+        onConfirm={() => setErrorModal({ ...errorModal, isOpen: false })}
+        onCancel={() => setErrorModal({ ...errorModal, isOpen: false })}
+      />
     </div>
   );
 }

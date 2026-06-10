@@ -3882,17 +3882,18 @@ async def get_kardex(item_id: Optional[UUID] = None, warehouse_id: Optional[UUID
 
 @app.get("/inventory/purchase-receipts/{receipt_id}", tags=["Inventory"])
 async def get_purchase_receipt_detail(receipt_id: UUID, db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
-    # Get header
+    # Get header with warehouse name
     res_header = db.table("purchase_receipts").select("*, warehouses(name)").eq("id", str(receipt_id)).execute()
     if not res_header.data:
         raise HTTPException(status_code=404, detail="Receipt not found")
-    
-    # Get lines with item and presentation names
+
+    # Get lines with explicit relationship joins
+    # items!purchase_receipt_lines_item_id_fkey if needed, but usually items(name) works if FK is unique
     res_lines = db.table("purchase_receipt_lines") \
         .select("*, items(name, base_uom_id), uom_presentations(name)") \
         .eq("receipt_id", str(receipt_id)) \
         .execute()
-        
+
     return {
         "header": res_header.data[0],
         "lines": res_lines.data
@@ -3900,11 +3901,10 @@ async def get_purchase_receipt_detail(receipt_id: UUID, db=Depends(get_db), _=De
 
 @app.get("/inventory/movements/reference/{reference_id}", tags=["Inventory"])
 async def get_movements_by_reference(reference_id: UUID, db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
-    # This helps get all lines of an issue (which share reference_id in stock_movements)
+    # Join with items, warehouses and also lot info if available
     res = db.table("stock_movements") \
-        .select("*, items(name), warehouses(name)") \
+        .select("*, items(name), warehouses(name), stock_lots(lot_number)") \
         .eq("reference_id", str(reference_id)) \
         .execute()
     return res.data
-
 
