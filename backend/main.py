@@ -3707,9 +3707,15 @@ async def list_items(org_id: str = Depends(get_active_org_id), db=Depends(get_db
 
 @app.patch("/inventory/items/{item_id}", response_model=ItemResponse, tags=["Inventory"])
 async def update_item(item_id: UUID, item: ItemCreate, db=Depends(get_db), _=Depends(require_permission("inventory.manage_items"))):
-    # Convert model to dict and handle UUID serialization manually for the client
+    # Convert model to dict and handle UUID serialization
+    full_data = item.dict(exclude_none=True)
+    
+    # Exclude 'presentations' as it's not a column in the 'items' table
+    if "presentations" in full_data:
+        del full_data["presentations"]
+        
     update_data = {k: (str(v) if isinstance(v, UUID) else v) 
-                   for k, v in item.dict(exclude_none=True).items()}
+                   for k, v in full_data.items()}
     
     res = db.table("items").update(update_data).eq("id", str(item_id)).execute()
     if not res.data:
