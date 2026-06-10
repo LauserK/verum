@@ -99,11 +99,19 @@ export default function ReceiptsPage() {
 
     setSaving(true);
     try {
+      // Clean lines to remove empty UUIDs and ensure valid types
+      const cleanedLines = lines.map(line => ({
+        ...line,
+        presentation_id: line.presentation_id === '' ? null : line.presentation_id,
+        qty_presentation: Number(line.qty_presentation),
+        unit_cost_presentation: Number(line.unit_cost_presentation)
+      }));
+
       await adminApi.createPurchaseReceipt({
         warehouse_id: warehouseId,
         supplier,
         receipt_number: receiptNumber,
-        lines: lines as PurchaseReceiptLine[]
+        lines: cleanedLines as PurchaseReceiptLine[]
       });
       router.push('/admin/inventory/kardex');
     } catch (error: any) {

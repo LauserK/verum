@@ -475,7 +475,7 @@ class StockMovementResponse(BaseModel):
 class PurchaseReceiptLineCreate(BaseModel):
     item_id: UUID
     qty_presentation: float
-    presentation_id: UUID
+    presentation_id: Optional[UUID] = None
     unit_cost_presentation: float # Cost per presentation unit
     expiry_date: Optional[str] = None
     lot_number: Optional[str] = None
