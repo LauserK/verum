@@ -6,6 +6,7 @@ import pytz
 from datetime import datetime, timezone, timedelta
 import io
 import csv
+import uuid
 from pydantic import BaseModel
 from typing import Optional, List
 
@@ -32,7 +33,10 @@ from schemas import (
     SuperAdminUserInOrg, SuperAdminOrgDetail,
     EditAttendanceDayRequest,
     WarehouseCreate, WarehouseResponse, ItemCreate, ItemResponse,
-    UOMBase, UOMPresentationCreate, UOMPresentationResponse
+    UOMBase, UOMPresentationCreate, UOMPresentationResponse,
+    PurchaseReceiptCreate, PurchaseReceiptResponse,
+    IssueDocumentCreate, IssueDocumentResponse,
+    StockMovementResponse
 )
 
 CARACAS_TZ = pytz.timezone("America/Caracas")
@@ -3702,6 +3706,177 @@ async def list_items(org_id: str = Depends(get_active_org_id), db=Depends(get_db
 @app.get("/inventory/uom-base", response_model=List[UOMBase], tags=["Inventory"])
 async def list_uom_base(db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
     res = db.table("uom_base").select("*").execute()
+    return res.data
+
+# ── Production & Inventory Endpoints (M17) ───────────────
+
+@app.post("/inventory/purchase-receipts", response_model=PurchaseReceiptResponse, tags=["Inventory"])
+async def create_purchase_receipt(receipt: PurchaseReceiptCreate, org_id: str = Depends(get_active_org_id), user=Depends(get_current_user), db=Depends(get_db), _=Depends(require_permission("inventory.receive"))):
+    # 1. Create the receipt header
+    receipt_data = {
+        "org_id": org_id,
+        "warehouse_id": str(receipt.warehouse_id),
+        "supplier": receipt.supplier,
+        "receipt_number": receipt.receipt_number,
+        "status": "confirmed", # Directly confirmed for M17 simplicity
+        "created_by": user.id,
+        "confirmed_at": datetime.now(CARACAS_TZ).isoformat()
+    }
+    
+    res = db.table("purchase_receipts").insert(receipt_data).execute()
+    if not res.data:
+        raise HTTPException(status_code=400, detail="Error creating purchase receipt")
+    
+    receipt_id = res.data[0]["id"]
+    
+    # 2. Process lines
+    for line in receipt.lines:
+        # Get presentation for conversion
+        pres_res = db.table("uom_presentations").select("conversion_factor").eq("id", str(line.presentation_id)).execute()
+        factor = 1.0
+        if pres_res.data:
+            factor = float(pres_res.data[0]["conversion_factor"])
+        
+        qty_base = float(line.qty_presentation) * factor
+        unit_cost_base = float(line.unit_cost_presentation) / factor
+        
+        # Insert receipt line
+        line_data = {
+            "receipt_id": receipt_id,
+            "item_id": str(line.item_id),
+            "qty_base": qty_base,
+            "presentation_id": str(line.presentation_id),
+            "qty_presentation": line.qty_presentation,
+            "unit_cost_base": unit_cost_base,
+            "expiry_date": line.expiry_date,
+            "lot_number": line.lot_number
+        }
+        db.table("purchase_receipt_lines").insert(line_data).execute()
+        
+        # Create stock lot
+        lot_data = {
+            "warehouse_id": str(receipt.warehouse_id),
+            "item_id": str(line.item_id),
+            "lot_number": line.lot_number,
+            "qty_base": qty_base,
+            "unit_cost_base": unit_cost_base,
+            "expiry_date": line.expiry_date
+        }
+        lot_res = db.table("stock_lots").insert(lot_data).execute()
+        lot_id = lot_res.data[0]["id"]
+        
+        # Update stock table (manual increment)
+        stock_res = db.table("stock").select("id, qty_base").eq("warehouse_id", str(receipt.warehouse_id)).eq("item_id", str(line.item_id)).execute()
+        if stock_res.data:
+            new_qty = float(stock_res.data[0]["qty_base"]) + qty_base
+            db.table("stock").update({"qty_base": new_qty}).eq("id", stock_res.data[0]["id"]).execute()
+        else:
+            db.table("stock").insert({
+                "warehouse_id": str(receipt.warehouse_id),
+                "item_id": str(line.item_id),
+                "qty_base": qty_base
+            }).execute()
+            
+        # Log movement
+        movement_data = {
+            "org_id": org_id,
+            "movement_type": "purchase",
+            "warehouse_id": str(receipt.warehouse_id),
+            "item_id": str(line.item_id),
+            "lot_id": lot_id,
+            "qty_base": qty_base,
+            "unit_cost_base": unit_cost_base,
+            "total_cost": qty_base * unit_cost_base,
+            "reference_id": receipt_id,
+            "reference_type": "purchase_receipt",
+            "created_by": user.id
+        }
+        db.table("stock_movements").insert(movement_data).execute()
+
+        # Update last purchase cost in items
+        db.table("items").update({
+            "last_purchase_cost": unit_cost_base,
+            "last_purchase_cost_updated_at": datetime.now(CARACAS_TZ).isoformat()
+        }).eq("id", str(line.item_id)).execute()
+
+    return res.data[0]
+
+@app.post("/inventory/issue-documents", response_model=IssueDocumentResponse, tags=["Inventory"])
+async def create_issue_document(doc: IssueDocumentCreate, org_id: str = Depends(get_active_org_id), user=Depends(get_current_user), db=Depends(get_db), _=Depends(require_permission("inventory.issue"))):
+    # Reference ID for movements
+    reference_id = str(uuid.uuid4())
+    
+    # Process lines with FIFO logic
+    for line in doc.lines:
+        # Get presentation for conversion
+        pres_res = db.table("uom_presentations").select("conversion_factor").eq("id", str(line.presentation_id)).execute()
+        factor = 1.0
+        if pres_res.data:
+            factor = float(pres_res.data[0]["conversion_factor"])
+        
+        total_to_consume = float(line.qty_presentation) * factor
+        
+        # FIFO logic: get oldest non-exhausted lots
+        lots_res = db.table("stock_lots") \
+            .select("*") \
+            .eq("item_id", str(line.item_id)) \
+            .eq("warehouse_id", str(doc.warehouse_id)) \
+            .filter("qty_base", "gt", 0) \
+            .order("received_at", desc=False) \
+            .execute()
+            
+        remaining = total_to_consume
+        for lot in (lots_res.data or []):
+            if remaining <= 0:
+                break
+                
+            lot_qty = float(lot["qty_base"])
+            consume_qty = min(remaining, lot_qty)
+            
+            # Update lot
+            new_lot_qty = lot_qty - consume_qty
+            db.table("stock_lots").update({
+                "qty_base": new_lot_qty,
+                "is_exhausted": new_lot_qty <= 0
+            }).eq("id", lot["id"]).execute()
+            
+            # Log movement
+            movement_data = {
+                "org_id": org_id,
+                "movement_type": "adjustment_out" if doc.reason == "adjustment" else "sale",
+                "warehouse_id": str(doc.warehouse_id),
+                "item_id": str(line.item_id),
+                "lot_id": lot["id"],
+                "qty_base": -consume_qty, # Negative for exits
+                "unit_cost_base": float(lot["unit_cost_base"]),
+                "total_cost": -consume_qty * float(lot["unit_cost_base"]),
+                "reference_id": reference_id,
+                "reference_type": "issue_document",
+                "notes": doc.notes,
+                "created_by": user.id
+            }
+            db.table("stock_movements").insert(movement_data).execute()
+            
+            remaining -= consume_qty
+            
+        # Update overall stock
+        stock_res = db.table("stock").select("id, qty_base").eq("warehouse_id", str(doc.warehouse_id)).eq("item_id", str(line.item_id)).execute()
+        if stock_res.data:
+            new_qty = max(0, float(stock_res.data[0]["qty_base"]) - total_to_consume)
+            db.table("stock").update({"qty_base": new_qty}).eq("id", stock_res.data[0]["id"]).execute()
+
+    return {"id": reference_id, "status": "confirmed", "warehouse_id": doc.warehouse_id, "created_at": datetime.now(CARACAS_TZ).isoformat()}
+
+@app.get("/inventory/kardex", response_model=List[StockMovementResponse], tags=["Inventory"])
+async def get_kardex(item_id: Optional[UUID] = None, warehouse_id: Optional[UUID] = None, org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
+    query = db.table("stock_movements").select("*").eq("org_id", org_id)
+    
+    if item_id:
+        query = query.eq("item_id", str(item_id))
+    if warehouse_id:
+        query = query.eq("warehouse_id", str(warehouse_id))
+        
+    res = query.order("created_at", desc=True).execute()
     return res.data
 
 
