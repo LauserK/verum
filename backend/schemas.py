@@ -495,7 +495,7 @@ class PurchaseReceiptResponse(BaseModel):
 class IssueDocumentLineCreate(BaseModel):
     item_id: UUID
     qty_presentation: float
-    presentation_id: UUID
+    presentation_id: Optional[UUID] = None
 
 class IssueDocumentCreate(BaseModel):
     warehouse_id: UUID
