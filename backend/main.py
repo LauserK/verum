@@ -3707,14 +3707,19 @@ async def list_items(org_id: str = Depends(get_active_org_id), db=Depends(get_db
 
 @app.patch("/inventory/items/{item_id}", response_model=ItemResponse, tags=["Inventory"])
 async def update_item(item_id: UUID, item: ItemCreate, db=Depends(get_db), _=Depends(require_permission("inventory.manage_items"))):
-    res = db.table("items").update(item.dict(exclude_none=True)).eq("id", str(item_id)).execute()
+    # Convert model to dict and handle UUID serialization manually for the client
+    update_data = {k: (str(v) if isinstance(v, UUID) else v) 
+                   for k, v in item.dict(exclude_none=True).items()}
+    
+    res = db.table("items").update(update_data).eq("id", str(item_id)).execute()
     if not res.data:
         raise HTTPException(status_code=404, detail="Item not found")
     return res.data[0]
 
 @app.delete("/inventory/items/{item_id}", tags=["Inventory"])
 async def delete_item(item_id: UUID, db=Depends(get_db), _=Depends(require_permission("inventory.manage_items"))):
-    db.table("items").delete().eq("id", str(item_id)).execute()
+    # Soft delete: just inactivate
+    db.table("items").update({"is_active": False}).eq("id", str(item_id)).execute()
     return {"ok": True}
 
 @app.get("/inventory/item-categories", response_model=List[ItemCategoryResponse], tags=["Inventory"])
@@ -3728,7 +3733,7 @@ async def create_item_category(category: ItemCategoryCreate, org_id: str = Depen
         "org_id": org_id,
         "name": category.name,
         "description": category.description,
-        "is_active": True # Asegurar explícitamente para evitar fallos de validación
+        "is_active": True 
     }
     res = db.table("item_categories").insert(data).execute()
     if not res.data or len(res.data) == 0:
@@ -3737,14 +3742,19 @@ async def create_item_category(category: ItemCategoryCreate, org_id: str = Depen
 
 @app.patch("/inventory/item-categories/{category_id}", response_model=ItemCategoryResponse, tags=["Inventory"])
 async def update_item_category(category_id: UUID, category: ItemCategoryCreate, db=Depends(get_db), _=Depends(require_permission("inventory.manage_categories"))):
-    res = db.table("item_categories").update(category.dict(exclude_none=True)).eq("id", str(category_id)).execute()
+    # Fix UUID serialization
+    update_data = {k: (str(v) if isinstance(v, UUID) else v) 
+                   for k, v in category.dict(exclude_none=True).items()}
+    
+    res = db.table("item_categories").update(update_data).eq("id", str(category_id)).execute()
     if not res.data:
         raise HTTPException(status_code=404, detail="Category not found")
     return res.data[0]
 
 @app.delete("/inventory/item-categories/{category_id}", tags=["Inventory"])
 async def delete_item_category(category_id: UUID, db=Depends(get_db), _=Depends(require_permission("inventory.manage_categories"))):
-    db.table("item_categories").delete().eq("id", str(category_id)).execute()
+    # Soft delete for categories too
+    db.table("item_categories").update({"is_active": False}).eq("id", str(category_id)).execute()
     return {"ok": True}
 
 @app.get("/inventory/uom-base", response_model=List[UOMBase], tags=["Inventory"])
