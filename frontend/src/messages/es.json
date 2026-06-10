@@ -200,6 +200,17 @@
         "point_of_sale": "Punto de Venta",
         "transit": "Tránsito"
       }
+    },
+    "movements": {
+      "purchase": "Compra / Ingreso",
+      "sale": "Venta / Egreso",
+      "adjustment_in": "Ajuste (+)",
+      "adjustment_out": "Ajuste (-)",
+      "production_in": "Producción (+)",
+      "production_out": "Consumo (-)",
+      "transfer_in": "Traspaso (+)",
+      "transfer_out": "Traspaso (-)",
+      "initial": "Saldo Inicial"
     }
   },
   "history": {

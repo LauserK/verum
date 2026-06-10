@@ -11,6 +11,7 @@ import { useTranslations } from '@/components/I18nProvider';
 
 export default function KardexPage() {
   const { t } = useTranslations('inventory.items');
+  const tMov = useTranslations('inventory.movements');
   const [movements, setMovements] = useState<StockMovement[]>([]);
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -130,19 +131,6 @@ export default function KardexPage() {
     }
   }
 
-  function getMovementTypeLabel(type: string) {
-    const labels: Record<string, string> = {
-      purchase: 'Compra / Ingreso',
-      sale: 'Venta / Egreso',
-      adjustment_in: 'Ajuste (+) ',
-      adjustment_out: 'Ajuste (-)',
-      production_in: 'Producción (+)',
-      production_out: 'Consumo (-)',
-      initial: 'Saldo Inicial'
-    };
-    return labels[type] || type;
-  }
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -242,7 +230,7 @@ export default function KardexPage() {
                             <ArrowDownRight className="w-3 h-3 text-error" />
                         )}
                         <span className={`text-xs font-bold ${m.qty_base > 0 ? 'text-success' : 'text-error'}`}>
-                            {getMovementTypeLabel(m.movement_type)}
+                            {tMov.t(m.movement_type)}
                         </span>
                       </div>
                   </td>

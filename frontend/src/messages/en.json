@@ -200,6 +200,17 @@
         "point_of_sale": "Point of Sale",
         "transit": "Transit"
       }
+    },
+    "movements": {
+      "purchase": "Purchase / Entry",
+      "sale": "Sale / Issue",
+      "adjustment_in": "Adjustment (+)",
+      "adjustment_out": "Adjustment (-)",
+      "production_in": "Production (+)",
+      "production_out": "Consumption (-)",
+      "transfer_in": "Transfer (+)",
+      "transfer_out": "Transfer (-)",
+      "initial": "Initial Balance"
     }
   },
   "history": {
