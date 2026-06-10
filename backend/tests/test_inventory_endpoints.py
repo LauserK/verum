@@ -100,3 +100,22 @@ def test_list_items(authorized_client, mock_supabase):
     assert response.status_code == 200
     assert len(response.json()) == 1
     assert response.json()[0]["name"] == "Harina de Trigo"
+
+def test_create_item_category(authorized_client, mock_supabase):
+    category_id = str(uuid.uuid4())
+    mock_supabase.table().insert().execute.return_value = MagicMock(data=[{
+        "id": category_id,
+        "org_id": ORG_ID,
+        "name": "Harinas",
+        "description": "Todo tipo de harinas",
+        "is_active": True
+    }])
+
+    response = authorized_client.post("/inventory/item-categories", json={
+        "name": "Harinas",
+        "description": "Todo tipo de harinas"
+    }, headers={"X-Org-ID": ORG_ID})
+
+    assert response.status_code == 200
+    assert response.json()["name"] == "Harinas"
+    assert response.json()["id"] == category_id

@@ -3708,18 +3708,19 @@ async def list_items(org_id: str = Depends(get_active_org_id), db=Depends(get_db
 @app.get("/inventory/item-categories", response_model=List[ItemCategoryResponse], tags=["Inventory"])
 async def list_item_categories(org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
     res = db.table("item_categories").select("*").eq("org_id", org_id).execute()
-    return res.data
+    return res.data or []
 
 @app.post("/inventory/item-categories", response_model=ItemCategoryResponse, tags=["Inventory"])
 async def create_item_category(category: ItemCategoryCreate, org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.manage_categories"))):
     data = {
         "org_id": org_id,
         "name": category.name,
-        "description": category.description
+        "description": category.description,
+        "is_active": True # Asegurar explícitamente para evitar fallos de validación
     }
     res = db.table("item_categories").insert(data).execute()
-    if not res.data:
-        raise HTTPException(status_code=400, detail="Error creating category")
+    if not res.data or len(res.data) == 0:
+        raise HTTPException(status_code=400, detail="Error creating category in database")
     return res.data[0]
 
 @app.delete("/inventory/item-categories/{category_id}", tags=["Inventory"])

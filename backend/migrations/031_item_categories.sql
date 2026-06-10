@@ -18,3 +18,20 @@ add column if not exists category_id uuid references item_categories(id) on dele
 INSERT INTO permissions (module, action, key, description) VALUES
   ('inventory', 'manage_categories', 'inventory.manage_categories', 'Crear y editar categorías de artículos')
 ON CONFLICT (key) DO NOTHING;
+
+-- Habilitar RLS
+alter table item_categories enable row level security;
+
+-- Política para que los usuarios vean solo las categorías de su organización
+create policy "Users can view categories of their own organization"
+  on item_categories for select
+  using ( org_id in (
+    select organization_id from profiles where id = auth.uid()
+  ));
+
+-- Política para que los administradores gestionen categorías
+create policy "Admins can manage categories"
+  on item_categories for all
+  using ( org_id in (
+    select organization_id from profiles where id = auth.uid()
+  ));
