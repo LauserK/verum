@@ -3732,10 +3732,11 @@ async def create_purchase_receipt(receipt: PurchaseReceiptCreate, org_id: str = 
     # 2. Process lines
     for line in receipt.lines:
         # Get presentation for conversion
-        pres_res = db.table("uom_presentations").select("conversion_factor").eq("id", str(line.presentation_id)).execute()
         factor = 1.0
-        if pres_res.data:
-            factor = float(pres_res.data[0]["conversion_factor"])
+        if line.presentation_id:
+            pres_res = db.table("uom_presentations").select("conversion_factor").eq("id", str(line.presentation_id)).execute()
+            if pres_res.data:
+                factor = float(pres_res.data[0]["conversion_factor"])
         
         qty_base = float(line.qty_presentation) * factor
         unit_cost_base = float(line.unit_cost_presentation) / factor
@@ -3745,7 +3746,7 @@ async def create_purchase_receipt(receipt: PurchaseReceiptCreate, org_id: str = 
             "receipt_id": receipt_id,
             "item_id": str(line.item_id),
             "qty_base": qty_base,
-            "presentation_id": str(line.presentation_id),
+            "presentation_id": str(line.presentation_id) if line.presentation_id else None,
             "qty_presentation": line.qty_presentation,
             "unit_cost_base": unit_cost_base,
             "expiry_date": line.expiry_date,
