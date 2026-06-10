@@ -694,6 +694,15 @@ export const adminApi = {
     deleteInventoryItem: (id: string): Promise<{ ok: boolean }> =>
         fetchWithAuth(`/inventory/items/${id}`, { method: 'DELETE' }),
 
+    getInventoryItem: (id: string): Promise<InventoryItem> =>
+        fetchWithAuth(`/inventory/items/${id}`),
+
+    getItemStock: (itemId: string): Promise<any[]> =>
+        fetchWithAuth(`/inventory/items/${itemId}/stock`),
+
+    associateWarehouseToItem: (itemId: string, warehouseId: string): Promise<{ ok: boolean }> =>
+        fetchWithAuth(`/inventory/items/${itemId}/stock`, { method: 'POST', body: JSON.stringify({ warehouse_id: warehouseId }) }),
+
     getUOMPresentations: (): Promise<UOMPresentation[]> =>
         fetchWithAuth('/inventory/uom-presentations'),
 

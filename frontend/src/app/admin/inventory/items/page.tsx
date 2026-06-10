@@ -167,7 +167,12 @@ export default function ItemsPage() {
                       </span>
                   </td>
                   <td className="p-4">
-                      <p className="font-bold text-text-primary text-sm">{item.name}</p>
+                      <Link 
+                        href={`/admin/inventory/items/${item.id}`}
+                        className="font-bold text-text-primary text-sm hover:text-primary transition-colors"
+                      >
+                        {item.name}
+                      </Link>
                   </td>
                   <td className="p-4">
                       <span className="text-sm text-text-secondary font-medium italic">

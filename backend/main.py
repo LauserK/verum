@@ -3728,6 +3728,30 @@ async def delete_item(item_id: UUID, db=Depends(get_db), _=Depends(require_permi
     db.table("items").update({"is_active": False}).eq("id", str(item_id)).execute()
     return {"ok": True}
 
+@app.get("/inventory/items/{item_id}", response_model=ItemResponse, tags=["Inventory"])
+async def get_item(item_id: UUID, db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
+    res = db.table("items").select("*").eq("id", str(item_id)).execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Item not found")
+    return res.data[0]
+
+@app.get("/inventory/items/{item_id}/stock", tags=["Inventory"])
+async def get_item_stock(item_id: UUID, db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
+    res = db.table("stock").select("*, warehouses(name)").eq("item_id", str(item_id)).execute()
+    return res.data or []
+
+@app.post("/inventory/items/{item_id}/stock", tags=["Inventory"])
+async def associate_warehouse(item_id: UUID, body: dict, db=Depends(get_db), _=Depends(require_permission("inventory.manage_items"))):
+    warehouse_id = body.get("warehouse_id")
+    if not warehouse_id:
+        raise HTTPException(400, "warehouse_id is required")
+    db.table("stock").upsert({
+        "item_id": str(item_id),
+        "warehouse_id": warehouse_id,
+        "qty_base": 0
+    }, on_conflict="item_id,warehouse_id").execute()
+    return {"ok": True}
+
 @app.get("/inventory/item-categories", response_model=List[ItemCategoryResponse], tags=["Inventory"])
 async def list_item_categories(org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
     res = db.table("item_categories").select("*").eq("org_id", org_id).execute()
