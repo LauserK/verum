@@ -463,6 +463,16 @@ class ItemResponse(BaseModel):
     is_active: bool
     created_at: datetime
 
+class ItemUpdate(BaseModel):
+    code: Optional[str] = None
+    name: Optional[str] = None
+    type: Optional[str] = None
+    category_id: Optional[UUID] = None
+    base_uom_id: Optional[UUID] = None
+    yield_alert_enabled: Optional[bool] = None
+    yield_alert_threshold_pct: Optional[float] = None
+    shelf_life_days: Optional[int] = None
+
 class WarehouseCreate(BaseModel):
     name: str
     venue_id: Optional[UUID] = None

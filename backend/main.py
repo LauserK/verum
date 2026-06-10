@@ -3706,7 +3706,7 @@ async def list_items(org_id: str = Depends(get_active_org_id), db=Depends(get_db
     return res.data or []
 
 @app.patch("/inventory/items/{item_id}", response_model=ItemResponse, tags=["Inventory"])
-async def update_item(item_id: UUID, item: ItemCreate, db=Depends(get_db), _=Depends(require_permission("inventory.manage_items"))):
+async def update_item(item_id: UUID, item: ItemUpdate, db=Depends(get_db), _=Depends(require_permission("inventory.manage_items"))):
     # Convert model to dict and handle UUID serialization
     full_data = item.dict(exclude_none=True)
     
@@ -3717,6 +3717,9 @@ async def update_item(item_id: UUID, item: ItemCreate, db=Depends(get_db), _=Dep
     update_data = {k: (str(v) if isinstance(v, UUID) else v) 
                    for k, v in full_data.items()}
     
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No data to update")
+
     res = db.table("items").update(update_data).eq("id", str(item_id)).execute()
     if not res.data:
         raise HTTPException(status_code=404, detail="Item not found")
