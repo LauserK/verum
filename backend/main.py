@@ -3821,12 +3821,30 @@ async def delete_uom_presentation(pres_id: UUID, db=Depends(get_db), _=Depends(r
 
 @app.get("/inventory/items/{item_id}/presentations", tags=["Inventory"])
 async def get_item_presentations(item_id: UUID, db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
-    # Get enabled presentations for this item via the junction table
-    res = db.table("item_uom_presentations") \
-        .select("presentation_id, uom_presentations(*)") \
+    # 1. Get the item to know its base_uom_id
+    item_res = db.table("items").select("base_uom_id, org_id").eq("id", str(item_id)).single().execute()
+    if not item_res.data:
+        raise HTTPException(status_code=404, detail="Item not found")
+    
+    base_uom_id = item_res.data["base_uom_id"]
+    org_id = item_res.data["org_id"]
+
+    # 2. Get enabled presentations for this item
+    res_enabled = db.table("item_uom_presentations") \
+        .select("presentation_id") \
         .eq("item_id", str(item_id)) \
         .execute()
-    return [r["uom_presentations"] for r in res.data if r.get("uom_presentations")]
+    enabled_ids = [r["presentation_id"] for r in res_enabled.data]
+
+    # 3. Get all global presentations for this base unit
+    # 4. Get all org-specific presentations for this base unit
+    res_all = db.table("uom_presentations") \
+        .select("*") \
+        .eq("base_uom_id", base_uom_id) \
+        .or_(f"is_global.eq.true,org_id.eq.{org_id}") \
+        .execute()
+    
+    return res_all.data or []
 
 @app.post("/inventory/items/{item_id}/presentations/{pres_id}", tags=["Inventory"])
 async def enable_item_presentation(item_id: UUID, pres_id: UUID, db=Depends(get_db), _=Depends(require_permission("inventory.manage_items"))):

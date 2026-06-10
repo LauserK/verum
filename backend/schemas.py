@@ -425,10 +425,11 @@ class UOMPresentationCreate(BaseModel):
     base_uom_id: UUID
     conversion_factor: float
     is_default: bool = False
+    is_global: bool = False
 
 class UOMPresentationResponse(UOMPresentationCreate):
     id: UUID
-    org_id: UUID
+    org_id: Optional[UUID] = None # Global ones might not have org_id
 
 class ItemCategoryCreate(BaseModel):
     name: str
