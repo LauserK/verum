@@ -459,3 +459,35 @@ class WarehouseResponse(WarehouseCreate):
     id: UUID
     org_id: UUID
     is_active: bool
+
+# ── Production & Inventory Models (M17) ──────────────────
+
+class StockMovementResponse(BaseModel):
+    id: UUID
+    movement_type: str
+    warehouse_id: UUID
+    item_id: UUID
+    qty_base: float
+    unit_cost_base: Optional[float]
+    total_cost: Optional[float]
+    created_at: datetime
+
+class PurchaseReceiptLineCreate(BaseModel):
+    item_id: UUID
+    qty_presentation: float
+    presentation_id: UUID
+    unit_cost_presentation: float # Cost per presentation unit
+    expiry_date: Optional[str] = None
+    lot_number: Optional[str] = None
+
+class PurchaseReceiptCreate(BaseModel):
+    warehouse_id: UUID
+    supplier: Optional[str] = None
+    receipt_number: Optional[str] = None
+    lines: List[PurchaseReceiptLineCreate]
+
+class PurchaseReceiptResponse(BaseModel):
+    id: UUID
+    status: str
+    warehouse_id: UUID
+    created_at: datetime
