@@ -29,7 +29,8 @@ from schemas import (
     AbsenceRequest, LeaveRequest, AbsenceApprovalRequest,
     ManualAttendanceRequest, SuperAdminUserDetail,
     SuperAdminUserOrgAdd, SuperAdminUserOrgUpdate,
-    SuperAdminUserInOrg, SuperAdminOrgDetail
+    SuperAdminUserInOrg, SuperAdminOrgDetail,
+    EditAttendanceDayRequest
 )
 
 CARACAS_TZ = pytz.timezone("America/Caracas")
@@ -297,6 +298,35 @@ async def get_profile(x_org_id: Optional[str] = Header(None), user=Depends(get_c
         raise HTTPException(status_code=500, detail=str(e))
 
 
+
+@app.get("/checklists/library/{venue_id}")
+async def get_library_templates(venue_id: str, user=Depends(require_permission("checklists.view"))):
+    """Returns all on_demand templates for a venue."""
+    try:
+        db = get_db()
+        # Permission check logic
+        venue_res = db.table("venues").select("org_id").eq("id", venue_id).execute()
+        if not venue_res.data:
+            raise HTTPException(404, "Sede no encontrada")
+        v_org_id = venue_res.data[0]["org_id"]
+        
+        is_org_admin = await resolve_permission(user.id, "admin.view_dashboard", db, org_id=v_org_id)
+        if not is_org_admin:
+            pv_check = db.table("profile_venues").select("venue_id").eq("profile_id", user.id).eq("venue_id", venue_id).execute()
+            if not pv_check.data:
+                 raise HTTPException(403, "No tienes acceso a esta sede")
+
+        templates_res = (
+            db.table("checklist_templates")
+            .select("id, title, description, frequency")
+            .eq("venue_id", venue_id)
+            .eq("frequency", "on_demand")
+            .execute()
+        )
+        return templates_res.data or []
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
 @app.get("/checklists/{venue_id}", response_model=list[ChecklistItem])
 async def get_checklists(venue_id: str, user=Depends(require_permission("checklists.view"))):
     """
@@ -351,46 +381,47 @@ async def get_checklists(venue_id: str, user=Depends(require_permission("checkli
             tid = q["template_id"]
             questions_by_template[tid] = questions_by_template.get(tid, 0) + 1
 
-        # 3. Get today's submissions for the current venue (all shifts, all users)
+        # 3. Get today's submissions OR active submissions for the current venue
         submissions_res = (
             db.table("submissions")
             .select("*")
             .eq("venue_id", venue_id)
-            .gte("created_at", f"{today}T00:00:00-04:00")
             .in_("template_id", template_ids)
             .execute()
         )
-        all_today_submissions = submissions_res.data or []
+        all_venue_submissions = submissions_res.data or []
+        all_today_submissions = [s for s in all_venue_submissions if s["created_at"].startswith(today) or s["status"] != "completed"]
         
-        # 4. Map submissions to templates based on frequency
-        # For 'shift' frequency, we only care about the current shift.
-        # For others (daily, weekly, etc.), any submission today counts.
+        # 4. Map submissions to templates
         submissions_map: dict = {}
         for s in all_today_submissions:
             tid = s["template_id"]
-            # If we already have a 'completed' one for this template, keep it
-            if submissions_map.get(tid, {}).get("status") == "completed":
-                continue
-            
-            # Find the template to check its frequency
             tmpl = next((t for t in templates if t["id"] == tid), None)
             freq = tmpl.get("frequency") if tmpl else "daily"
             
+            if freq == "on_demand" and s.get("is_private") and s.get("user_id") != user.id:
+                continue
+                
+            if tid not in submissions_map:
+                submissions_map[tid] = []
+                
             if freq == "shift":
-                # Only map if it's the current shift
                 if s["shift"] == shift:
-                    submissions_map[tid] = s
+                    submissions_map[tid].append(s)
+            elif freq == "on_demand":
+                if s["status"] != "completed" or s["created_at"].startswith(today):
+                    submissions_map[tid].append(s)
             else:
-                # For non-shift checklists, any submission today counts.
-                # Prioritize completed or in_progress over draft if multiple exist.
-                existing = submissions_map.get(tid)
+                existing = submissions_map[tid][0] if submissions_map[tid] else None
                 if not existing or s["status"] == "completed" or (s["status"] == "in_progress" and existing["status"] == "draft"):
-                    submissions_map[tid] = s
+                    submissions_map[tid] = [s]
 
-        # 5. Get answer counts for these matched submissions
-        submission_ids = [s["id"] for s in submissions_map.values()]
-        answers_counts: dict[str, int] = {}
-        
+        # 5. Get answer counts
+        submission_ids = []
+        for subs in submissions_map.values():
+            submission_ids.extend([s["id"] for s in subs])
+            
+        answers_counts: dict = {}
         if submission_ids:
             answers_res = (
                 db.table("answers")
@@ -402,88 +433,104 @@ async def get_checklists(venue_id: str, user=Depends(require_permission("checkli
                 sid = a["submission_id"]
                 answers_counts[sid] = answers_counts.get(sid, 0) + 1
 
-        # 5. Build a set of completed template IDs (for prerequisite logic)
+        # Build a set of completed template IDs (for prerequisite logic)
         completed_ids = {
-            tid for tid, sub in submissions_map.items()
-            if sub.get("status") == "completed"
+            tid for tid, subs in submissions_map.items()
+            if any(sub.get("status") == "completed" for sub in subs)
         }
 
-        # 6. Build response with status calculation
-        # Database 0=Sun, 1=Mon, ..., 6=Sat. Python weekday() is 0=Mon, 6=Sun.
+        # 6. Build response
         day_of_week = (datetime.now(CARACAS_TZ).weekday() + 1) % 7
-        
         result: list[dict] = []
+        
         for t in templates:
-            # If due_date is set, only show the checklist on that specific date
+            tid = t["id"]
+            freq = t.get("frequency")
+            
+            # If on_demand and no active submissions, it only lives in the library
+            if freq == "on_demand" and not submissions_map.get(tid):
+                continue
+                
             tmpl_due_date = t.get("due_date")
             if tmpl_due_date and tmpl_due_date != today:
                 continue
-            
-            # If frequency is weekly/monthly/custom, check the schedule
-            freq = t.get("frequency")
+                
             sched = t.get("schedule") or []
-            if freq == "weekly" and sched:
-                if day_of_week not in sched:
-                    continue
-            elif freq == "custom" and sched:
-                if day_of_week not in sched:
-                    continue
-            # Note: monthly logic is a bit more complex, for now we skip filtering here 
-            # to avoid accidental hiding, as get_compliance handles it for reports.
+            if freq == "weekly" and sched and day_of_week not in sched:
+                continue
+            elif freq == "custom" and sched and day_of_week not in sched:
+                continue
 
-            tid = t["id"]
             total_q = questions_by_template.get(tid, 0)
-            sub = submissions_map.get(tid)
-
-            # Check available_from_time logic
+            subs = submissions_map.get(tid, [])
+            
             tmpl_available_time = t.get("available_from_time")
             is_time_locked = False
             if tmpl_available_time:
-                # Get current time in same format (assuming local HH:MM, but typically server is UTC. 
-                # Be careful: Verum frontend/backend might expect local time or UTC. Currently dashboard uses `get_current_shift()` logic.
-                # Let's use UTC HH:MM for now as that's what we have)
                 now_str = datetime.now(CARACAS_TZ).strftime("%H:%M:%S")
-                # Ensure tmpl_available_time is string
                 if str(now_str) < str(tmpl_available_time):
                     is_time_locked = True
-
-            # Determine status
+                    
             prereq = t.get("prerequisite_template_id")
-            if prereq and prereq not in completed_ids:
-                status_val = "locked"
-                answered = 0
-                sub_id = None
-            elif is_time_locked and not sub:
-                status_val = "locked"
-                answered = 0
-                sub_id = None
-            elif sub:
-                if sub["status"] == "completed":
-                    status_val = "completed"
-                    answered = total_q
-                else:
-                    status_val = "in_progress"
-                    answered = answers_counts.get(sub["id"], 0)
-                sub_id = sub["id"]
-            else:
+            
+            if not subs:
                 status_val = "pending"
-                answered = 0
-                sub_id = None
-
-            result.append({
-                "id": tid,
-                "title": t["title"],
-                "description": t.get("description"),
-                "frequency": t.get("frequency"),
-                "due_date": tmpl_due_date,
-                "due_time": t.get("due_time"),
-                "available_from_time": t.get("available_from_time"),
-                "prerequisite_template_id": prereq,
-                "status": status_val,
-                "total_questions": total_q,
-                "answered_questions": answered,
-                "submission_id": sub_id,
-            })
+                if prereq and prereq not in completed_ids:
+                    status_val = "locked"
+                elif is_time_locked:
+                    status_val = "locked"
+                    
+                result.append({
+                    "id": tid,
+                    "title": t["title"],
+                    "description": t.get("description"),
+                    "frequency": freq,
+                    "due_date": tmpl_due_date,
+                    "due_time": t.get("due_time"),
+                    "available_from_time": tmpl_available_time,
+                    "prerequisite_template_id": prereq,
+                    "status": status_val,
+                    "total_questions": total_q,
+                    "answered_questions": 0,
+                    "submission_id": None,
+                    "custom_title": None,
+                    "is_private": False
+                })
+            else:
+                for sub in subs:
+                    status_val = "pending"
+                    answered = 0
+                    
+                    if sub["status"] == "completed":
+                        status_val = "completed"
+                        answered = total_q
+                    else:
+                        status_val = "in_progress"
+                        answered = answers_counts.get(sub["id"], 0)
+                        
+                        # Apply locks only if not started
+                        if answered == 0 and sub["status"] == "draft":
+                            if prereq and prereq not in completed_ids:
+                                status_val = "locked"
+                            elif is_time_locked:
+                                status_val = "locked"
+                                
+                    result.append({
+                        "id": tid,
+                        "title": t["title"],
+                        "description": t.get("description"),
+                        "frequency": freq,
+                        "due_date": tmpl_due_date,
+                        "due_time": t.get("due_time"),
+                        "available_from_time": tmpl_available_time,
+                        "prerequisite_template_id": prereq,
+                        "status": status_val,
+                        "total_questions": total_q,
+                        "answered_questions": answered,
+                        "submission_id": sub["id"],
+                        "custom_title": sub.get("custom_title"),
+                        "is_private": sub.get("is_private", False)
+                    })
 
         return result
 
@@ -617,10 +664,11 @@ async def create_submission(body: CreateSubmissionRequest, user=Depends(require_
         if freq == "shift":
             query = query.eq("shift", shift)
             
-        existing = query.order("created_at", desc=True).limit(1).execute()
-
-        if existing.data and len(existing.data) > 0:
-            return existing.data[0]
+        # Bypass idempotency for on_demand to allow multiple instances
+        if freq != "on_demand":
+            existing = query.order("created_at", desc=True).limit(1).execute()
+            if existing.data and len(existing.data) > 0:
+                return existing.data[0]
 
         # Create new draft only if no submission exists
         new_sub = {
@@ -629,6 +677,8 @@ async def create_submission(body: CreateSubmissionRequest, user=Depends(require_
             "venue_id": body.venue_id,
             "shift": shift,
             "status": "draft",
+            "custom_title": body.custom_title,
+            "is_private": body.is_private
         }
         result = db.table("submissions").insert(new_sub).execute()
         return result.data[0]
@@ -3240,6 +3290,128 @@ async def add_manual_attendance(body: ManualAttendanceRequest, current_user=Depe
     res = db.table("attendance_logs").insert(out_log).execute()
     
     return {"ok": True, "count": 2, "overtime_hours": overtime_hours, "minutes_late": minutes_late}
+
+@app.post("/admin/attendance/edit-day")
+async def edit_attendance_day(body: EditAttendanceDayRequest, current_user=Depends(get_current_user), db=Depends(get_db), _=Depends(require_permission("attendance.manage"))):
+    """Admin explicitly edits a user's clock-in/out times for a specific day."""
+    
+    work_date_str = body.work_date
+    next_day_str = (datetime.strptime(work_date_str, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+
+    # Fetch existing logs for this day
+    logs_res = db.table("attendance_logs").select("*")\
+        .eq("profile_id", body.profile_id)\
+        .eq("venue_id", body.venue_id)\
+        .gte("marked_at", f"{work_date_str}T00:00:00-04:00")\
+        .lt("marked_at", f"{next_day_str}T00:00:00-04:00")\
+        .execute()
+        
+    logs = logs_res.data or []
+    
+    clock_in_log = next((l for l in logs if l["event_type"] == "clock_in"), None)
+    clock_out_log = next((l for l in logs if l["event_type"] == "clock_out"), None)
+
+    # 1. Parse dates and validate
+    in_dt = None
+    out_dt = None
+    try:
+        if body.clock_in:
+            in_str = body.clock_in if len(body.clock_in) > 16 else f"{body.clock_in}:00"
+            in_dt = CARACAS_TZ.localize(datetime.fromisoformat(in_str))
+        if body.clock_out:
+            out_str = body.clock_out if len(body.clock_out) > 16 else f"{body.clock_out}:00"
+            out_dt = CARACAS_TZ.localize(datetime.fromisoformat(out_str))
+    except ValueError:
+        raise HTTPException(400, "Formato de fecha inválido. Use ISO8601 (YYYY-MM-DDTHH:MM)")
+
+    if in_dt and out_dt and out_dt <= in_dt:
+        raise HTTPException(400, "La hora de salida debe ser posterior a la de entrada")
+
+    # 2. Get active shift for calculations
+    active_shift = None
+    iso_weekday = datetime.strptime(work_date_str, "%Y-%m-%d").isoweekday()
+    shift_res = db.table("employee_shifts").select("*").eq("profile_id", body.profile_id).eq("venue_id", body.venue_id).eq("is_active", True).execute()
+    
+    for s in shift_res.data or []:
+        if s["modality"] == "fixed" and s["weekdays"] and iso_weekday in s["weekdays"]:
+            active_shift = {
+                "id": s["id"],
+                "expected_start": s["start_time"],
+                "expected_end": s["end_time"]
+            }
+            break
+        elif s["modality"] == "rotating":
+            d_res = db.table("shift_days").select("*").eq("employee_shift_id", s["id"]).eq("weekday", iso_weekday).execute()
+            if d_res.data and not d_res.data[0].get("day_off"):
+                active_shift = {
+                    "id": s["id"],
+                    "expected_start": d_res.data[0]["start_time"],
+                    "expected_end": d_res.data[0]["end_time"]
+                }
+                break
+
+    base_log = {
+        "profile_id": body.profile_id,
+        "venue_id": body.venue_id,
+        "edited_by": current_user.id,
+        "edit_reason": body.reason,
+        "verification_status": "verified"
+    }
+    if active_shift:
+        base_log.update({
+            "employee_shift_id": active_shift["id"],
+            "expected_start": active_shift["expected_start"],
+            "expected_end": active_shift["expected_end"]
+        })
+
+    updates_count = 0
+    
+    # 3. Handle Clock In
+    if in_dt:
+        minutes_late = 0
+        if active_shift:
+            minutes_late = calculate_late_minutes(in_dt.strftime("%H:%M:%S"), active_shift["expected_start"])
+            
+        in_payload = base_log.copy()
+        in_payload.update({
+            "event_type": "clock_in",
+            "marked_at": in_dt.isoformat(),
+            "minutes_late": minutes_late
+        })
+        
+        if clock_in_log:
+            db.table("attendance_logs").update(in_payload).eq("id", clock_in_log["id"]).execute()
+        else:
+            db.table("attendance_logs").insert(in_payload).execute()
+        updates_count += 1
+
+    # 4. Handle Clock Out
+    if out_dt:
+        overtime_hours = 0
+        if active_shift and in_dt:
+            e_in = datetime.strptime(active_shift["expected_start"], "%H:%M:%S")
+            e_out = datetime.strptime(active_shift["expected_end"], "%H:%M:%S")
+            total_expected_mins = (e_out.hour * 60 + e_out.minute) - (e_in.hour * 60 + e_in.minute)
+            total_worked_mins = (out_dt - in_dt).total_seconds() / 60
+            
+            if total_worked_mins > total_expected_mins:
+                overtime_mins = total_worked_mins - total_expected_mins
+                overtime_hours = int(overtime_mins // 60)
+                
+        out_payload = base_log.copy()
+        out_payload.update({
+            "event_type": "clock_out",
+            "marked_at": out_dt.isoformat(),
+            "overtime_hours": overtime_hours
+        })
+        
+        if clock_out_log:
+            db.table("attendance_logs").update(out_payload).eq("id", clock_out_log["id"]).execute()
+        else:
+            db.table("attendance_logs").insert(out_payload).execute()
+        updates_count += 1
+
+    return {"ok": True, "updated": updates_count}
 
 @app.post("/attendance/requests")
 async def request_leave(body: LeaveRequest, current_user=Depends(get_current_user), db=Depends(get_db), _=Depends(require_permission("attendance.request_leave"))):

@@ -26,7 +26,7 @@ export default function StaffPendingCountsPage() {
       
       if (!venueId) {
         const profile = await getProfile()
-        venueId = profile.venue_id
+        venueId = profile.venue_id || null
       }
 
       if (!venueId) {
