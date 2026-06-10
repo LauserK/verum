@@ -805,12 +805,21 @@ export interface UOMPresentation {
     is_default: boolean
 }
 
+export interface ItemCategory {
+    id: string
+    org_id: string
+    name: string
+    description: string | null
+    is_active: boolean
+}
+
 export interface InventoryItem {
     id: string
     org_id: string
     code: string | null
     name: string
     type: 'raw_material' | 'semi_finished' | 'finished' | 'packaging' | 'supply'
+    category_id: string | null
     base_uom_id: string
     is_active: boolean
     created_at: string

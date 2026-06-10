@@ -1,0 +1,180 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { adminApi, ItemCategory } from '@/lib/api';
+import { Plus, Tag, X, Save, Loader2, ArrowLeft, Trash2 } from 'lucide-react';
+import Link from 'next/link';
+import ConfirmationModal from '@/components/ConfirmationModal';
+
+export default function ItemCategoriesPage() {
+  const [categories, setCategories] = useState<ItemCategory[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [newCategory, setNewCategory] = useState({ name: '', description: '' });
+
+  const [errorModal, setErrorModal] = useState<{ isOpen: boolean; message: string }>({
+    isOpen: false,
+    message: ''
+  });
+
+  useEffect(() => {
+    loadCategories();
+  }, []);
+
+  async function loadCategories() {
+    try {
+      const data = await adminApi.getItemCategories();
+      setCategories(data);
+    } catch (error) {
+      console.error('Error loading categories:', error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleCreate() {
+    if (!newCategory.name.trim()) return;
+    setSaving(true);
+    try {
+      await adminApi.createItemCategory(newCategory);
+      setShowModal(false);
+      setNewCategory({ name: '', description: '' });
+      await loadCategories();
+    } catch (error: any) {
+      setErrorModal({
+        isOpen: true,
+        message: error.message || 'Error al crear la categoría'
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm('¿Estás seguro de eliminar esta categoría?')) return;
+    try {
+        await adminApi.deleteItemCategory(id);
+        await loadCategories();
+    } catch (error: any) {
+        setErrorModal({ isOpen: true, message: error.message || 'Error al eliminar' });
+    }
+  }
+
+  if (loading) return <div className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-primary" /></div>;
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="flex items-center gap-4">
+            <Link href="/admin/inventory/items" className="p-2 hover:bg-surface-raised rounded-full transition-colors">
+                <ArrowLeft className="w-5 h-5 text-text-secondary" />
+            </Link>
+            <div>
+                <h1 className="text-2xl font-bold text-text-primary">Categorías de Artículos</h1>
+                <p className="text-sm text-text-secondary mt-1">Clasificación personalizada (Harinados, Lácteos, etc.)</p>
+            </div>
+        </div>
+        <button 
+          onClick={() => setShowModal(true)}
+          className="flex items-center gap-2 bg-primary text-text-inverse px-4 h-10 rounded-xl text-sm font-medium hover:bg-primary-hover transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          Nueva Categoría
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {categories.map(cat => (
+          <div key={cat.id} className="bg-surface p-5 rounded-2xl border border-border shadow-sm group">
+            <div className="flex items-start justify-between">
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                        <Tag className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                        <h3 className="font-bold text-text-primary">{cat.name}</h3>
+                        <p className="text-xs text-text-secondary mt-0.5">{cat.description || 'Sin descripción'}</p>
+                    </div>
+                </div>
+                <button 
+                    onClick={() => handleDelete(cat.id)}
+                    className="p-2 text-text-disabled hover:text-error opacity-0 group-hover:opacity-100 transition-all"
+                >
+                    <Trash2 className="w-4 h-4" />
+                </button>
+            </div>
+          </div>
+        ))}
+        {categories.length === 0 && (
+            <div className="col-span-full bg-surface border border-dashed border-border rounded-2xl py-20 text-center">
+                <Tag className="w-12 h-12 text-text-disabled mx-auto mb-4" />
+                <p className="text-text-secondary font-medium">No hay categorías configuradas</p>
+            </div>
+        )}
+      </div>
+
+      {showModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in">
+          <div className="bg-surface rounded-3xl p-6 w-full max-w-md shadow-2xl border border-border">
+            <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-bold text-text-primary">Nueva Categoría</h2>
+                <button onClick={() => setShowModal(false)} className="text-text-secondary hover:text-text-primary">
+                    <X className="w-5 h-5" />
+                </button>
+            </div>
+            
+            <div className="space-y-5">
+              <div>
+                <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Nombre</label>
+                <input 
+                  type="text" 
+                  value={newCategory.name}
+                  onChange={e => setNewCategory({...newCategory, name: e.target.value})}
+                  className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm outline-none focus:border-primary"
+                  placeholder="Ej: Harinas"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Descripción</label>
+                <textarea 
+                  value={newCategory.description}
+                  onChange={e => setNewCategory({...newCategory, description: e.target.value})}
+                  className="w-full bg-surface border border-border rounded-xl px-4 py-3 text-sm outline-none focus:border-primary min-h-[100px]"
+                  placeholder="Opcional..."
+                />
+              </div>
+            </div>
+
+            <div className="mt-8 flex gap-3">
+              <button 
+                onClick={() => setShowModal(false)}
+                className="flex-1 px-4 h-11 border border-border text-text-primary rounded-xl font-bold text-sm"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={handleCreate}
+                disabled={saving || !newCategory.name.trim()}
+                className="flex-1 px-4 h-11 bg-primary text-text-inverse rounded-xl font-bold text-sm flex items-center justify-center gap-2"
+              >
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                Guardar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ConfirmationModal 
+        isOpen={errorModal.isOpen}
+        title="Error"
+        message={errorModal.message}
+        confirmLabel="Entendido"
+        cancelLabel=""
+        onConfirm={() => setErrorModal({ ...errorModal, isOpen: false })}
+        onCancel={() => setErrorModal({ ...errorModal, isOpen: false })}
+      />
+    </div>
+  );
+}

@@ -430,10 +430,20 @@ class UOMPresentationResponse(UOMPresentationCreate):
     id: UUID
     org_id: UUID
 
+class ItemCategoryCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+class ItemCategoryResponse(ItemCategoryCreate):
+    id: UUID
+    org_id: UUID
+    is_active: bool
+
 class ItemCreate(BaseModel):
     code: Optional[str] = None
     name: str
     type: str
+    category_id: Optional[UUID] = None
     base_uom_id: UUID
     yield_alert_enabled: bool = False
     yield_alert_threshold_pct: Optional[float] = None
@@ -446,6 +456,7 @@ class ItemResponse(BaseModel):
     code: Optional[str]
     name: str
     type: str
+    category_id: Optional[UUID] = None
     base_uom_id: UUID
     is_active: bool
     created_at: datetime

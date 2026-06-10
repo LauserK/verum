@@ -35,6 +35,7 @@ from schemas import (
     EditAttendanceDayRequest,
     WarehouseCreate, WarehouseResponse, ItemCreate, ItemResponse,
     UOMBase, UOMPresentationCreate, UOMPresentationResponse,
+    ItemCategoryCreate, ItemCategoryResponse,
     PurchaseReceiptCreate, PurchaseReceiptResponse,
     IssueDocumentCreate, IssueDocumentResponse,
     StockMovementResponse
@@ -3703,6 +3704,28 @@ async def create_item(item: ItemCreate, org_id: str = Depends(get_active_org_id)
 async def list_items(org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
     res = db.table("items").select("*").eq("org_id", org_id).execute()
     return res.data
+
+@app.get("/inventory/item-categories", response_model=List[ItemCategoryResponse], tags=["Inventory"])
+async def list_item_categories(org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
+    res = db.table("item_categories").select("*").eq("org_id", org_id).execute()
+    return res.data
+
+@app.post("/inventory/item-categories", response_model=ItemCategoryResponse, tags=["Inventory"])
+async def create_item_category(category: ItemCategoryCreate, org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.manage_categories"))):
+    data = {
+        "org_id": org_id,
+        "name": category.name,
+        "description": category.description
+    }
+    res = db.table("item_categories").insert(data).execute()
+    if not res.data:
+        raise HTTPException(status_code=400, detail="Error creating category")
+    return res.data[0]
+
+@app.delete("/inventory/item-categories/{category_id}", tags=["Inventory"])
+async def delete_item_category(category_id: UUID, db=Depends(get_db), _=Depends(require_permission("inventory.manage_categories"))):
+    db.table("item_categories").delete().eq("id", str(category_id)).execute()
+    return {"ok": True}
 
 @app.get("/inventory/uom-base", response_model=List[UOMBase], tags=["Inventory"])
 async def list_uom_base(db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
