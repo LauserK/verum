@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react'
 import { adminApi, getProfile, type VenueInfo, type InventoryDashboardSummary } from '@/lib/api'
 import { useVenue } from '@/components/VenueContext'
-import { Box, Wrench, AlertTriangle, ClipboardList, Clock, ArrowRight } from 'lucide-react'
+import { Box, Wrench, AlertTriangle, ClipboardList, Clock, ArrowRight, Archive, Warehouse } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -60,10 +60,16 @@ export default function InventoryDashboardPage() {
       {/* Submenu Redirection Links */}
       <div className="flex gap-4 overflow-x-auto pb-2">
         <Link href="/admin/inventory/assets" className="px-4 py-2 bg-surface border border-border rounded-xl text-sm font-semibold hover:border-primary transition-colors flex items-center gap-2">
-          <Box className="w-4 h-4 text-primary" /> Ir a Activos Fijos
+          <Box className="w-4 h-4 text-primary" /> Activos Fijos
         </Link>
         <Link href="/admin/inventory/utensils" className="px-4 py-2 bg-surface border border-border rounded-xl text-sm font-semibold hover:border-primary transition-colors flex items-center gap-2">
-          <ClipboardList className="w-4 h-4 text-primary" /> Ir a Utensilios
+          <ClipboardList className="w-4 h-4 text-primary" /> Utensilios
+        </Link>
+        <Link href="/admin/inventory/items" className="px-4 py-2 bg-surface border border-border rounded-xl text-sm font-semibold hover:border-primary transition-colors flex items-center gap-2">
+          <Archive className="w-4 h-4 text-primary" /> Artículos
+        </Link>
+        <Link href="/admin/inventory/warehouses" className="px-4 py-2 bg-surface border border-border rounded-xl text-sm font-semibold hover:border-primary transition-colors flex items-center gap-2">
+          <Warehouse className="w-4 h-4 text-primary" /> Almacenes
         </Link>
       </div>
 

@@ -148,6 +148,58 @@
         "required": "Category name is required.",
         "generic": "Error creating category"
       }
+    },
+    "items": {
+      "title": "Master Items",
+      "subtitle": "Global catalog of raw materials and supplies",
+      "newItem": "New Item",
+      "newTitle": "New Item",
+      "nameLabel": "Item Name",
+      "namePlaceholder": "E.g. Wheat Flour",
+      "codeLabel": "Internal Code",
+      "codePlaceholder": "E.g. MAT-001",
+      "typeLabel": "Category / Type",
+      "uomLabel": "Base Unit of Measure",
+      "loading": "Loading items...",
+      "create": "Save Item",
+      "saving": "Saving...",
+      "cancel": "Cancel",
+      "empty": "No items registered",
+      "table": {
+        "code": "Code",
+        "name": "Name",
+        "type": "Type",
+        "uom": "Base UOM",
+        "status": "Status"
+      },
+      "types": {
+        "raw_material": "Raw Material",
+        "semi_finished": "Semi-finished",
+        "finished": "Finished Product",
+        "supply": "Supply / Input",
+        "packaging": "Packaging"
+      }
+    },
+    "warehouses": {
+      "title": "Warehouses",
+      "subtitle": "Stock and production points management",
+      "newWarehouse": "New Warehouse",
+      "newTitle": "New Warehouse",
+      "nameLabel": "Warehouse Name",
+      "namePlaceholder": "E.g. Main Warehouse",
+      "typeLabel": "Facility Type",
+      "loading": "Loading warehouses...",
+      "create": "Create Warehouse",
+      "saving": "Saving...",
+      "cancel": "Cancel",
+      "empty": "No warehouses registered",
+      "createFirst": "Create first one now",
+      "types": {
+        "storage": "Storage / Warehouse",
+        "production": "Production / Kitchen",
+        "point_of_sale": "Point of Sale",
+        "transit": "Transit"
+      }
     }
   },
   "history": {

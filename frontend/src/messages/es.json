@@ -148,6 +148,58 @@
         "required": "El nombre de la categoría es obligatorio.",
         "generic": "Error al crear la categoría"
       }
+    },
+    "items": {
+      "title": "Maestro de Artículos",
+      "subtitle": "Catálogo global de materias primas e insumos",
+      "newItem": "Nuevo Artículo",
+      "newTitle": "Nuevo Artículo",
+      "nameLabel": "Nombre del Artículo",
+      "namePlaceholder": "Ej: Harina de Trigo",
+      "codeLabel": "Código Interno",
+      "codePlaceholder": "Ej: MAT-001",
+      "typeLabel": "Categoría / Tipo",
+      "uomLabel": "Unidad de Medida Base",
+      "loading": "Cargando artículos...",
+      "create": "Guardar Artículo",
+      "saving": "Guardando...",
+      "cancel": "Cancelar",
+      "empty": "No hay artículos registrados",
+      "table": {
+        "code": "Código",
+        "name": "Nombre",
+        "type": "Tipo",
+        "uom": "UOM Base",
+        "status": "Estado"
+      },
+      "types": {
+        "raw_material": "Materia Prima",
+        "semi_finished": "Semi-elaborado",
+        "finished": "Producto Terminado",
+        "supply": "Insumo / Suministro",
+        "packaging": "Empaque"
+      }
+    },
+    "warehouses": {
+      "title": "Almacenes",
+      "subtitle": "Gestión de puntos de stock y producción",
+      "newWarehouse": "Nuevo Almacén",
+      "newTitle": "Nuevo Almacén",
+      "nameLabel": "Nombre del Almacén",
+      "namePlaceholder": "Ej: Bodega Principal",
+      "typeLabel": "Tipo de Instalación",
+      "loading": "Cargando almacenes...",
+      "create": "Crear Almacén",
+      "saving": "Guardando...",
+      "cancel": "Cancelar",
+      "empty": "No hay almacenes registrados",
+      "createFirst": "Crear el primero ahora",
+      "types": {
+        "storage": "Almacenaje / Bodega",
+        "production": "Producción / Cocina",
+        "point_of_sale": "Punto de Venta",
+        "transit": "Tránsito"
+      }
     }
   },
   "history": {
