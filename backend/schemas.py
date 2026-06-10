@@ -470,6 +470,9 @@ class StockMovementResponse(BaseModel):
     qty_base: float
     unit_cost_base: Optional[float]
     total_cost: Optional[float]
+    reference_id: Optional[UUID] = None
+    reference_type: Optional[str] = None
+    notes: Optional[str] = None
     created_at: datetime
 
 class PurchaseReceiptLineCreate(BaseModel):
