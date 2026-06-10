@@ -7,8 +7,10 @@ import Link from 'next/link';
 import { useReactToPrint } from 'react-to-print';
 import { MovementPrint } from '@/components/inventory/MovementPrint';
 import ConfirmationModal from '@/components/ConfirmationModal';
+import { useTranslations } from '@/components/I18nProvider';
 
 export default function KardexPage() {
+  const { t } = useTranslations('inventory.items');
   const [movements, setMovements] = useState<StockMovement[]>([]);
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -94,7 +96,7 @@ export default function KardexPage() {
                     itemName: l.items?.name || 'Artículo',
                     qty: l.qty_presentation,
                     uom: l.uom_presentations?.name || 'Unidad',
-                    cost: l.unit_cost_base * (l.qty_base / l.qty_presentation), // Re-calculate presentation cost
+                    cost: l.unit_cost_base * (l.qty_base / l.qty_presentation),
                     lot: l.lot_number
                 }))
             });

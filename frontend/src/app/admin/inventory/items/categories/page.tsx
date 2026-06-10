@@ -4,9 +4,11 @@ import { useState, useEffect } from 'react';
 import { adminApi, ItemCategory } from '@/lib/api';
 import { Plus, Tag, X, Save, Loader2, ArrowLeft, Trash2, Pencil } from 'lucide-react';
 import Link from 'next/link';
+import { useTranslations } from '@/components/I18nProvider';
 import ConfirmationModal from '@/components/ConfirmationModal';
 
 export default function ItemCategoriesPage() {
+  const { t } = useTranslations('inventory.items');
   const [categories, setCategories] = useState<ItemCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -61,7 +63,7 @@ export default function ItemCategoriesPage() {
     } catch (error: any) {
       setErrorModal({
         isOpen: true,
-        message: error.message || 'Error al guardar la categoría'
+        message: error.message || t('errors.generic')
       });
     } finally {
       setSaving(false);
@@ -107,9 +109,9 @@ export default function ItemCategoriesPage() {
             <thead>
               <tr className="bg-surface-raised border-b border-border">
                 <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest w-12"></th>
-                <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest">Nombre</th>
+                <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest">{t('table.name')}</th>
                 <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest">Descripción</th>
-                <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest">Estado</th>
+                <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest">{t('table.status')}</th>
                 <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest text-right">Acciones</th>
               </tr>
             </thead>
@@ -177,7 +179,7 @@ export default function ItemCategoriesPage() {
             
             <div className="space-y-5">
               <div>
-                <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Nombre</label>
+                <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">{t('nameLabel')}</label>
                 <input 
                   type="text" 
                   value={formData.name}
@@ -202,7 +204,7 @@ export default function ItemCategoriesPage() {
                 onClick={() => setShowModal(false)}
                 className="flex-1 px-4 h-11 border border-border text-text-primary rounded-xl font-bold text-sm hover:bg-surface-raised transition-all"
               >
-                Cancelar
+                {t('cancel')}
               </button>
               <button 
                 onClick={handleSave}

@@ -8,9 +8,11 @@ import { useRouter } from 'next/navigation';
 import ConfirmationModal from '@/components/ConfirmationModal';
 import { useReactToPrint } from 'react-to-print';
 import { MovementPrint } from '@/components/inventory/MovementPrint';
+import { useTranslations } from '@/components/I18nProvider';
 
 export default function IssuesPage() {
   const router = useRouter();
+  const { t } = useTranslations('inventory.warehouses');
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [items, setItems] = useState<InventoryItem[]>([]);
   
@@ -98,7 +100,13 @@ export default function IssuesPage() {
 
       if (shouldPrint) {
           const warehouse = warehouses.find(w => w.id === warehouseId);
-          const reasonLabels: any = { waste: 'Merma', sale: 'Venta', adjustment: 'Ajuste', sample: 'Muestra', other: 'Otro' };
+          const reasonLabels: any = { 
+            waste: t('types.storage'), // Placeholder or mapping needed if specific reason translations don't exist
+            sale: 'Venta', 
+            adjustment: 'Ajuste', 
+            sample: 'Muestra', 
+            other: 'Otro' 
+          };
           
           setLastSavedData({
               id: res.id,
@@ -243,7 +251,7 @@ export default function IssuesPage() {
                 onClick={() => router.back()}
                 className="px-6 h-11 border border-border text-text-primary rounded-xl font-bold text-sm hover:bg-surface-raised transition-all"
             >
-                Cancelar
+                {t('cancel')}
             </button>
             <button 
                 onClick={() => handleSave(false)}

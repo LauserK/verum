@@ -4,8 +4,11 @@ import { useState, useEffect } from 'react';
 import { adminApi, InventoryItem, UOMBase, ItemCategory } from '@/lib/api';
 import { Plus, Archive, X, Save, Loader2, Search, Filter, Tag, Pencil, Trash2 } from 'lucide-react';
 import Link from 'next/link';
+import { useTranslations } from '@/components/I18nProvider';
+import ConfirmationModal from '@/components/ConfirmationModal';
 
 export default function ItemsPage() {
+  const { t } = useTranslations('inventory.items');
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [uoms, setUoms] = useState<UOMBase[]>([]);
   const [categories, setCategories] = useState<ItemCategory[]>([]);
@@ -21,6 +24,11 @@ export default function ItemsPage() {
     type: 'raw_material', 
     base_uom_id: '',
     category_id: ''
+  });
+
+  const [errorModal, setErrorModal] = useState<{ isOpen: boolean; message: string }>({
+    isOpen: false,
+    message: ''
   });
 
   useEffect(() => {
@@ -89,8 +97,11 @@ export default function ItemsPage() {
       
       setShowModal(false);
       await loadData();
-    } catch (error) {
-      alert('Error al guardar artículo');
+    } catch (error: any) {
+      setErrorModal({
+          isOpen: true,
+          message: error.message || 'Error al guardar el artículo'
+      });
     } finally {
       setSaving(false);
     }
@@ -101,8 +112,8 @@ export default function ItemsPage() {
       try {
           await adminApi.deleteInventoryItem(id);
           await loadData();
-      } catch (error) {
-          alert('Error al eliminar artículo');
+      } catch (error: any) {
+          setErrorModal({ isOpen: true, message: error.message || 'Error al eliminar' });
       }
   }
 
@@ -112,8 +123,8 @@ export default function ItemsPage() {
     <div className="space-y-6 animate-in fade-in">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-text-primary">Maestro de Artículos</h1>
-          <p className="text-sm text-text-secondary mt-1">Catálogo global de materias primas e insumos</p>
+          <h1 className="text-2xl font-bold text-text-primary">{t('title')}</h1>
+          <p className="text-sm text-text-secondary mt-1">{t('subtitle')}</p>
         </div>
         <div className="flex gap-2">
             <Link 
@@ -128,7 +139,7 @@ export default function ItemsPage() {
                 className="flex items-center gap-2 bg-primary text-text-inverse px-4 h-10 rounded-xl text-sm font-medium hover:bg-primary-hover transition-colors"
             >
                 <Plus className="w-4 h-4" />
-                Nuevo Artículo
+                {t('newItem')}
             </button>
         </div>
       </div>
@@ -138,11 +149,11 @@ export default function ItemsPage() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-surface-raised border-b border-border">
-                <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest">Código</th>
-                <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest">Nombre</th>
+                <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest">{t('table.code')}</th>
+                <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest">{t('table.name')}</th>
                 <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest">Categoría</th>
-                <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest">Tipo</th>
-                <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest">UOM Base</th>
+                <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest">{t('table.type')}</th>
+                <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest">{t('table.uom')}</th>
                 <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest text-right">Acciones</th>
               </tr>
             </thead>
@@ -164,7 +175,7 @@ export default function ItemsPage() {
                   </td>
                   <td className="p-4">
                     <span className="text-[10px] font-bold px-2 py-1 rounded-md bg-primary/5 text-primary uppercase tracking-wider border border-primary/10">
-                      {item.type.replace('_', ' ')}
+                      {t(`types.${item.type}`)}
                     </span>
                   </td>
                   <td className="p-4 text-sm text-text-secondary font-medium">
@@ -194,7 +205,7 @@ export default function ItemsPage() {
                 <tr>
                   <td colSpan={6} className="p-12 text-center">
                       <Archive className="w-10 h-10 text-text-disabled mx-auto mb-3" />
-                      <p className="text-text-secondary font-medium">No hay artículos registrados</p>
+                      <p className="text-text-secondary font-medium">{t('empty')}</p>
                   </td>
                 </tr>
               )}
@@ -207,7 +218,7 @@ export default function ItemsPage() {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in">
           <div className="bg-surface rounded-3xl p-6 w-full max-w-md shadow-2xl border border-border animate-in zoom-in-95 duration-200">
             <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-bold text-text-primary">{editingId ? 'Editar Artículo' : 'Nuevo Artículo'}</h2>
+                <h2 className="text-xl font-bold text-text-primary">{editingId ? 'Editar Artículo' : t('newTitle')}</h2>
                 <button onClick={() => setShowModal(false)} className="text-text-secondary hover:text-text-primary transition-colors">
                     <X className="w-5 h-5" />
                 </button>
@@ -215,23 +226,23 @@ export default function ItemsPage() {
             
             <div className="space-y-5">
               <div>
-                <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Nombre del Artículo</label>
+                <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">{t('nameLabel')}</label>
                 <input 
                   type="text" 
                   value={formData.name}
                   onChange={e => setFormData({...formData, name: e.target.value})}
                   className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
-                  placeholder="Ej: Harina de Trigo"
+                  placeholder={t('namePlaceholder')}
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Código Interno</label>
+                <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">{t('codeLabel')}</label>
                 <input 
                   type="text" 
                   value={formData.code}
                   onChange={e => setFormData({...formData, code: e.target.value})}
                   className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
-                  placeholder="Ej: MAT-001"
+                  placeholder={t('codePlaceholder')}
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -249,22 +260,22 @@ export default function ItemsPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Tipo Técnico</label>
+                    <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">{t('typeLabel')}</label>
                     <select 
                       value={formData.type}
                       onChange={e => setFormData({...formData, type: e.target.value})}
                       className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all appearance-none cursor-pointer"
                     >
-                      <option value="raw_material">Materia Prima</option>
-                      <option value="semi_finished">Semi-elaborado</option>
-                      <option value="finished">Producto Terminado</option>
-                      <option value="supply">Insumo / Suministro</option>
-                      <option value="packaging">Empaque</option>
+                      <option value="raw_material">{t('types.raw_material')}</option>
+                      <option value="semi_finished">{t('types.semi_finished')}</option>
+                      <option value="finished">{t('types.finished')}</option>
+                      <option value="supply">{t('types.supply')}</option>
+                      <option value="packaging">{t('types.packaging')}</option>
                     </select>
                   </div>
               </div>
               <div>
-                <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Unidad de Medida Base</label>
+                <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">{t('uomLabel')}</label>
                 <select 
                   value={formData.base_uom_id}
                   disabled={!!editingId}
@@ -284,7 +295,7 @@ export default function ItemsPage() {
                 onClick={() => setShowModal(false)}
                 className="flex-1 px-4 h-11 border border-border text-text-primary rounded-xl font-bold text-sm hover:bg-surface-raised transition-all"
               >
-                Cancelar
+                {t('cancel')}
               </button>
               <button 
                 onClick={handleSave}
@@ -292,12 +303,22 @@ export default function ItemsPage() {
                 className="flex-1 px-4 h-11 bg-primary text-text-inverse rounded-xl font-bold text-sm hover:bg-primary-hover transition-all flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                {editingId ? 'Guardar Cambios' : 'Crear Artículo'}
+                {editingId ? 'Guardar Cambios' : t('create')}
               </button>
             </div>
           </div>
         </div>
       )}
+
+      <ConfirmationModal 
+        isOpen={errorModal.isOpen}
+        title="Error"
+        message={errorModal.message}
+        confirmLabel="Entendido"
+        cancelLabel=""
+        onConfirm={() => setErrorModal({ ...errorModal, isOpen: false })}
+        onCancel={() => setErrorModal({ ...errorModal, isOpen: false })}
+      />
     </div>
   );
 }
