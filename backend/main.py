@@ -38,7 +38,8 @@ from schemas import (
     ItemCategoryCreate, ItemCategoryResponse,
     PurchaseReceiptCreate, PurchaseReceiptResponse,
     IssueDocumentCreate, IssueDocumentResponse,
-    StockMovementResponse
+    StockMovementResponse,
+    TransferCreate, TransferConfirm, TransferResponse
 )
 
 CARACAS_TZ = pytz.timezone("America/Caracas")
