@@ -33,7 +33,7 @@ from schemas import (
     SuperAdminUserOrgAdd, SuperAdminUserOrgUpdate,
     SuperAdminUserInOrg, SuperAdminOrgDetail,
     EditAttendanceDayRequest,
-    WarehouseCreate, WarehouseResponse, ItemCreate, ItemResponse,
+    WarehouseCreate, WarehouseResponse, ItemCreate, ItemUpdate, ItemResponse,
     UOMBase, UOMPresentationCreate, UOMPresentationResponse,
     ItemCategoryCreate, ItemCategoryResponse,
     PurchaseReceiptCreate, PurchaseReceiptResponse,
@@ -3702,7 +3702,18 @@ async def create_item(item: ItemCreate, org_id: str = Depends(get_active_org_id)
 
 @app.get("/inventory/items", response_model=List[ItemResponse], tags=["Inventory"])
 async def list_items(org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
-    res = db.table("items").select("*").eq("org_id", org_id).eq("is_active", True).execute()
+    res = db.table("items") \
+        .select("*, uom_base(name)") \
+        .eq("org_id", org_id) \
+        .eq("is_active", True) \
+        .execute()
+    
+    # Flatten uom_base.name to uom_name
+    for item in res.data:
+        if item.get("uom_base"):
+            item["uom_name"] = item["uom_base"].get("name")
+            del item["uom_base"]
+            
     return res.data or []
 
 @app.patch("/inventory/items/{item_id}", response_model=ItemResponse, tags=["Inventory"])
@@ -3733,10 +3744,20 @@ async def delete_item(item_id: UUID, db=Depends(get_db), _=Depends(require_permi
 
 @app.get("/inventory/items/{item_id}", response_model=ItemResponse, tags=["Inventory"])
 async def get_item(item_id: UUID, db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
-    res = db.table("items").select("*").eq("id", str(item_id)).execute()
+    res = db.table("items") \
+        .select("*, uom_base(name)") \
+        .eq("id", str(item_id)) \
+        .execute()
+        
     if not res.data:
         raise HTTPException(status_code=404, detail="Item not found")
-    return res.data[0]
+        
+    item = res.data[0]
+    if item.get("uom_base"):
+        item["uom_name"] = item["uom_base"].get("name")
+        del item["uom_base"]
+        
+    return item
 
 @app.get("/inventory/items/{item_id}/stock", tags=["Inventory"])
 async def get_item_stock(item_id: UUID, db=Depends(get_db), _=Depends(require_permission("inventory.view"))):

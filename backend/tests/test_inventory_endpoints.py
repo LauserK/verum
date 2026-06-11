@@ -82,7 +82,7 @@ def test_create_item(authorized_client, mock_supabase):
 
 def test_list_items(authorized_client, mock_supabase):
     item_id = str(uuid.uuid4())
-    mock_supabase.table().select().eq().execute.return_value = MagicMock(data=[
+    mock_supabase.table().select().eq().eq().execute.return_value = MagicMock(data=[
         {
             "id": item_id,
             "org_id": ORG_ID,
@@ -91,7 +91,8 @@ def test_list_items(authorized_client, mock_supabase):
             "type": "raw_material",
             "base_uom_id": BASE_UOM_ID,
             "is_active": True,
-            "created_at": "2026-06-10T12:00:00Z"
+            "created_at": "2026-06-10T12:00:00Z",
+            "uom_base": {"name": "Gramos"}
         }
     ])
 
@@ -119,3 +120,25 @@ def test_create_item_category(authorized_client, mock_supabase):
     assert response.status_code == 200
     assert response.json()["name"] == "Harinas"
     assert response.json()["id"] == category_id
+
+def test_update_item(authorized_client, mock_supabase):
+    item_id = str(uuid.uuid4())
+    mock_supabase.table().update().eq().execute.return_value = MagicMock(data=[{
+        "id": item_id,
+        "org_id": ORG_ID,
+        "code": "ITEM-001-UPD",
+        "name": "Harina de Trigo Especial",
+        "type": "raw_material",
+        "base_uom_id": BASE_UOM_ID,
+        "is_active": True,
+        "created_at": "2026-06-10T12:00:00Z"
+    }])
+
+    response = authorized_client.patch(f"/inventory/items/{item_id}", json={
+        "name": "Harina de Trigo Especial",
+        "code": "ITEM-001-UPD"
+    }, headers={"X-Org-ID": ORG_ID})
+
+    assert response.status_code == 200
+    assert response.json()["name"] == "Harina de Trigo Especial"
+    assert response.json()["code"] == "ITEM-001-UPD"
