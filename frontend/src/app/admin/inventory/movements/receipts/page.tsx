@@ -20,6 +20,7 @@ export default function ReceiptsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  const [itemPresentations, setItemPresentations] = useState<Record<string, UOMPresentation[]>>({});
   const [warehouseId, setWarehouseId] = useState('');
   const [supplier, setSupplier] = useState('');
   const [receiptNumber, setReceiptNumber] = useState('');
@@ -76,13 +77,21 @@ export default function ReceiptsPage() {
     
     const item = items.find(i => i.id === itemId);
     if (item) {
-        try {
-            const supabase = createClient();
-            const { data } = await supabase.from('uom_presentations').select('*').eq('base_uom_id', item.base_uom_id);
-            if (data && data.length > 0) {
-                newLines[index].presentation_id = data[0].id;
+        if (itemPresentations[itemId]) {
+            newLines[index].presentation_id = itemPresentations[itemId][0]?.id || '';
+        } else {
+            try {
+                const supabase = createClient();
+                const { data } = await supabase.from('uom_presentations').select('*').eq('base_uom_id', item.base_uom_id);
+                if (data && data.length > 0) {
+                    newLines[index].presentation_id = data[0].id;
+                    // Store in our lookup map
+                    setItemPresentations(prev => ({ ...prev, [itemId]: data as UOMPresentation[] }));
+                }
+            } catch (e) {
+                console.error('Error fetching presentations:', e);
             }
-        } catch (e) {}
+        }
     }
     
     setLines(newLines);
@@ -215,7 +224,7 @@ export default function ReceiptsPage() {
           <div className="space-y-3">
             {lines.map((line, index) => (
               <div key={index} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-surface-raised p-4 rounded-xl border border-border group">
-                <div className="md:col-span-5">
+                <div className="md:col-span-4">
                     <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1">Artículo</label>
                     <select 
                         value={line.item_id}
@@ -242,6 +251,24 @@ export default function ReceiptsPage() {
                     />
                 </div>
                 <div className="md:col-span-2">
+                    <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1">Unidad</label>
+                    <select 
+                        value={line.presentation_id || ''}
+                        onChange={e => {
+                            const newLines = [...lines];
+                            newLines[index].presentation_id = e.target.value;
+                            setLines(newLines);
+                        }}
+                        className="w-full bg-surface border border-border rounded-lg px-3 h-10 text-sm"
+                        disabled={!line.item_id}
+                    >
+                        <option value="">{items.find(i => i.id === line.item_id)?.uom_name || 'Básica'}</option>
+                        {line.item_id && itemPresentations[line.item_id]?.map(p => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                    </select>
+                </div>
+                <div className="md:col-span-2">
                     <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1">Costo Unit.</label>
                     <input 
                         type="number"
@@ -254,8 +281,8 @@ export default function ReceiptsPage() {
                         className="w-full bg-surface border border-border rounded-lg px-3 h-10 text-sm"
                     />
                 </div>
-                <div className="md:col-span-2">
-                    <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1">Vencimiento</label>
+                <div className="md:col-span-1">
+                    <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1">Venc.</label>
                     <input 
                         type="date"
                         value={line.expiry_date || ''}
@@ -264,7 +291,7 @@ export default function ReceiptsPage() {
                             newLines[index].expiry_date = e.target.value;
                             setLines(newLines);
                         }}
-                        className="w-full bg-surface border border-border rounded-lg px-3 h-10 text-sm"
+                        className="w-full bg-surface border border-border rounded-lg px-2 h-10 text-[11px]"
                     />
                 </div>
                 <div className="md:col-span-1 flex justify-center">

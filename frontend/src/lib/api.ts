@@ -866,6 +866,7 @@ export interface InventoryItem {
     type: 'raw_material' | 'semi_finished' | 'finished' | 'packaging' | 'supply'
     category_id: string | null
     base_uom_id: string
+    uom_name?: string
     last_purchase_cost: number | null
     last_purchase_cost_updated_at: string | null
     is_active: boolean
@@ -898,7 +899,7 @@ export interface StockMovement {
 export interface PurchaseReceiptLine {
     item_id: string
     qty_presentation: number
-    presentation_id: string
+    presentation_id: string | null
     unit_cost_presentation: number
     expiry_date?: string
     lot_number?: string
@@ -923,7 +924,7 @@ export interface IssueDocument {
     lines: Array<{
         item_id: string
         qty_presentation: number
-        presentation_id: string
+        presentation_id: string | null
     }>
     created_at: string
 }
