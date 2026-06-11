@@ -3698,7 +3698,36 @@ async def create_item(item: ItemCreate, org_id: str = Depends(get_active_org_id)
     res = db.table("items").insert(data).execute()
     if not res.data:
         raise HTTPException(status_code=400, detail="Error creating item")
-    return res.data[0]
+    
+    item_id = res.data[0]["id"]
+    
+    # Create default presentations if any
+    if item.presentations:
+        for p in item.presentations:
+            p_data = {
+                "org_id": org_id,
+                "name": p.name,
+                "base_uom_id": str(item.base_uom_id),
+                "conversion_factor": p.conversion_factor,
+                "is_default": p.is_default
+            }
+            db.table("uom_presentations").insert(p_data).execute()
+
+    # Fetch with uom_name join
+    item_res = db.table("items") \
+        .select("*, uom_base(name)") \
+        .eq("id", item_id) \
+        .execute()
+    
+    if not item_res.data:
+        raise HTTPException(status_code=400, detail="Error fetching created item")
+        
+    created_item = item_res.data[0]
+    if created_item.get("uom_base"):
+        created_item["uom_name"] = created_item["uom_base"].get("name")
+        del created_item["uom_base"]
+        
+    return created_item
 
 @app.get("/inventory/items", response_model=List[ItemResponse], tags=["Inventory"])
 async def list_items(org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
@@ -3734,7 +3763,19 @@ async def update_item(item_id: UUID, item: ItemUpdate, db=Depends(get_db), _=Dep
     res = db.table("items").update(update_data).eq("id", str(item_id)).execute()
     if not res.data:
         raise HTTPException(status_code=404, detail="Item not found")
-    return res.data[0]
+        
+    # Fetch with uom_name join
+    item_res = db.table("items") \
+        .select("*, uom_base(name)") \
+        .eq("id", str(item_id)) \
+        .execute()
+        
+    updated_item = item_res.data[0]
+    if updated_item.get("uom_base"):
+        updated_item["uom_name"] = updated_item["uom_base"].get("name")
+        del updated_item["uom_base"]
+        
+    return updated_item
 
 @app.delete("/inventory/items/{item_id}", tags=["Inventory"])
 async def delete_item(item_id: UUID, db=Depends(get_db), _=Depends(require_permission("inventory.manage_items"))):

@@ -459,6 +459,7 @@ class ItemResponse(BaseModel):
     type: str
     category_id: Optional[UUID] = None
     base_uom_id: UUID
+    uom_name: Optional[str] = None
     last_purchase_cost: Optional[float] = None
     last_purchase_cost_updated_at: Optional[datetime] = None
     is_active: bool
