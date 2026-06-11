@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { adminApi } from '@/lib/api';
-import { Loader2, Search, FileText, ArrowUpRight, ArrowDownRight, Eye, Calendar, Package, Printer } from 'lucide-react';
+import { Loader2, Search, FileText, ArrowUpRight, ArrowDownRight, Eye, Calendar, Package, Printer, ArrowRightLeft, ArrowRight } from 'lucide-react';
 
 interface DocumentsHistoryModalProps {
   isOpen: boolean;
@@ -15,7 +15,7 @@ export default function DocumentsHistoryModal({ isOpen, onClose, onViewDetail, o
   const [loading, setLoading] = useState(true);
   const [docs, setDocs] = useState<any[]>([]);
   const [filter, setFilter] = useState('');
-  const [activeTab, setActiveTab] = useState<'all' | 'receipt' | 'issue'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'receipt' | 'issue' | 'transfer'>('all');
 
   useEffect(() => {
     if (isOpen) {
@@ -26,14 +26,16 @@ export default function DocumentsHistoryModal({ isOpen, onClose, onViewDetail, o
   async function loadDocuments() {
     setLoading(true);
     try {
-      const [receipts, issues] = await Promise.all([
+      const [receipts, issues, transfers] = await Promise.all([
         adminApi.getPurchaseReceipts(),
-        adminApi.getIssueDocuments()
+        adminApi.getIssueDocuments(),
+        adminApi.getTransfers()
       ]);
 
       const combined = [
         ...receipts.map(r => ({ ...r, type: 'receipt', docType: 'Ingreso' })),
-        ...issues.map(i => ({ ...i, type: 'issue', docType: 'Egreso' }))
+        ...issues.map(i => ({ ...i, type: 'issue', docType: 'Egreso' })),
+        ...transfers.map(t => ({ ...t, type: 'transfer', docType: 'Traslado' }))
       ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
       setDocs(combined);
@@ -48,7 +50,8 @@ export default function DocumentsHistoryModal({ isOpen, onClose, onViewDetail, o
     const matchesFilter = (d.receipt_number || '').toLowerCase().includes(filter.toLowerCase()) ||
       (d.supplier || '').toLowerCase().includes(filter.toLowerCase()) ||
       (d.reason || '').toLowerCase().includes(filter.toLowerCase()) ||
-      (d.warehouses?.name || '').toLowerCase().includes(filter.toLowerCase());
+      (d.warehouses?.name || d.origin?.name || '').toLowerCase().includes(filter.toLowerCase()) ||
+      (d.destination?.name || '').toLowerCase().includes(filter.toLowerCase());
     
     const matchesTab = activeTab === 'all' || d.type === activeTab;
     
@@ -67,7 +70,7 @@ export default function DocumentsHistoryModal({ isOpen, onClose, onViewDetail, o
         <div className="p-6 border-b border-border flex justify-between items-center bg-surface-raised">
           <div>
             <h2 className="text-xl font-bold text-text-primary">Historial de Documentos</h2>
-            <p className="text-xs text-text-secondary">Gestión y auditoría de ingresos y egresos</p>
+            <p className="text-xs text-text-secondary">Gestión y auditoría de ingresos, egresos y traslados</p>
           </div>
           <button 
             onClick={onClose}
@@ -110,6 +113,12 @@ export default function DocumentsHistoryModal({ isOpen, onClose, onViewDetail, o
             >
               Egresos
             </button>
+            <button 
+              onClick={() => setActiveTab('transfer')}
+              className={`px-4 py-2 text-xs font-bold rounded-lg transition-all ${activeTab === 'transfer' ? 'bg-surface text-warning shadow-sm' : 'text-text-secondary hover:text-text-primary'}`}
+            >
+              Traslados
+            </button>
           </div>
         </div>
 
@@ -131,7 +140,7 @@ export default function DocumentsHistoryModal({ isOpen, onClose, onViewDetail, o
                 <tr className="border-b border-border">
                   <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest">Fecha</th>
                   <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest">Tipo</th>
-                  <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest">Referencia</th>
+                  <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest">Referencia / Ruta</th>
                   <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest">Almacén</th>
                   <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest text-right">Acciones</th>
                 </tr>
@@ -148,25 +157,38 @@ export default function DocumentsHistoryModal({ isOpen, onClose, onViewDetail, o
                       </p>
                     </td>
                     <td className="p-4">
-                      <div className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${d.type === 'receipt' ? 'bg-success/10 text-success' : 'bg-error/10 text-error'}`}>
+                      <div className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${d.type === 'receipt' ? 'bg-success/10 text-success' : (d.type === 'transfer' ? 'bg-warning/10 text-warning' : 'bg-error/10 text-error')}`}>
                         {d.type === 'receipt' ? (
                           <ArrowUpRight className="w-3 h-3" />
                         ) : (
-                          <ArrowDownRight className="w-3 h-3" />
+                          d.type === 'transfer' ? <ArrowRightLeft className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />
                         )}
                         {d.docType}
                       </div>
                     </td>
                     <td className="p-4">
-                      <p className="text-sm font-bold text-text-primary">
-                        {d.receipt_number || d.reason || 'Sin Nº'}
-                      </p>
-                      <p className="text-[10px] text-text-secondary uppercase truncate max-w-[200px]">
-                        {d.supplier || 'N/A'}
-                      </p>
+                      {d.type === 'transfer' ? (
+                        <div>
+                            <p className="text-sm font-bold text-text-primary flex items-center gap-2">
+                                {d.origin?.name} <ArrowRight className="w-3 h-3 text-text-disabled" /> {d.destination?.name}
+                            </p>
+                            <p className="text-[10px] text-text-secondary uppercase truncate max-w-[200px]">
+                                {d.status === 'in_transit' ? 'En Tránsito' : 'Recibido'}
+                            </p>
+                        </div>
+                      ) : (
+                        <>
+                            <p className="text-sm font-bold text-text-primary">
+                                {d.receipt_number || d.reason || 'Sin Nº'}
+                            </p>
+                            <p className="text-[10px] text-text-secondary uppercase truncate max-w-[200px]">
+                                {d.supplier || 'N/A'}
+                            </p>
+                        </>
+                      )}
                     </td>
                     <td className="p-4">
-                       <span className="text-sm text-text-primary font-medium">{d.warehouses?.name || '---'}</span>
+                       <span className="text-sm text-text-primary font-medium">{d.warehouses?.name || d.origin?.name || '---'}</span>
                     </td>
                     <td className="p-4 text-right">
                       <div className="flex items-center justify-end gap-1">

@@ -4441,6 +4441,15 @@ async def confirm_transfer(transfer_id: UUID, doc: TransferConfirm, org_id: str 
     
     return {"ok": True, "status": final_status}
 
+@app.get("/inventory/transfers", tags=["Inventory"])
+async def list_transfers(org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
+    res = db.table("transfer_documents") \
+        .select("*, origin:origin_warehouse_id(name), destination:destination_warehouse_id(name)") \
+        .eq("org_id", org_id) \
+        .order("created_at", desc=True) \
+        .execute()
+    return res.data or []
+
 @app.get("/inventory/transfers/pending", tags=["Inventory"])
 async def list_pending_transfers(warehouse_id: Optional[UUID] = None, org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
     query = db.table("transfer_documents") \

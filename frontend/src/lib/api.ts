@@ -696,6 +696,9 @@ export const adminApi = {
         return fetchWithAuth(url);
     },
 
+    getTransfers: (): Promise<any[]> =>
+        fetchWithAuth('/inventory/transfers'),
+
     getTransferDetail: (id: string): Promise<any> =>
         fetchWithAuth(`/inventory/transfers/${id}`),
 

@@ -1,11 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { adminApi, Warehouse } from '@/lib/api';
-import { Loader2, ArrowLeft, ArrowRightLeft, Package, Calendar, ArrowRight, Eye } from 'lucide-react';
+import { Loader2, ArrowLeft, ArrowRightLeft, Package, Calendar, ArrowRight, Eye, Printer } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from '@/components/I18nProvider';
+import { useReactToPrint } from 'react-to-print';
+import { MovementPrint } from '@/components/inventory/MovementPrint';
 
 export default function PendingTransfersPage() {
   const router = useRouter();
@@ -13,9 +15,47 @@ export default function PendingTransfersPage() {
   const [transfers, setTransfers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Printing state
+  const printRef = useRef<HTMLDivElement>(null);
+  const [printData, setPrintData] = useState<any>(null);
+  
+  const handlePrintTrigger = useReactToPrint({
+    contentRef: printRef,
+    documentTitle: `Traslado-Pendiente`,
+    onAfterPrint: () => setPrintData(null)
+  });
+
+  useEffect(() => {
+    if (printData && printRef.current) {
+        handlePrintTrigger();
+    }
+  }, [printData]);
+
   useEffect(() => {
     loadPending();
   }, []);
+
+  async function handlePrint(tr: any) {
+    try {
+        const detail = await adminApi.getTransferDetail(tr.id);
+        setPrintData({
+            type: 'transfer',
+            id: detail.header.id,
+            warehouseName: detail.header.origin?.name || 'Origen',
+            destinationName: detail.header.destination?.name || 'Destino',
+            notes: detail.header.notes,
+            createdAt: detail.header.created_at,
+            lines: detail.lines.map((l: any) => ({
+                itemName: l.items?.name || 'Artículo',
+                qty: l.qty_sent_presentation,
+                uom: l.uom_presentations?.name || l.items?.uom_base?.name || 'Unidad',
+                lot: `TR-${detail.header.id.replace(/-/g, '').slice(0, 8)}`
+            }))
+        });
+    } catch (e) {
+        console.error(e);
+    }
+  }
 
   async function loadPending() {
     try {
@@ -90,19 +130,39 @@ export default function PendingTransfersPage() {
                     </p>
                   </td>
                   <td className="p-4 text-center">
-                    <Link 
-                      href={`/admin/inventory/movements/transfers/${tr.id}/confirm`}
-                      className="inline-flex items-center gap-2 px-4 h-9 bg-primary text-text-inverse rounded-lg text-xs font-bold hover:bg-primary-hover transition-all"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                      Confirmar Recepción
-                    </Link>
+                    <div className="flex items-center justify-center gap-2">
+                        <button 
+                          onClick={() => handlePrint(tr)}
+                          className="p-2 text-text-secondary hover:text-primary hover:bg-primary/5 rounded-lg transition-all"
+                          title="Imprimir Guía de Envío"
+                        >
+                          <Printer className="w-4.5 h-4.5" />
+                        </button>
+                        <Link 
+                          href={`/admin/inventory/movements/transfers/${tr.id}/confirm`}
+                          className="inline-flex items-center gap-2 px-4 h-9 bg-primary text-text-inverse rounded-lg text-xs font-bold hover:bg-primary-hover transition-all"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          Confirmar Recepción
+                        </Link>
+                    </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Hidden print container */}
+      <div className="hidden">
+        {printData && (
+          <MovementPrint 
+            ref={printRef}
+            type="transfer"
+            data={printData}
+          />
+        )}
       </div>
     </div>
   );
