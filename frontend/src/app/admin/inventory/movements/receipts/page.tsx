@@ -77,15 +77,14 @@ export default function ReceiptsPage() {
     
     const item = items.find(i => i.id === itemId);
     if (item) {
-        if (itemPresentations[itemId]) {
-            newLines[index].presentation_id = itemPresentations[itemId][0]?.id || '';
-        } else {
+        // Al cambiar de artículo, reseteamos la presentación a la unidad base ('') por defecto
+        newLines[index].presentation_id = '';
+        
+        if (!itemPresentations[itemId]) {
             try {
                 const supabase = createClient();
                 const { data } = await supabase.from('uom_presentations').select('*').eq('base_uom_id', item.base_uom_id);
                 if (data && data.length > 0) {
-                    newLines[index].presentation_id = data[0].id;
-                    // Store in our lookup map
                     setItemPresentations(prev => ({ ...prev, [itemId]: data as UOMPresentation[] }));
                 }
             } catch (e) {
