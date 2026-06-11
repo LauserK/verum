@@ -1,6 +1,7 @@
 'use client';
 
 import React, { forwardRef } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 
 interface MovementPrintProps {
   type: 'receipt' | 'issue' | 'transfer';
@@ -44,9 +45,20 @@ export const MovementPrint = forwardRef<HTMLDivElement, MovementPrintProps>(({ t
           <h1 className="text-3xl font-black tracking-tighter uppercase mb-1">VERUM</h1>
           <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest leading-none">Portal de Gestión Operativa</p>
         </div>
-        <div className="text-right">
+        <div className="text-right flex flex-col items-end">
           <h2 className="text-xl font-bold uppercase leading-none">{title}</h2>
           <p className="text-xs font-mono text-gray-600 mt-2">ID: {data.id?.slice(0, 8).toUpperCase() || '---'}</p>
+          
+          {isTransfer && data.id && (
+            <div className="mt-4 p-2 border border-gray-200 rounded-xl bg-white">
+                <QRCodeSVG 
+                    value={`${typeof window !== 'undefined' ? window.location.origin : ''}/admin/inventory/movements/transfers/${data.id}/confirm`}
+                    size={80}
+                    level="H"
+                />
+                <p className="text-[8px] font-bold text-center mt-1 text-gray-400">ESCANEAR PARA RECIBIR</p>
+            </div>
+          )}
         </div>
       </div>
 
