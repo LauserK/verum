@@ -142,11 +142,15 @@ export default function IssuesPage() {
             reason: reasonLabels[reason] || reason,
             notes,
             createdAt: new Date().toISOString(),
-            lines: cleanedLines.map(l => ({
-                itemName: items.find(i => i.id === l.item_id)?.name || 'Artículo',
-                qty: l.qty_presentation,
-                uom: l.presentation_id ? itemPresentations[l.item_id]?.find(p => p.id === l.presentation_id)?.name : (items.find(i => i.id === l.item_id)?.uom_name || 'Unidad')
-            }))
+            lines: cleanedLines.map(l => {
+                const item = items.find(i => i.id === l.item_id);
+                const presentation = l.presentation_id ? itemPresentations[l.item_id!]?.find(p => p.id === l.presentation_id) : null;
+                return {
+                    itemName: item?.name || 'Artículo',
+                    qty: l.qty_presentation,
+                    uom: presentation ? presentation.name : (item?.uom_name || 'Unidad')
+                };
+            })
         });
       } else {
         router.push('/admin/inventory/kardex');

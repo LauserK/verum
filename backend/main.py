@@ -4146,10 +4146,9 @@ async def get_purchase_receipt_detail(receipt_id: UUID, db=Depends(get_db), _=De
     if not res_header.data:
         raise HTTPException(status_code=404, detail="Receipt not found")
 
-    # Get lines with explicit relationship joins
-    # items!purchase_receipt_lines_item_id_fkey if needed, but usually items(name) works if FK is unique
+    # Get lines with item, base UOM and presentation names
     res_lines = db.table("purchase_receipt_lines") \
-        .select("*, items(name, base_uom_id), uom_presentations(name)") \
+        .select("*, items(name, uom_base(name)), uom_presentations(name)") \
         .eq("receipt_id", str(receipt_id)) \
         .execute()
 

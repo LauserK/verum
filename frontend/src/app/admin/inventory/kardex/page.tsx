@@ -105,7 +105,7 @@ export default function KardexPage() {
                 lines: detail.lines.map((l: any) => ({
                     itemName: l.items?.name || 'Artículo',
                     qty: l.qty_presentation,
-                    uom: l.uom_presentations?.name || 'Unidad',
+                    uom: l.uom_presentations?.name || l.items?.uom_base?.name || 'Unidad',
                     cost: l.unit_cost_base * (l.qty_base / l.qty_presentation),
                     lot: l.lot_number
                 }))
@@ -123,8 +123,8 @@ export default function KardexPage() {
                 lines: detail.lines.map((l: any) => ({
                     itemName: l.items?.name || 'Artículo',
                     qty: l.qty_presentation,
-                    uom: l.uom_presentations?.name || 'Unidad Base',
-                    lot: null // Issue lines don't track lot directly in the document master yet
+                    uom: l.uom_presentations?.name || l.items?.uom_base?.name || 'Unidad Base',
+                    lot: null
                 }))
             };
         }

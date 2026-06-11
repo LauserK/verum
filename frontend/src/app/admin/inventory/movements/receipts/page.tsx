@@ -140,12 +140,17 @@ export default function ReceiptsPage() {
             receiptNumber,
             date: receiptDate,
             createdAt: new Date().toISOString(),
-            lines: cleanedLines.map(l => ({
-                itemName: items.find(i => i.id === l.item_id)?.name || 'Artículo',
-                qty: l.qty_presentation,
-                cost: l.unit_cost_presentation,
-                lot: l.lot_number
-            }))
+            lines: cleanedLines.map(l => {
+                const item = items.find(i => i.id === l.item_id);
+                const presentation = l.presentation_id ? itemPresentations[l.item_id!]?.find(p => p.id === l.presentation_id) : null;
+                return {
+                    itemName: item?.name || 'Artículo',
+                    qty: l.qty_presentation,
+                    uom: presentation ? presentation.name : (item?.uom_name || 'Unidad'),
+                    cost: l.unit_cost_presentation,
+                    lot: l.lot_number
+                };
+            })
         });
       } else {
         router.push('/admin/inventory/kardex');
