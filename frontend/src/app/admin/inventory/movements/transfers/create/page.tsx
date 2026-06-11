@@ -155,6 +155,8 @@ export default function CreateTransferPage() {
           autoConfirm,
           createdAt: new Date().toISOString(),
           createdBy: profile?.full_name || 'Usuario',
+          confirmedAt: autoConfirm ? new Date().toISOString() : null,
+          confirmedBy: autoConfirm ? (profile?.full_name || 'Usuario') : null,
           lines: lines.map(l => ({
               itemName: items.find(i => i.id === l.item_id)?.name || 'Artículo',
               qty: l.qty_sent_presentation,

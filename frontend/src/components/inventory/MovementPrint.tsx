@@ -15,6 +15,8 @@ interface MovementPrintProps {
     notes?: string;
     createdAt: string;
     createdBy?: string;
+    confirmedAt?: string;
+    confirmedBy?: string;
     autoConfirm?: boolean;
     lines: Array<{
       itemName: string;
@@ -30,6 +32,9 @@ export const MovementPrint = forwardRef<HTMLDivElement, MovementPrintProps>(({ t
   const isReceipt = type === 'receipt';
   const isTransfer = type === 'transfer';
   const isIssue = type === 'issue';
+  
+  // Check if it's confirmed (for transfers or any doc with confirmedAt)
+  const isConfirmed = !!data.confirmedAt;
 
   // Determine Title
   let title = 'Comprobante de Movimiento';
@@ -38,7 +43,7 @@ export const MovementPrint = forwardRef<HTMLDivElement, MovementPrintProps>(({ t
   if (isTransfer) title = 'Comprobante de Traslado';
 
   return (
-    <div ref={ref} className="p-10 text-black bg-white min-h-screen font-sans">
+    <div ref={ref} className="p-10 text-black bg-white min-h-screen font-sans relative flex flex-col">
       {/* Header */}
       <div className="flex justify-between items-start border-b-2 border-gray-900 pb-6">
         <div>
@@ -101,7 +106,7 @@ export const MovementPrint = forwardRef<HTMLDivElement, MovementPrintProps>(({ t
                         size={100}
                         level="H"
                     />
-                    <p className="text-[9px] font-black text-center mt-2 text-gray-900 tracking-tighter">ESCANEAR PARA RECIBIR</p>
+                    <p className="text-[9px] font-black text-center mt-2 text-gray-900 tracking-tighter uppercase">Escanear para Recibir</p>
                 </div>
             )}
         </div>
@@ -118,7 +123,7 @@ export const MovementPrint = forwardRef<HTMLDivElement, MovementPrintProps>(({ t
             </div>
           )}
           
-          {isTransfer && (
+          {isTransfer && !isConfirmed && (
             <div className="pt-2">
               <div className="inline-block border-2 border-gray-900 p-3 text-right w-full">
                 <p className="font-bold uppercase text-[9px] text-gray-400 mb-1 text-left">Logística (Llenar a mano)</p>
@@ -136,7 +141,7 @@ export const MovementPrint = forwardRef<HTMLDivElement, MovementPrintProps>(({ t
       </div>
 
       {/* Table */}
-      <div className="mt-6">
+      <div className="mt-6 flex-1">
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="border-b-2 border-gray-900 bg-gray-50">
@@ -188,12 +193,12 @@ export const MovementPrint = forwardRef<HTMLDivElement, MovementPrintProps>(({ t
       )}
 
       {/* Signatures */}
-      <div className="mt-32">
+      <div className="mt-auto pt-10">
         <div className="grid grid-cols-3 gap-12">
           <div className="text-center space-y-4">
             <div className="border-t border-gray-400 pt-2">
               <p className="text-[10px] font-bold uppercase mb-1">Entregado por</p>
-              <div className="h-4" /> {/* Space for manual date/time if needed */}
+              <div className="h-4" />
               <p className="text-[9px] text-gray-400">Firma y Hora: ___________</p>
             </div>
           </div>
@@ -214,7 +219,28 @@ export const MovementPrint = forwardRef<HTMLDivElement, MovementPrintProps>(({ t
         </div>
       </div>
 
-      <div className="mt-20 flex justify-between items-center text-[9px] text-gray-400 uppercase tracking-tight border-t border-gray-100 pt-4">
+      {/* Confirmation Banner */}
+      {isConfirmed && (
+          <div className="mt-10 bg-green-600 text-white p-4 -mx-10 -mb-10 flex justify-between items-center px-10">
+              <div className="flex items-center gap-3">
+                  <div className="w-6 h-6 bg-white/20 rounded-full flex items-center justify-center">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <div>
+                      <p className="text-[10px] font-black uppercase tracking-widest leading-none">Documento Confirmado / Recibido</p>
+                      <p className="text-[9px] opacity-80 font-bold mt-1">La mercancía ha sido verificada en el almacén de destino.</p>
+                  </div>
+              </div>
+              <div className="text-right">
+                  <p className="text-[10px] font-bold uppercase leading-none">{data.confirmedBy || 'Usuario'}</p>
+                  <p className="text-[9px] opacity-80 mt-1">{data.confirmedAt ? new Date(data.confirmedAt).toLocaleString() : ''}</p>
+              </div>
+          </div>
+      )}
+
+      <div className={`mt-10 flex justify-between items-center text-[9px] text-gray-400 uppercase tracking-tight border-t border-gray-100 pt-4 ${isConfirmed ? 'hidden' : ''}`}>
         <span>VERUM LOGÍSTICA • {data.id || 'N/A'}</span>
         <span>Generado el {new Date().toLocaleString()}</span>
       </div>
@@ -222,7 +248,7 @@ export const MovementPrint = forwardRef<HTMLDivElement, MovementPrintProps>(({ t
       <style jsx global>{`
         @media print {
           body { margin: 0; padding: 0; }
-          @page { size: auto; margin: 10mm; }
+          @page { size: auto; margin: 0mm; }
           .no-print { display: none; }
         }
       `}</style>
