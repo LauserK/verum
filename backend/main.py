@@ -4164,9 +4164,9 @@ async def get_issue_document_detail(issue_id: UUID, db=Depends(get_db), _=Depend
     if not res_header.data:
         raise HTTPException(status_code=404, detail="Issue document not found")
 
-    # Get lines with item and presentation names
+    # Get lines with item, base UOM and presentation names
     res_lines = db.table("issue_document_lines") \
-        .select("*, items(name, base_uom_id), uom_presentations(name)") \
+        .select("*, items(name, uom_base(name)), uom_presentations(name)") \
         .eq("issue_id", str(issue_id)) \
         .execute()
 
