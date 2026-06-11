@@ -14,6 +14,15 @@
     "version": "Versión 2.4.0-build.82",
     "switchLanguage": "Cambiar a Español"
   },
+  "common": {
+    "cancel": "Cancelar",
+    "save": "Guardar",
+    "saving": "Guardando...",
+    "error": "Error",
+    "success": "Éxito",
+    "confirm": "Confirmar",
+    "delete": "Eliminar"
+  },
   "nav": {
     "dashboard": "Dashboard",
     "checklists": "Checklists",
@@ -160,6 +169,7 @@
       "codePlaceholder": "Ej: MAT-001",
       "typeLabel": "Categoría / Tipo",
       "uomLabel": "Unidad de Medida Base",
+      "uomBaseFallback": "Unidad base",
       "loading": "Cargando artículos...",
       "create": "Guardar Artículo",
       "saving": "Guardando...",

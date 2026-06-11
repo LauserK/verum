@@ -13,7 +13,7 @@ import { useTranslations } from '@/components/I18nProvider';
 
 export default function ReceiptsPage() {
   const router = useRouter();
-  const { t } = useTranslations('inventory.warehouses');
+  const { t } = useTranslations();
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [items, setItems] = useState<InventoryItem[]>([]);
   
@@ -262,7 +262,7 @@ export default function ReceiptsPage() {
                         className="w-full bg-surface border border-border rounded-lg px-3 h-10 text-sm"
                         disabled={!line.item_id}
                     >
-                        <option value="">{items.find(i => i.id === line.item_id)?.uom_name || 'Básica'}</option>
+                        <option value="">{items.find(i => i.id === line.item_id)?.uom_name || t('inventory.items.uomBaseFallback')}</option>
                         {line.item_id && itemPresentations[line.item_id]?.map(p => (
                             <option key={p.id} value={p.id}>{p.name}</option>
                         ))}
@@ -313,7 +313,7 @@ export default function ReceiptsPage() {
                 onClick={() => router.back()}
                 className="px-6 h-11 border border-border text-text-primary rounded-xl font-bold text-sm hover:bg-surface-raised transition-all"
             >
-                {t('cancel')}
+                {t('common.cancel')}
             </button>
             <button 
                 onClick={() => handleSave(false)}
