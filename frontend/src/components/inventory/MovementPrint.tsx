@@ -21,6 +21,8 @@ interface MovementPrintProps {
     lines: Array<{
       itemName: string;
       qty: number;
+      qtySent?: number;
+      qtyReceived?: number;
       uom?: string;
       cost?: number;
       lot?: string;
@@ -148,26 +150,51 @@ export const MovementPrint = forwardRef<HTMLDivElement, MovementPrintProps>(({ t
               <th className="py-3 px-2 text-[10px] font-bold uppercase tracking-widest">Descripción del Artículo</th>
               <th className="py-3 px-2 text-[10px] font-bold uppercase tracking-widest text-center">Unidad</th>
               <th className="py-3 px-2 text-[10px] font-bold uppercase tracking-widest text-center">Lote</th>
-              <th className="py-3 px-2 text-[10px] font-bold uppercase tracking-widest text-right">Cantidad</th>
+              
+              {isTransfer && isConfirmed ? (
+                <>
+                  <th className="py-3 px-2 text-[10px] font-bold uppercase tracking-widest text-right">Enviado</th>
+                  <th className="py-3 px-2 text-[10px] font-bold uppercase tracking-widest text-right">Recibido</th>
+                  <th className="py-3 px-2 text-[10px] font-bold uppercase tracking-widest text-right text-error">Dif.</th>
+                </>
+              ) : (
+                <th className="py-3 px-2 text-[10px] font-bold uppercase tracking-widest text-right">Cantidad</th>
+              )}
+
               {isReceipt && <th className="py-3 px-2 text-[10px] font-bold uppercase tracking-widest text-right">Costo Unit.</th>}
               {isReceipt && <th className="py-3 px-2 text-[10px] font-bold uppercase tracking-widest text-right">Total</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {data.lines.map((line, index) => (
-              <tr key={index}>
-                <td className="py-3 px-2">
-                    <p className="font-bold text-sm">{line.itemName}</p>
-                </td>
-                <td className="py-3 px-2 text-center">
-                    <span className="text-[10px] font-bold uppercase text-gray-600">{line.uom || 'Base'}</span>
-                </td>
-                <td className="py-3 px-2 text-center font-mono text-xs">{line.lot || '---'}</td>
-                <td className="py-3 px-2 text-right font-black text-sm">{line.qty.toFixed(2)}</td>
-                {isReceipt && <td className="py-3 px-2 text-right font-mono text-xs">${(line.cost || 0).toFixed(2)}</td>}
-                {isReceipt && <td className="py-3 px-2 text-right font-bold font-mono text-sm">${((line.qty) * (line.cost || 0)).toFixed(2)}</td>}
-              </tr>
-            ))}
+            {data.lines.map((line, index) => {
+              const diff = (line.qtyReceived ?? 0) - (line.qtySent ?? line.qty);
+              return (
+                <tr key={index}>
+                  <td className="py-3 px-2">
+                      <p className="font-bold text-sm">{line.itemName}</p>
+                  </td>
+                  <td className="py-3 px-2 text-center">
+                      <span className="text-[10px] font-bold uppercase text-gray-600">{line.uom || 'Base'}</span>
+                  </td>
+                  <td className="py-3 px-2 text-center font-mono text-xs">{line.lot || '---'}</td>
+                  
+                  {isTransfer && isConfirmed ? (
+                    <>
+                      <td className="py-3 px-2 text-right font-bold text-sm text-gray-500">{(line.qtySent ?? line.qty).toFixed(2)}</td>
+                      <td className="py-3 px-2 text-right font-black text-sm text-gray-900">{(line.qtyReceived ?? 0).toFixed(2)}</td>
+                      <td className={`py-3 px-2 text-right font-bold text-xs ${diff !== 0 ? 'text-error' : 'text-gray-300'}`}>
+                        {diff !== 0 ? diff.toFixed(2) : '-'}
+                      </td>
+                    </>
+                  ) : (
+                    <td className="py-3 px-2 text-right font-black text-sm">{line.qty.toFixed(2)}</td>
+                  )}
+
+                  {isReceipt && <td className="py-3 px-2 text-right font-mono text-xs">${(line.cost || 0).toFixed(2)}</td>}
+                  {isReceipt && <td className="py-3 px-2 text-right font-bold font-mono text-sm">${((line.qty) * (line.cost || 0)).toFixed(2)}</td>}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

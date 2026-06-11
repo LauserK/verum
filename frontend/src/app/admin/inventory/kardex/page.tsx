@@ -128,6 +128,8 @@ export default function KardexPage() {
                 lines: detail.lines.map((l: any) => ({
                     itemName: l.items?.name || 'Artículo',
                     qty: l.qty_sent_presentation,
+                    qtySent: l.qty_sent_presentation,
+                    qtyReceived: l.qty_received_presentation,
                     uom: l.uom_presentations?.name || l.items?.uom_base?.name || 'Unidad',
                     lot: `TR-${detail.header.id.replace(/-/g, '').slice(0, 8)}`
                 }))
