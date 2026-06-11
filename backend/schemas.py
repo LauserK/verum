@@ -548,6 +548,7 @@ class TransferCreate(BaseModel):
     origin_warehouse_id: UUID
     destination_warehouse_id: UUID
     notes: Optional[str] = None
+    auto_confirm: bool = False
     lines: List[TransferLineCreate]
 
 class TransferLineConfirm(BaseModel):

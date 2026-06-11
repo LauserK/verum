@@ -4197,9 +4197,11 @@ async def create_transfer(doc: TransferCreate, org_id: str = Depends(get_active_
         "org_id": org_id,
         "origin_warehouse_id": str(doc.origin_warehouse_id),
         "destination_warehouse_id": str(doc.destination_warehouse_id),
-        "status": "in_transit",
+        "status": "confirmed" if doc.auto_confirm else "in_transit",
         "notes": doc.notes,
-        "created_by": user.id
+        "created_by": user.id,
+        "confirmed_by": user.id if doc.auto_confirm else None,
+        "confirmed_at": datetime.now(CARACAS_TZ).isoformat() if doc.auto_confirm else None
     }
     header_res = db.table("transfer_documents").insert(header_data).execute()
     if not header_res.data:
@@ -4264,6 +4266,22 @@ async def create_transfer(doc: TransferCreate, org_id: str = Depends(get_active_
             }).execute()
             
             remaining -= consume_qty
+            
+        # 3. Handle deficit (Negative Stock Support)
+        if remaining > 0:
+            db.table("stock_movements").insert({
+                "org_id": org_id,
+                "movement_type": "transfer_out",
+                "warehouse_id": str(doc.origin_warehouse_id),
+                "item_id": str(line.item_id),
+                "qty_base": -remaining,
+                "unit_cost_base": 0.0, 
+                "total_cost": 0.0,
+                "reference_id": transfer_id,
+                "reference_type": "transfer_document",
+                "notes": f"Traslado a almacén {doc.destination_warehouse_id} (DÉFICIT)",
+                "created_by": user.id
+            }).execute()
 
         weighted_unit_cost = total_cost_at_origin / total_to_move if total_to_move > 0 else 0.0
 
@@ -4274,15 +4292,65 @@ async def create_transfer(doc: TransferCreate, org_id: str = Depends(get_active_
             "presentation_id": str(line.presentation_id) if line.presentation_id else None,
             "qty_sent_presentation": float(line.qty_sent_presentation),
             "qty_sent_base": total_to_move,
-            "unit_cost_base": weighted_unit_cost
+            "unit_cost_base": weighted_unit_cost,
+            "qty_received_presentation": float(line.qty_sent_presentation) if doc.auto_confirm else None,
+            "qty_received_base": total_to_move if doc.auto_confirm else None
         }
         db.table("transfer_document_lines").insert(line_data).execute()
 
-        # Update overall stock at origin
+        # Update overall stock at origin (Allows negative values)
         stock_res = db.table("stock").select("id, qty_base").eq("warehouse_id", str(doc.origin_warehouse_id)).eq("item_id", str(line.item_id)).execute()
         if stock_res.data:
-            new_qty = max(0, float(stock_res.data[0]["qty_base"]) - total_to_move)
+            new_qty = float(stock_res.data[0]["qty_base"]) - total_to_move
             db.table("stock").update({"qty_base": new_qty}).eq("id", stock_res.data[0]["id"]).execute()
+        else:
+            db.table("stock").insert({
+                "warehouse_id": str(doc.origin_warehouse_id),
+                "item_id": str(line.item_id),
+                "qty_base": -total_to_move
+            }).execute()
+
+        # 4. Immediate Reception (Auto-Confirm Logic)
+        if doc.auto_confirm:
+            # Add to destination inventory immediately
+            lot_data = {
+                "warehouse_id": str(doc.destination_warehouse_id),
+                "item_id": str(line.item_id),
+                "lot_number": f"TR-{transfer_id.hex[:8]}",
+                "qty_base": total_to_move,
+                "unit_cost_base": weighted_unit_cost,
+                "received_at": datetime.now(CARACAS_TZ).isoformat()
+            }
+            db.table("stock_lots").insert(lot_data).execute()
+            
+            # Log movement at destination
+            db.table("stock_movements").insert({
+                "org_id": org_id,
+                "movement_type": "transfer_in",
+                "warehouse_id": str(doc.destination_warehouse_id),
+                "item_id": str(line.item_id),
+                "qty_base": total_to_move,
+                "unit_cost_base": weighted_unit_cost,
+                "total_cost": total_to_move * weighted_unit_cost,
+                "reference_id": transfer_id,
+                "reference_type": "transfer_document",
+                "notes": f"Traslado automático desde almacén {doc.origin_warehouse_id}",
+                "created_by": user.id
+            }).execute()
+            
+            # Update overall stock at destination
+            stock_dest_res = db.table("stock").select("id, qty_base").eq("warehouse_id", str(doc.destination_warehouse_id)).eq("item_id", str(line.item_id)).execute()
+            if stock_dest_res.data:
+                new_dest_qty = float(stock_dest_res.data[0]["qty_base"]) + total_to_move
+                db.table("stock").update({"qty_base": new_dest_qty}).eq("id", stock_dest_res.data[0]["id"]).execute()
+            else:
+                db.table("stock").insert({
+                    "warehouse_id": str(doc.destination_warehouse_id),
+                    "item_id": str(line.item_id),
+                    "qty_base": total_to_move
+                }).execute()
+
+    return header_res.data[0]
 
     return header_res.data[0]
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { adminApi, Warehouse, InventoryItem, UOMPresentation } from '@/lib/api';
 import { Plus, Trash2, Save, Loader2, ArrowLeft, ClipboardList, ArrowRightLeft, Search, Package, Calendar } from 'lucide-react';
 import Link from 'next/link';
@@ -8,6 +8,8 @@ import { useRouter } from 'next/navigation';
 import ConfirmationModal from '@/components/ConfirmationModal';
 import { createClient } from '@/utils/supabase/client';
 import { useTranslations } from '@/components/I18nProvider';
+import { useReactToPrint } from 'react-to-print';
+import { MovementPrint } from '@/components/inventory/MovementPrint';
 
 export default function CreateTransferPage() {
   const router = useRouter();
@@ -23,10 +25,27 @@ export default function CreateTransferPage() {
   const [destinationWarehouseId, setDestinationWarehouseId] = useState('');
   const [notes, setNotes] = useState('');
   const [transferDate, setTransferDate] = useState(new Date().toISOString().split('T')[0]);
+  const [autoConfirm, setAutoConfirm] = useState(false);
   
   const [lines, setLines] = useState<(Partial<{ item_id: string; qty_sent_presentation: number; presentation_id: string | null; searchQuery: string; showSuggestions: boolean }>)[]>([
     { item_id: '', qty_sent_presentation: 0, presentation_id: '', searchQuery: '', showSuggestions: false }
   ]);
+
+  // Printing state
+  const printRef = useRef<HTMLDivElement>(null);
+  const [lastSavedData, setLastSavedData] = useState<any>(null);
+
+  const handlePrint = useReactToPrint({
+    contentRef: printRef,
+    documentTitle: `Traslado-${new Date().getTime()}`,
+    onAfterPrint: () => router.push('/admin/inventory/kardex')
+  });
+
+  useEffect(() => {
+    if (lastSavedData && printRef.current) {
+        handlePrint();
+    }
+  }, [lastSavedData]);
 
   // Error modal state
   const [errorModal, setErrorModal] = useState<{ isOpen: boolean; message: string }>({
@@ -110,6 +129,7 @@ export default function CreateTransferPage() {
         origin_warehouse_id: originWarehouseId,
         destination_warehouse_id: destinationWarehouseId,
         notes,
+        auto_confirm: autoConfirm,
         lines: lines.map(line => ({
           item_id: line.item_id!,
           presentation_id: line.presentation_id === '' ? null : line.presentation_id,
@@ -117,8 +137,26 @@ export default function CreateTransferPage() {
         }))
       };
 
-      await adminApi.createTransfer(payload);
-      router.push('/admin/inventory/kardex');
+      const res = await adminApi.createTransfer(payload);
+      
+      // Setup print data
+      const origin = warehouses.find(w => w.id === originWarehouseId);
+      const dest = warehouses.find(w => w.id === destinationWarehouseId);
+
+      setLastSavedData({
+          id: res.id,
+          type: 'transfer',
+          warehouseName: origin?.name || 'Origen',
+          destinationName: dest?.name || 'Destino',
+          notes,
+          autoConfirm,
+          createdAt: new Date().toISOString(),
+          lines: lines.map(l => ({
+              itemName: items.find(i => i.id === l.item_id)?.name || 'Artículo',
+              qty: l.qty_sent_presentation,
+              uom: l.presentation_id ? itemPresentations[l.item_id!]?.find(p => p.id === l.presentation_id)?.name : (items.find(i => i.id === l.item_id)?.uom_name || 'Unidad')
+          }))
+      });
     } catch (error: any) {
       setErrorModal({
         isOpen: true,
@@ -190,6 +228,19 @@ export default function CreateTransferPage() {
               className="w-full bg-surface border border-border rounded-xl px-4 py-3 text-sm text-text-primary outline-none focus:border-primary min-h-[80px]"
               placeholder="Ej: Reabastecimiento de producción..."
             />
+          </div>
+          
+          <div className="md:col-span-3 flex items-center gap-3 bg-surface-raised p-4 rounded-xl border border-border">
+            <div 
+                onClick={() => setAutoConfirm(!autoConfirm)}
+                className={`w-12 h-6 rounded-full relative transition-all cursor-pointer ${autoConfirm ? 'bg-success' : 'bg-text-disabled'}`}
+            >
+                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${autoConfirm ? 'left-7' : 'left-1'}`} />
+            </div>
+            <div>
+                <p className="text-sm font-bold text-text-primary">Recibir Automáticamente</p>
+                <p className="text-[10px] text-text-secondary uppercase tracking-tighter">Evita la confirmación manual en destino</p>
+            </div>
           </div>
         </div>
 
@@ -338,6 +389,20 @@ export default function CreateTransferPage() {
         onConfirm={() => setErrorModal({ ...errorModal, isOpen: false })}
         onCancel={() => setErrorModal({ ...errorModal, isOpen: false })}
       />
+
+      {/* Hidden print container */}
+      <div className="hidden">
+        {lastSavedData && (
+          <MovementPrint 
+            ref={printRef}
+            type="issue" 
+            data={{
+                ...lastSavedData,
+                reason: `Traslado a ${lastSavedData.destinationName}${lastSavedData.autoConfirm ? ' (AUTO)' : ''}`
+            }}
+          />
+        )}
+      </div>
     </div>
   );
 }

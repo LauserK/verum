@@ -171,53 +171,62 @@ export default function KardexPage() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-20 px-4">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+        <div className="flex items-center gap-3 shrink-0">
           <Link href="/admin/inventory" className="p-2 hover:bg-surface-raised rounded-full transition-colors">
               <ArrowLeft className="w-5 h-5 text-text-secondary" />
           </Link>
           <div>
-            <h1 className="text-2xl font-bold text-text-primary">Kardex de Inventario</h1>
-            <p className="text-sm text-text-secondary">Historial detallado de movimientos por lote (PEPS)</p>
+            <h1 className="text-xl font-bold text-text-primary">Kardex de Inventario</h1>
+            <p className="text-[11px] text-text-secondary">Movimientos por lote (PEPS)</p>
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          <button 
-            onClick={() => setShowHistory(true)}
-            className="p-2.5 bg-surface-raised border border-border text-primary rounded-xl hover:bg-surface transition-all shadow-sm"
-            title="Ver Historial Documentos"
-          >
-            <History className="w-5 h-5" />
-          </button>
-          <Link 
-            href="/admin/inventory/movements/transfers/pending"
-            className="flex items-center gap-2 border border-primary text-primary px-4 h-11 rounded-xl text-sm font-bold hover:bg-primary/5 transition-all shadow-sm"
-          >
-            <ArrowRightLeft className="w-4 h-4" />
-            Traslados Pendientes
-          </Link>
-          <Link 
-            href="/admin/inventory/movements/transfers/create"
-            className="flex items-center gap-2 border border-border text-text-primary px-4 h-11 rounded-xl text-sm font-bold hover:bg-surface-raised transition-all"
-          >
-            <ArrowRightLeft className="w-4 h-4 text-warning" />
-            Nuevo Traslado
-          </Link>
-          <Link 
-            href="/admin/inventory/movements/receipts"
-            className="flex items-center gap-2 border border-border text-text-primary px-4 h-11 rounded-xl text-sm font-bold hover:bg-surface-raised transition-all"
-          >
-            <ArrowUpRight className="w-4 h-4 text-success" />
-            Registrar Ingreso
-          </Link>
-          <Link 
-            href="/admin/inventory/movements/issues"
-            className="flex items-center gap-2 border border-border text-text-primary px-4 h-11 rounded-xl text-sm font-bold hover:bg-surface-raised transition-all"
-          >
-            <ArrowDownRight className="w-4 h-4 text-error" />
-            Registrar Egreso
-          </Link>
+        <div className="flex items-center gap-2 md:flex-nowrap flex-wrap">
+          {/* Grupo de Consulta y Estado */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button 
+              onClick={() => setShowHistory(true)}
+              className="p-2 bg-surface-raised border border-border text-primary rounded-xl hover:bg-surface transition-all shadow-sm"
+              title="Ver Historial Documentos"
+            >
+              <History className="w-4.5 h-4.5" />
+            </button>
+            <Link 
+              href="/admin/inventory/movements/transfers/pending"
+              className="flex items-center gap-1.5 border border-primary text-primary px-3 h-10 rounded-xl text-[11px] font-bold hover:bg-primary/5 transition-all shadow-sm whitespace-nowrap"
+            >
+              <ArrowRightLeft className="w-3.5 h-3.5" />
+              Traslados Pendientes
+            </Link>
+          </div>
+
+          <div className="hidden md:block w-px h-6 bg-border mx-0.5 shrink-0" />
+
+          {/* Grupo de Acciones de Registro */}
+          <div className="flex items-center gap-1.5 md:flex-nowrap flex-wrap">
+            <Link 
+              href="/admin/inventory/movements/transfers/create"
+              className="flex items-center gap-1.5 border border-border text-text-primary px-3 h-10 rounded-xl text-[11px] font-bold hover:bg-surface-raised transition-all whitespace-nowrap"
+            >
+              <ArrowRightLeft className="w-3.5 h-3.5 text-warning" />
+              Nuevo Traslado
+            </Link>
+            <Link 
+              href="/admin/inventory/movements/receipts"
+              className="flex items-center gap-1.5 border border-border text-text-primary px-3 h-10 rounded-xl text-[11px] font-bold hover:bg-surface-raised transition-all whitespace-nowrap"
+            >
+              <ArrowUpRight className="w-3.5 h-3.5 text-success" />
+              Registrar Ingreso
+            </Link>
+            <Link 
+              href="/admin/inventory/movements/issues"
+              className="flex items-center gap-1.5 border border-border text-text-primary px-3 h-10 rounded-xl text-[11px] font-bold hover:bg-surface-raised transition-all whitespace-nowrap"
+            >
+              <ArrowDownRight className="w-3.5 h-3.5 text-error" />
+              Registrar Egreso
+            </Link>
+          </div>
         </div>
       </div>
 
