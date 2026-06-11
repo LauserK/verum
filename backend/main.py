@@ -4022,10 +4022,22 @@ async def create_purchase_receipt(receipt: PurchaseReceiptCreate, org_id: str = 
 
 @app.post("/inventory/issue-documents", response_model=IssueDocumentResponse, tags=["Inventory"])
 async def create_issue_document(doc: IssueDocumentCreate, org_id: str = Depends(get_active_org_id), user=Depends(get_current_user), db=Depends(get_db), _=Depends(require_permission("inventory.issue"))):
-    # Reference ID for movements
-    reference_id = str(uuid.uuid4())
+    # 1. Create the issue header
+    header_data = {
+        "org_id": org_id,
+        "warehouse_id": str(doc.warehouse_id),
+        "reason": doc.reason,
+        "notes": doc.notes,
+        "status": "confirmed",
+        "created_by": user.id
+    }
+    header_res = db.table("issue_documents").insert(header_data).execute()
+    if not header_res.data:
+        raise HTTPException(status_code=400, detail="Error creating issue document header")
     
-    # Process lines with FIFO logic
+    doc_id = header_res.data[0]["id"]
+    
+    # 2. Process lines with FIFO logic
     for line in doc.lines:
         # Get presentation for conversion
         factor = 1.0
@@ -4035,6 +4047,17 @@ async def create_issue_document(doc: IssueDocumentCreate, org_id: str = Depends(
                 factor = float(pres_res.data[0]["conversion_factor"])
 
         total_to_consume = float(line.qty_presentation) * factor
+        
+        # Create issue line
+        line_data = {
+            "issue_id": doc_id,
+            "item_id": str(line.item_id),
+            "qty_base": total_to_consume,
+            "presentation_id": str(line.presentation_id) if line.presentation_id else None,
+            "qty_presentation": float(line.qty_presentation)
+        }
+        db.table("issue_document_lines").insert(line_data).execute()
+
         # FIFO logic: get oldest non-exhausted lots
         lots_res = db.table("stock_lots") \
             .select("*") \
@@ -4069,7 +4092,7 @@ async def create_issue_document(doc: IssueDocumentCreate, org_id: str = Depends(
                 "qty_base": -consume_qty, # Negative for exits
                 "unit_cost_base": float(lot["unit_cost_base"]),
                 "total_cost": -consume_qty * float(lot["unit_cost_base"]),
-                "reference_id": reference_id,
+                "reference_id": doc_id,
                 "reference_type": "issue_document",
                 "notes": doc.notes,
                 "created_by": user.id
@@ -4084,7 +4107,7 @@ async def create_issue_document(doc: IssueDocumentCreate, org_id: str = Depends(
             new_qty = max(0, float(stock_res.data[0]["qty_base"]) - total_to_consume)
             db.table("stock").update({"qty_base": new_qty}).eq("id", stock_res.data[0]["id"]).execute()
 
-    return {"id": reference_id, "status": "confirmed", "warehouse_id": doc.warehouse_id, "created_at": datetime.now(CARACAS_TZ).isoformat()}
+    return header_res.data[0]
 
 @app.get("/inventory/kardex", response_model=List[StockMovementResponse], tags=["Inventory"])
 async def get_kardex(item_id: Optional[UUID] = None, warehouse_id: Optional[UUID] = None, org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
