@@ -4098,6 +4098,24 @@ async def get_kardex(item_id: Optional[UUID] = None, warehouse_id: Optional[UUID
     res = query.order("created_at", desc=True).execute()
     return res.data
 
+@app.get("/inventory/purchase-receipts", tags=["Inventory"])
+async def list_purchase_receipts(org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
+    res = db.table("purchase_receipts") \
+        .select("*, warehouses(name)") \
+        .eq("org_id", org_id) \
+        .order("created_at", desc=True) \
+        .execute()
+    return res.data or []
+
+@app.get("/inventory/issue-documents", tags=["Inventory"])
+async def list_issue_documents(org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
+    res = db.table("issue_documents") \
+        .select("*, warehouses(name)") \
+        .eq("org_id", org_id) \
+        .order("created_at", desc=True) \
+        .execute()
+    return res.data or []
+
 @app.get("/inventory/purchase-receipts/{receipt_id}", tags=["Inventory"])
 async def get_purchase_receipt_detail(receipt_id: UUID, db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
     # Get header with warehouse name

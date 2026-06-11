@@ -670,6 +670,12 @@ export const adminApi = {
     createPurchaseReceipt: (data: Partial<PurchaseReceipt>): Promise<PurchaseReceipt> =>
         fetchWithAuth('/inventory/purchase-receipts', { method: 'POST', body: JSON.stringify(data) }),
 
+    getPurchaseReceipts: (): Promise<any[]> =>
+        fetchWithAuth('/inventory/purchase-receipts'),
+
+    getIssueDocuments: (): Promise<any[]> =>
+        fetchWithAuth('/inventory/issue-documents'),
+
     createIssueDocument: (data: Partial<IssueDocument>): Promise<IssueDocument> =>
         fetchWithAuth('/inventory/issue-documents', { method: 'POST', body: JSON.stringify(data) }),
 

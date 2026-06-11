@@ -2,11 +2,12 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { adminApi, StockMovement, InventoryItem, Warehouse } from '@/lib/api';
-import { Loader2, ArrowLeft, Printer, ArrowUpRight, ArrowDownRight, History } from 'lucide-react';
+import { Loader2, ArrowLeft, Printer, ArrowUpRight, ArrowDownRight, History, Search } from 'lucide-react';
 import Link from 'next/link';
 import { useReactToPrint } from 'react-to-print';
 import { MovementPrint } from '@/components/inventory/MovementPrint';
 import MovementDetailModal from '@/components/inventory/MovementDetailModal';
+import DocumentsHistoryModal from '@/components/inventory/DocumentsHistoryModal';
 import ConfirmationModal from '@/components/ConfirmationModal';
 import { useTranslations } from '@/components/I18nProvider';
 
@@ -20,6 +21,9 @@ export default function KardexPage() {
   const [loading, setLoading] = useState(true);
   const [fetchingDetail, setFetchingDetail] = useState(false);
   const [filters, setFilters] = useState({ item_id: '', warehouse_id: '' });
+
+  // Modal history state
+  const [showHistory, setShowHistory] = useState(false);
 
   // Modal detail state
   const [showDetail, setShowDetail] = useState(false);
@@ -82,12 +86,13 @@ export default function KardexPage() {
     }
   }
 
-  async function fetchMovementDetail(movement: StockMovement) {
-    if (!movement.reference_id) return null;
+  async function fetchMovementDetail(movement: any) {
+    const referenceId = movement.reference_id || movement.id;
+    const referenceType = movement.reference_type || (movement.type === 'receipt' ? 'purchase_receipt' : 'issue_document');
     
     try {
-        if (movement.reference_type === 'purchase_receipt') {
-            const detail = await adminApi.getPurchaseReceipt(movement.reference_id);
+        if (referenceType === 'purchase_receipt') {
+            const detail = await adminApi.getPurchaseReceipt(referenceId);
             return {
                 type: 'receipt',
                 id: detail.header.id,
@@ -106,14 +111,14 @@ export default function KardexPage() {
                 }))
             };
         } else {
-            const lines = await adminApi.getMovementsByReference(movement.reference_id);
+            const lines = await adminApi.getMovementsByReference(referenceId);
             if (lines.length > 0) {
                 const first = lines[0];
                 return {
                     type: 'issue',
-                    id: movement.reference_id,
+                    id: referenceId,
                     warehouseName: (first as any).warehouses?.name || 'Almacén',
-                    reason: movement.movement_type === 'sale' ? 'Venta' : 'Ajuste / Salida',
+                    reason: (movement.reason) || (movement.movement_type === 'sale' ? 'Venta' : 'Ajuste / Salida'),
                     notes: movement.notes,
                     createdAt: movement.created_at,
                     lines: lines.map(l => ({
@@ -132,7 +137,7 @@ export default function KardexPage() {
     return null;
   }
 
-  async function handleShowDetail(movement: StockMovement) {
+  async function handleShowDetail(movement: any) {
     setFetchingDetail(true);
     try {
         const detail = await fetchMovementDetail(movement);
@@ -150,164 +155,136 @@ export default function KardexPage() {
     }
   }
 
-  async function handlePrintFromModal() {
-    setPrintData(selectedDetail);
-    setShowDetail(false);
-  }
-
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <div className="max-w-7xl mx-auto space-y-6 pb-20 px-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-            <Link href="/admin/inventory" className="p-2 hover:bg-surface-raised rounded-full transition-colors">
-                <ArrowLeft className="w-5 h-5 text-text-secondary" />
-            </Link>
-            <div>
-                <h1 className="text-2xl font-bold text-text-primary">Kardex de Inventario</h1>
-                <p className="text-sm text-text-secondary mt-1">Historial detallado de movimientos por lote (PEPS)</p>
-            </div>
+          <Link href="/admin/inventory" className="p-2 hover:bg-surface-raised rounded-full transition-colors">
+              <ArrowLeft className="w-5 h-5 text-text-secondary" />
+          </Link>
+          <div>
+            <h1 className="text-2xl font-bold text-text-primary">Kardex de Inventario</h1>
+            <p className="text-sm text-text-secondary">Historial detallado de movimientos por lote (PEPS)</p>
+          </div>
         </div>
-        <div className="flex gap-2">
-            <Link 
-                href="/admin/inventory/movements/receipts"
-                className="flex items-center gap-2 border border-border text-text-primary px-4 h-10 rounded-xl text-sm font-medium hover:bg-surface-raised transition-colors"
-            >
-                <ArrowUpRight className="w-4 h-4 text-success" />
-                Registrar Ingreso
-            </Link>
-            <Link 
-                href="/admin/inventory/movements/issues"
-                className="flex items-center gap-2 border border-border text-text-primary px-4 h-10 rounded-xl text-sm font-medium hover:bg-surface-raised transition-all"
-            >
-                <ArrowDownRight className="w-4 h-4 text-error" />
-                Registrar Egreso
-            </Link>
+
+        <div className="flex flex-wrap gap-3">
+          <button 
+            onClick={() => setShowHistory(true)}
+            className="px-5 h-11 bg-surface-raised border border-border text-text-primary rounded-xl font-bold text-sm hover:bg-surface transition-all flex items-center gap-2"
+          >
+            <History className="w-4 h-4 text-primary" />
+            Ver Historial Documentos
+          </button>
+          <Link 
+            href="/admin/inventory/movements/receipts"
+            className="px-5 h-11 border border-primary text-primary rounded-xl font-bold text-sm hover:bg-primary/5 transition-all flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            Registrar Ingreso
+          </Link>
+          <Link 
+            href="/admin/inventory/movements/issues"
+            className="px-5 h-11 bg-primary text-text-inverse rounded-xl font-bold text-sm hover:bg-primary-hover transition-all flex items-center gap-2 shadow-lg shadow-primary/20"
+          >
+            <ArrowDownRight className="w-4 h-4" />
+            Registrar Egreso
+          </Link>
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="bg-surface rounded-2xl border border-border p-4 shadow-sm flex flex-wrap gap-4">
-          <div className="flex-1 min-w-[200px]">
-              <label className="block text-[10px] font-bold text-text-secondary uppercase tracking-widest mb-1.5 ml-1">Filtrar por Artículo</label>
-              <select 
-                value={filters.item_id}
-                onChange={e => setFilters({...filters, item_id: e.target.value})}
-                className="w-full bg-surface-raised border border-border rounded-xl px-3 h-10 text-sm outline-none focus:border-primary"
-              >
-                  <option value="">Todos los artículos</option>
-                  {items.map(item => (
-                      <option key={item.id} value={item.id}>{item.name}</option>
-                  ))}
-              </select>
+      {/* Filtros */}
+      <div className="bg-surface rounded-2xl border border-border p-6 shadow-sm">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-text-secondary uppercase tracking-widest px-1">Artículo</label>
+            <select 
+              value={filters.item_id}
+              onChange={e => setFilters({ ...filters, item_id: e.target.value })}
+              className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary outline-none focus:border-primary appearance-none cursor-pointer"
+            >
+              <option value="">Todos los artículos</option>
+              {items.map(item => (
+                <option key={item.id} value={item.id}>{item.name}</option>
+              ))}
+            </select>
           </div>
-          <div className="flex-1 min-w-[200px]">
-              <label className="block text-[10px] font-bold text-text-secondary uppercase tracking-widest mb-1.5 ml-1">Filtrar por Almacén</label>
-              <select 
-                value={filters.warehouse_id}
-                onChange={e => setFilters({...filters, warehouse_id: e.target.value})}
-                className="w-full bg-surface-raised border border-border rounded-xl px-3 h-10 text-sm outline-none focus:border-primary"
-              >
-                  <option value="">Todos los almacenes</option>
-                  {warehouses.map(wh => (
-                      <option key={wh.id} value={wh.id}>{wh.name}</option>
-                  ))}
-              </select>
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-text-secondary uppercase tracking-widest px-1">Almacén</label>
+            <select 
+              value={filters.warehouse_id}
+              onChange={e => setFilters({ ...filters, warehouse_id: e.target.value })}
+              className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary outline-none focus:border-primary appearance-none cursor-pointer"
+            >
+              <option value="">Todos los almacenes</option>
+              {warehouses.map(wh => (
+                <option key={wh.id} value={wh.id}>{wh.name}</option>
+              ))}
+            </select>
           </div>
+        </div>
       </div>
 
+      {/* Tabla de Movimientos */}
       <div className="bg-surface rounded-2xl border border-border overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-surface-raised border-b border-border">
-                <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest">Fecha</th>
-                <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest">Tipo</th>
-                <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest">Almacén / Artículo</th>
-                <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest text-right">Cantidad</th>
-                <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest text-right">Total</th>
-                <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest text-center">Acciones</th>
+                <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest">Fecha / Hora</th>
+                <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest">Tipo</th>
+                <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest">Artículo</th>
+                <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest">Almacén</th>
+                <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest text-right">Cant. (Base)</th>
+                <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest">Referencia / Notas</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {loading ? (
-                  <tr>
-                      <td colSpan={6} className="p-12 text-center">
-                          <Loader2 className="animate-spin w-8 h-8 text-primary mx-auto mb-2" />
-                          <p className="text-text-secondary text-sm">Cargando movimientos...</p>
-                      </td>
-                  </tr>
-              ) : movements.map(m => (
-                <tr key={m.id} className="hover:bg-surface-raised transition-colors group">
+              {loading && movements.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="p-20 text-center"><Loader2 className="animate-spin w-8 h-8 text-primary mx-auto" /></td>
+                </tr>
+              ) : movements.map((m) => (
+                <tr key={m.id} className="hover:bg-surface-raised/50 transition-colors">
                   <td className="p-4 whitespace-nowrap">
                       <p className="text-sm font-medium text-text-primary">
-                          {new Date(m.created_at).toLocaleDateString()}
+                        {new Date(m.created_at).toLocaleDateString()}
                       </p>
-                      <p className="text-[10px] text-text-secondary">
-                          {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      <p className="text-[10px] text-text-secondary uppercase">
+                        {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </p>
                   </td>
                   <td className="p-4">
                       <div className="flex items-center gap-2">
                         {m.qty_base > 0 ? (
-                            <ArrowUpRight className="w-3 h-3 text-success" />
+                          <ArrowUpRight className="w-4 h-4 text-success" />
                         ) : (
-                            <ArrowDownRight className="w-3 h-3 text-error" />
+                          <ArrowDownRight className="w-4 h-4 text-error" />
                         )}
-                        <span className={`text-xs font-bold ${m.qty_base > 0 ? 'text-success' : 'text-error'}`}>
-                            {tMov.t(m.movement_type)}
+                        <span className={`text-xs font-bold uppercase ${m.qty_base > 0 ? 'text-success' : 'text-error'}`}>
+                          {tMov.t(m.movement_type)}
                         </span>
                       </div>
                   </td>
                   <td className="p-4">
                       <p className="text-sm font-bold text-text-primary">
-                          {items.find(i => i.id === m.item_id)?.name || 'Artículo'}
+                        {items.find(i => i.id === m.item_id)?.name || 'Artículo'}
                       </p>
                       <p className="text-[10px] text-text-secondary uppercase">
-                          {warehouses.find(w => w.id === m.warehouse_id)?.name || 'Almacén'}
+                        {items.find(i => i.id === m.item_id)?.code || '---'}
                       </p>
                   </td>
-                  <td className="p-4 text-right">
-                      <span className={`text-sm font-mono font-bold ${m.qty_base > 0 ? 'text-text-primary' : 'text-text-primary'}`}>
-                          {m.qty_base > 0 ? '+' : ''}{m.qty_base.toFixed(2)}
-                      </span>
+                  <td className="p-4">
+                      <p className="text-sm font-medium text-text-primary">
+                        {warehouses.find(w => w.id === m.warehouse_id)?.name || 'Almacén'}
+                      </p>
                   </td>
-                  <td className="p-4 text-right">
-                      <span className="text-sm font-bold text-text-primary font-mono">
-                          ${Math.abs(m.total_cost || 0).toFixed(2)}
-                      </span>
+                  <td className={`p-4 text-sm font-mono font-bold text-right ${m.qty_base > 0 ? 'text-text-primary' : 'text-text-primary'}`}>
+                      {m.qty_base > 0 ? '+' : ''}{m.qty_base.toFixed(2)}
                   </td>
-                  <td className="p-4 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        {m.reference_id && (
-                          <>
-                            <button 
-                                onClick={() => handleShowDetail(m)}
-                                disabled={fetchingDetail}
-                                className="p-2 text-text-secondary hover:text-primary hover:bg-primary/5 rounded-lg transition-all"
-                                title="Ver detalle del documento"
-                            >
-                                {fetchingDetail && selectedDetail?.id === m.reference_id ? (
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                ) : (
-                                    <History className="w-4 h-4" />
-                                )}
-                            </button>
-                            <button 
-                                onClick={() => {
-                                    handleShowDetail(m).then(() => {
-                                        // We can't easily chain here without refs or state, 
-                                        // so we rely on the modal's print button if needed or just handleRePrint
-                                    })
-                                    handleRePrint(m)
-                                }}
-                                className="p-2 text-text-secondary hover:text-primary hover:bg-primary/5 rounded-lg transition-all"
-                                title="Re-imprimir comprobante original"
-                            >
-                                <Printer className="w-4 h-4" />
-                            </button>
-                          </>
-                        )}
-                      </div>
+                  <td className="p-4">
+                      <p className="text-xs text-text-primary font-medium">{m.notes || '---'}</p>
+                      <p className="text-[10px] text-text-secondary font-mono truncate max-w-[120px]">REF: {m.reference_id?.slice(0, 8) || '---'}</p>
                   </td>
                 </tr>
               ))}
@@ -323,6 +300,13 @@ export default function KardexPage() {
           </table>
         </div>
       </div>
+
+      {/* History Modal */}
+      <DocumentsHistoryModal 
+        isOpen={showHistory}
+        onClose={() => setShowHistory(false)}
+        onViewDetail={handleShowDetail}
+      />
 
       {/* Detail Modal */}
       <MovementDetailModal 
@@ -344,7 +328,7 @@ export default function KardexPage() {
 
       <ConfirmationModal 
         isOpen={errorModal.isOpen}
-        title="Error al imprimir"
+        title="Error"
         message={errorModal.message}
         confirmLabel="Entendido"
         cancelLabel=""
