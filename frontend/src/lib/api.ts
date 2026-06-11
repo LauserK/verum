@@ -685,6 +685,20 @@ export const adminApi = {
     getIssueDocument: (id: string): Promise<{ header: any; lines: any[] }> =>
         fetchWithAuth(`/inventory/issue-documents/${id}`),
 
+    createTransfer: (data: any): Promise<any> =>
+        fetchWithAuth('/inventory/transfers', { method: 'POST', body: JSON.stringify(data) }),
+
+    confirmTransfer: (id: string, data: any): Promise<any> =>
+        fetchWithAuth(`/inventory/transfers/${id}/confirm`, { method: 'PATCH', body: JSON.stringify(data) }),
+
+    getPendingTransfers: (warehouseId?: string): Promise<any[]> => {
+        const url = warehouseId ? `/inventory/transfers/pending?warehouse_id=${warehouseId}` : '/inventory/transfers/pending';
+        return fetchWithAuth(url);
+    },
+
+    getTransferDetail: (id: string): Promise<any> =>
+        fetchWithAuth(`/inventory/transfers/${id}`),
+
     getMovementsByReference: (referenceId: string): Promise<StockMovement[]> =>
         fetchWithAuth(`/inventory/movements/reference/${referenceId}`),
 
