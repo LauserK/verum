@@ -272,6 +272,28 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
 
           {activeTab === 'warehouses' && (
               <div className="space-y-6 animate-in fade-in">
+                  {itemStock.length > 0 && (
+                      <div className="bg-primary/5 rounded-2xl border border-primary/20 p-6 flex items-center justify-between">
+                          <div className="flex items-center gap-4">
+                              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                                  <Package className="w-6 h-6 text-primary" />
+                              </div>
+                              <div>
+                                  <h3 className="font-bold text-text-primary text-lg">Stock Total</h3>
+                                  <p className="text-sm text-text-secondary">Suma de existencias en todos los almacenes</p>
+                              </div>
+                          </div>
+                          <div className="text-right">
+                              <p className="text-3xl font-black text-primary font-mono">
+                                  {itemStock.reduce((acc, s) => acc + (s.qty_base || 0), 0).toFixed(2)}
+                              </p>
+                              <p className="text-[10px] text-primary font-bold uppercase tracking-widest">
+                                  {uoms.find(u => u.id === item.base_uom_id)?.code}
+                              </p>
+                          </div>
+                      </div>
+                  )}
+
                   <div className="bg-surface rounded-2xl border border-border p-6 shadow-sm">
                       <div className="flex justify-between items-center mb-6">
                         <h3 className="text-lg font-bold text-text-primary">Stock por Almacén</h3>
