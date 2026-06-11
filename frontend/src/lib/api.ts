@@ -910,6 +910,7 @@ export interface PurchaseReceipt {
     warehouse_id: string
     supplier: string | null
     receipt_number: string | null
+    date?: string
     status: string
     lines: PurchaseReceiptLine[]
     created_at: string

@@ -6,6 +6,7 @@ import { Loader2, ArrowLeft, Printer, ArrowUpRight, ArrowDownRight, History } fr
 import Link from 'next/link';
 import { useReactToPrint } from 'react-to-print';
 import { MovementPrint } from '@/components/inventory/MovementPrint';
+import MovementDetailModal from '@/components/inventory/MovementDetailModal';
 import ConfirmationModal from '@/components/ConfirmationModal';
 import { useTranslations } from '@/components/I18nProvider';
 
@@ -17,8 +18,12 @@ export default function KardexPage() {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   
   const [loading, setLoading] = useState(true);
-  const [printing, setPrinting] = useState(false);
+  const [fetchingDetail, setFetchingDetail] = useState(false);
   const [filters, setFilters] = useState({ item_id: '', warehouse_id: '' });
+
+  // Modal detail state
+  const [showDetail, setShowDetail] = useState(false);
+  const [selectedDetail, setSelectedDetail] = useState<any>(null);
 
   // Error modal state
   const [errorModal, setErrorModal] = useState<{ isOpen: boolean; message: string }>({
@@ -35,7 +40,6 @@ export default function KardexPage() {
     documentTitle: `Documento-${printData?.receiptNumber || 'Ref'}`,
     onAfterPrint: () => {
         setPrintData(null);
-        setPrinting(false);
     }
   });
 
@@ -78,20 +82,20 @@ export default function KardexPage() {
     }
   }
 
-  async function handleRePrint(movement: StockMovement) {
-    if (!movement.reference_id) return;
+  async function fetchMovementDetail(movement: StockMovement) {
+    if (!movement.reference_id) return null;
     
-    setPrinting(true);
     try {
         if (movement.reference_type === 'purchase_receipt') {
             const detail = await adminApi.getPurchaseReceipt(movement.reference_id);
-            setPrintData({
+            return {
                 type: 'receipt',
                 id: detail.header.id,
                 warehouseName: detail.header.warehouses?.name || 'Almacén',
                 supplier: detail.header.supplier,
                 receiptNumber: detail.header.receipt_number,
                 createdAt: detail.header.confirmed_at || detail.header.created_at,
+                date: detail.header.date,
                 notes: detail.header.notes,
                 lines: detail.lines.map((l: any) => ({
                     itemName: l.items?.name || 'Artículo',
@@ -100,12 +104,12 @@ export default function KardexPage() {
                     cost: l.unit_cost_base * (l.qty_base / l.qty_presentation),
                     lot: l.lot_number
                 }))
-            });
+            };
         } else {
             const lines = await adminApi.getMovementsByReference(movement.reference_id);
             if (lines.length > 0) {
                 const first = lines[0];
-                setPrintData({
+                return {
                     type: 'issue',
                     id: movement.reference_id,
                     warehouseName: (first as any).warehouses?.name || 'Almacén',
@@ -118,17 +122,37 @@ export default function KardexPage() {
                         uom: 'Unidad Base',
                         lot: (l as any).stock_lots?.lot_number
                     }))
-                });
+                };
             }
         }
     } catch (error: any) {
-        console.error('Print error:', error);
+        console.error('Detail fetch error:', error);
+        throw error;
+    }
+    return null;
+  }
+
+  async function handleShowDetail(movement: StockMovement) {
+    setFetchingDetail(true);
+    try {
+        const detail = await fetchMovementDetail(movement);
+        if (detail) {
+            setSelectedDetail(detail);
+            setShowDetail(true);
+        }
+    } catch (error: any) {
         setErrorModal({
             isOpen: true,
-            message: `No se pudo obtener el documento original: ${error.message || 'Error de conexión'}`
+            message: `No se pudo obtener el detalle del documento: ${error.message}`
         });
-        setPrinting(false);
+    } finally {
+        setFetchingDetail(false);
     }
+  }
+
+  async function handlePrintFromModal() {
+    setPrintData(selectedDetail);
+    setShowDetail(false);
   }
 
   return (
@@ -253,16 +277,37 @@ export default function KardexPage() {
                       </span>
                   </td>
                   <td className="p-4 text-center">
-                      {m.reference_id && (
-                        <button 
-                            onClick={() => handleRePrint(m)}
-                            disabled={printing}
-                            className="p-2 text-text-secondary hover:text-primary hover:bg-primary/5 rounded-lg transition-all"
-                            title="Re-imprimir comprobante original"
-                        >
-                            {printing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
-                        </button>
-                      )}
+                      <div className="flex items-center justify-center gap-1">
+                        {m.reference_id && (
+                          <>
+                            <button 
+                                onClick={() => handleShowDetail(m)}
+                                disabled={fetchingDetail}
+                                className="p-2 text-text-secondary hover:text-primary hover:bg-primary/5 rounded-lg transition-all"
+                                title="Ver detalle del documento"
+                            >
+                                {fetchingDetail && selectedDetail?.id === m.reference_id ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                    <History className="w-4 h-4" />
+                                )}
+                            </button>
+                            <button 
+                                onClick={() => {
+                                    handleShowDetail(m).then(() => {
+                                        // We can't easily chain here without refs or state, 
+                                        // so we rely on the modal's print button if needed or just handleRePrint
+                                    })
+                                    handleRePrint(m)
+                                }}
+                                className="p-2 text-text-secondary hover:text-primary hover:bg-primary/5 rounded-lg transition-all"
+                                title="Re-imprimir comprobante original"
+                            >
+                                <Printer className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
+                      </div>
                   </td>
                 </tr>
               ))}
@@ -278,6 +323,13 @@ export default function KardexPage() {
           </table>
         </div>
       </div>
+
+      {/* Detail Modal */}
+      <MovementDetailModal 
+        isOpen={showDetail}
+        onClose={() => setShowDetail(false)}
+        data={selectedDetail}
+      />
 
       {/* Hidden print container */}
       <div className="hidden">

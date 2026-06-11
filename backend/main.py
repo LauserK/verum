@@ -3935,6 +3935,7 @@ async def create_purchase_receipt(receipt: PurchaseReceiptCreate, org_id: str = 
         "warehouse_id": str(receipt.warehouse_id),
         "supplier": receipt.supplier,
         "receipt_number": receipt.receipt_number,
+        "date": receipt.date,
         "status": "confirmed", # Directly confirmed for M17 simplicity
         "created_by": user.id,
         "confirmed_at": datetime.now(CARACAS_TZ).isoformat()

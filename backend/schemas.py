@@ -512,6 +512,7 @@ class PurchaseReceiptCreate(BaseModel):
     warehouse_id: UUID
     supplier: Optional[str] = None
     receipt_number: Optional[str] = None
+    date: Optional[str] = None
     lines: List[PurchaseReceiptLineCreate]
 
 class PurchaseReceiptResponse(BaseModel):
