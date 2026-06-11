@@ -73,7 +73,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function useTranslations(namespace?: keyof Translations) {
+export function useTranslations(namespace?: string) {
   const context = useContext(I18nContext);
   if (!context) {
     throw new Error('useTranslations must be used within an I18nProvider');

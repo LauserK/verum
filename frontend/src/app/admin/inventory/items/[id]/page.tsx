@@ -16,6 +16,7 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
   const router = useRouter();
   const { id } = use(params);
   const { t } = useTranslations('inventory.items');
+  const { t: tMov } = useTranslations('inventory.movements');
   
   const [activeTab, setActiveTab] = useState<'general' | 'units' | 'warehouses' | 'history'>('general');
   const [loading, setLoading] = useState(true);
@@ -359,7 +360,7 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
                                       <div className="flex items-center gap-2">
                                           {m.qty_base > 0 ? <ArrowUpRight className="w-3 h-3 text-success" /> : <ArrowDownRight className="w-3 h-3 text-error" />}
                                           <span className={`text-xs font-bold uppercase ${m.qty_base > 0 ? 'text-success' : 'text-error'}`}>
-                                              {useTranslations('inventory.movements').t(m.movement_type)}
+                                              {tMov(m.movement_type)}
                                           </span>
                                       </div>
                                   </td>

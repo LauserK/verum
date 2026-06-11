@@ -10,7 +10,7 @@ export default function WarehousesPage() {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [newWarehouse, setNewWarehouse] = useState({ name: '', type: 'storage' });
+  const [newWarehouse, setNewWarehouse] = useState<{ name: string; type: Warehouse['type'] }>({ name: '', type: 'storage' });
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -125,7 +125,7 @@ export default function WarehousesPage() {
                 <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">{t('typeLabel')}</label>
                 <select 
                   value={newWarehouse.type}
-                  onChange={e => setNewWarehouse({...newWarehouse, type: e.target.value})}
+                  onChange={e => setNewWarehouse({...newWarehouse, type: e.target.value as Warehouse['type']})}
                   className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all appearance-none cursor-pointer"
                 >
                   <option value="storage">{t('types.storage')}</option>
