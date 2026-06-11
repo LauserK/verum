@@ -4142,8 +4142,8 @@ async def list_issue_documents(org_id: str = Depends(get_active_org_id), db=Depe
 
 @app.get("/inventory/purchase-receipts/{receipt_id}", tags=["Inventory"])
 async def get_purchase_receipt_detail(receipt_id: UUID, db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
-    # Get header with warehouse name
-    res_header = db.table("purchase_receipts").select("*, warehouses(name)").eq("id", str(receipt_id)).execute()
+    # Get header with warehouse and creator name
+    res_header = db.table("purchase_receipts").select("*, warehouses(name), profiles:created_by(full_name)").eq("id", str(receipt_id)).execute()
     if not res_header.data:
         raise HTTPException(status_code=404, detail="Receipt not found")
 
@@ -4160,8 +4160,8 @@ async def get_purchase_receipt_detail(receipt_id: UUID, db=Depends(get_db), _=De
 
 @app.get("/inventory/issue-documents/{issue_id}", tags=["Inventory"])
 async def get_issue_document_detail(issue_id: UUID, db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
-    # Get header with warehouse name
-    res_header = db.table("issue_documents").select("*, warehouses(name)").eq("id", str(issue_id)).execute()
+    # Get header with warehouse and creator name
+    res_header = db.table("issue_documents").select("*, warehouses(name), profiles:created_by(full_name)").eq("id", str(issue_id)).execute()
     if not res_header.data:
         raise HTTPException(status_code=404, detail="Issue document not found")
 
@@ -4466,7 +4466,7 @@ async def list_pending_transfers(warehouse_id: Optional[UUID] = None, org_id: st
 @app.get("/inventory/transfers/{transfer_id}", tags=["Inventory"])
 async def get_transfer_detail(transfer_id: UUID, db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
     res_header = db.table("transfer_documents") \
-        .select("*, origin:origin_warehouse_id(name), destination:destination_warehouse_id(name)") \
+        .select("*, origin:origin_warehouse_id(name), destination:destination_warehouse_id(name), profiles:created_by(full_name), confirmed_profile:confirmed_by(full_name)") \
         .eq("id", str(transfer_id)) \
         .execute()
         

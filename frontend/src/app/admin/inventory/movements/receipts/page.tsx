@@ -16,6 +16,7 @@ export default function ReceiptsPage() {
   const { t } = useTranslations();
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [items, setItems] = useState<InventoryItem[]>([]);
+  const [profile, setProfile] = useState<any>(null);
   
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -58,12 +59,14 @@ export default function ReceiptsPage() {
 
   async function loadData() {
     try {
-      const [whData, itemsData] = await Promise.all([
+      const [whData, itemsData, profileData] = await Promise.all([
         adminApi.getInventoryWarehouses(),
-        adminApi.getInventoryItems()
+        adminApi.getInventoryItems(),
+        adminApi.getProfile()
       ]);
       setWarehouses(whData);
       setItems(itemsData);
+      setProfile(profileData);
 
       if (whData.length > 0) setWarehouseId(whData[0].id);
     } catch (error) {
@@ -140,6 +143,7 @@ export default function ReceiptsPage() {
             receiptNumber,
             date: receiptDate,
             createdAt: new Date().toISOString(),
+            createdBy: profile?.full_name || 'Usuario',
             lines: cleanedLines.map(l => {
                 const item = items.find(i => i.id === l.item_id);
                 const presentation = l.presentation_id ? itemPresentations[l.item_id!]?.find(p => p.id === l.presentation_id) : null;

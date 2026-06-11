@@ -45,6 +45,9 @@ export default function PendingTransfersPage() {
             destinationName: detail.header.destination?.name || 'Destino',
             notes: detail.header.notes,
             createdAt: detail.header.created_at,
+            createdBy: detail.header.profiles?.full_name || 'Sistema',
+            confirmedAt: detail.header.confirmed_at,
+            confirmedBy: detail.header.confirmed_profile?.full_name,
             lines: detail.lines.map((l: any) => ({
                 itemName: l.items?.name || 'Artículo',
                 qty: l.qty_sent_presentation,

@@ -16,6 +16,7 @@ export default function CreateTransferPage() {
   const { t } = useTranslations();
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [items, setItems] = useState<InventoryItem[]>([]);
+  const [profile, setProfile] = useState<any>(null);
   
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -59,12 +60,14 @@ export default function CreateTransferPage() {
 
   async function loadData() {
     try {
-      const [whData, itemsData] = await Promise.all([
+      const [whData, itemsData, profileData] = await Promise.all([
         adminApi.getInventoryWarehouses(),
-        adminApi.getInventoryItems()
+        adminApi.getInventoryItems(),
+        adminApi.getProfile()
       ]);
       setWarehouses(whData);
       setItems(itemsData);
+      setProfile(profileData);
       if (whData.length > 0) {
         setOriginWarehouseId(whData[0].id);
         if (whData.length > 1) setDestinationWarehouseId(whData[1].id);
@@ -151,6 +154,7 @@ export default function CreateTransferPage() {
           notes,
           autoConfirm,
           createdAt: new Date().toISOString(),
+          createdBy: profile?.full_name || 'Usuario',
           lines: lines.map(l => ({
               itemName: items.find(i => i.id === l.item_id)?.name || 'Artículo',
               qty: l.qty_sent_presentation,

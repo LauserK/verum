@@ -48,22 +48,11 @@ export const MovementPrint = forwardRef<HTMLDivElement, MovementPrintProps>(({ t
         <div className="text-right flex flex-col items-end">
           <h2 className="text-xl font-bold uppercase leading-none">{title}</h2>
           <p className="text-xs font-mono text-gray-600 mt-2">ID: {data.id?.slice(0, 8).toUpperCase() || '---'}</p>
-          
-          {isTransfer && data.id && (
-            <div className="mt-4 p-2 border border-gray-200 rounded-xl bg-white">
-                <QRCodeSVG 
-                    value={`${typeof window !== 'undefined' ? window.location.origin : ''}/admin/inventory/movements/transfers/${data.id}/confirm`}
-                    size={80}
-                    level="H"
-                />
-                <p className="text-[8px] font-bold text-center mt-1 text-gray-400">ESCANEAR PARA RECIBIR</p>
-            </div>
-          )}
         </div>
       </div>
 
       {/* Info Grid */}
-      <div className="grid grid-cols-2 gap-8 my-8 text-sm">
+      <div className="grid grid-cols-3 gap-8 my-8 text-sm">
         <div className="space-y-4">
           {isTransfer ? (
             <>
@@ -103,6 +92,20 @@ export const MovementPrint = forwardRef<HTMLDivElement, MovementPrintProps>(({ t
           </div>
         </div>
 
+        {/* QR Code Column (Centered) */}
+        <div className="flex flex-col items-center justify-center">
+            {isTransfer && data.id && (
+                <div className="p-3 border-2 border-gray-900 rounded-2xl bg-white shadow-sm flex flex-col items-center">
+                    <QRCodeSVG 
+                        value={`${typeof window !== 'undefined' ? window.location.origin : ''}/admin/inventory/movements/transfers/${data.id}/confirm`}
+                        size={100}
+                        level="H"
+                    />
+                    <p className="text-[9px] font-black text-center mt-2 text-gray-900 tracking-tighter">ESCANEAR PARA RECIBIR</p>
+                </div>
+            )}
+        </div>
+
         <div className="space-y-4 text-right">
           <div>
             <p className="font-bold uppercase text-[9px] text-gray-400 mb-0.5">Fecha y Hora</p>
@@ -117,13 +120,13 @@ export const MovementPrint = forwardRef<HTMLDivElement, MovementPrintProps>(({ t
           
           {isTransfer && (
             <div className="pt-2">
-              <div className="inline-block border-2 border-gray-900 p-2 text-right">
+              <div className="inline-block border-2 border-gray-900 p-3 text-right w-full">
                 <p className="font-bold uppercase text-[9px] text-gray-400 mb-1 text-left">Logística (Llenar a mano)</p>
-                <div className="space-y-2">
-                  <p className="text-[10px] border-b border-gray-200 pb-1">Encargado: ________________________</p>
-                  <div className="flex gap-4">
-                    <p className="text-[10px]">H. Salida: ________</p>
-                    <p className="text-[10px]">H. Llegada: ________</p>
+                <div className="space-y-3">
+                  <p className="text-[10px] border-b border-gray-200 pb-1">Encargado: ____________________</p>
+                  <div className="flex justify-between gap-2">
+                    <p className="text-[10px]">H. Salida: _______</p>
+                    <p className="text-[10px]">H. Llegada: _______</p>
                   </div>
                 </div>
               </div>
