@@ -111,30 +111,27 @@ export default function KardexPage() {
                 }))
             };
         } else {
-            const lines = await adminApi.getMovementsByReference(referenceId);
-            if (lines.length > 0) {
-                const first = lines[0];
-                return {
-                    type: 'issue',
-                    id: referenceId,
-                    warehouseName: (first as any).warehouses?.name || 'Almacén',
-                    reason: (movement.reason) || (movement.movement_type === 'sale' ? 'Venta' : 'Ajuste / Salida'),
-                    notes: movement.notes,
-                    createdAt: movement.created_at,
-                    lines: lines.map(l => ({
-                        itemName: (l as any).items?.name || 'Artículo',
-                        qty: Math.abs(l.qty_base),
-                        uom: 'Unidad Base',
-                        lot: (l as any).stock_lots?.lot_number
-                    }))
-                };
-            }
+            // Updated to use the specific detail endpoint for issue documents
+            const detail = await adminApi.getIssueDocument(referenceId);
+            return {
+                type: 'issue',
+                id: detail.header.id,
+                warehouseName: detail.header.warehouses?.name || 'Almacén',
+                reason: detail.header.reason === 'sale' ? 'Venta' : (detail.header.reason === 'adjustment' ? 'Ajuste' : 'Salida'),
+                notes: detail.header.notes,
+                createdAt: detail.header.created_at,
+                lines: detail.lines.map((l: any) => ({
+                    itemName: l.items?.name || 'Artículo',
+                    qty: l.qty_presentation,
+                    uom: l.uom_presentations?.name || 'Unidad Base',
+                    lot: null // Issue lines don't track lot directly in the document master yet
+                }))
+            };
         }
     } catch (error: any) {
         console.error('Detail fetch error:', error);
         throw error;
     }
-    return null;
   }
 
   async function handleShowDetail(movement: any) {

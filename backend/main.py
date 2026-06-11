@@ -4158,6 +4158,24 @@ async def get_purchase_receipt_detail(receipt_id: UUID, db=Depends(get_db), _=De
         "lines": res_lines.data
     }
 
+@app.get("/inventory/issue-documents/{issue_id}", tags=["Inventory"])
+async def get_issue_document_detail(issue_id: UUID, db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
+    # Get header with warehouse name
+    res_header = db.table("issue_documents").select("*, warehouses(name)").eq("id", str(issue_id)).execute()
+    if not res_header.data:
+        raise HTTPException(status_code=404, detail="Issue document not found")
+
+    # Get lines with item and presentation names
+    res_lines = db.table("issue_document_lines") \
+        .select("*, items(name, base_uom_id), uom_presentations(name)") \
+        .eq("issue_id", str(issue_id)) \
+        .execute()
+
+    return {
+        "header": res_header.data[0],
+        "lines": res_lines.data
+    }
+
 @app.get("/inventory/movements/reference/{reference_id}", tags=["Inventory"])
 async def get_movements_by_reference(reference_id: UUID, db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
     # Join with items, warehouses and also lot info if available

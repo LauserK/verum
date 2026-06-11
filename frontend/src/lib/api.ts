@@ -682,6 +682,9 @@ export const adminApi = {
     getPurchaseReceipt: (id: string): Promise<{ header: any; lines: any[] }> =>
         fetchWithAuth(`/inventory/purchase-receipts/${id}`),
 
+    getIssueDocument: (id: string): Promise<{ header: any; lines: any[] }> =>
+        fetchWithAuth(`/inventory/issue-documents/${id}`),
+
     getMovementsByReference: (referenceId: string): Promise<StockMovement[]> =>
         fetchWithAuth(`/inventory/movements/reference/${referenceId}`),
 
