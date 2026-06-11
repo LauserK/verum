@@ -191,6 +191,20 @@ export default function KardexPage() {
             <History className="w-5 h-5" />
           </button>
           <Link 
+            href="/admin/inventory/movements/transfers/pending"
+            className="flex items-center gap-2 border border-primary text-primary px-4 h-11 rounded-xl text-sm font-bold hover:bg-primary/5 transition-all shadow-sm"
+          >
+            <ArrowRightLeft className="w-4 h-4" />
+            Traslados Pendientes
+          </Link>
+          <Link 
+            href="/admin/inventory/movements/transfers/create"
+            className="flex items-center gap-2 border border-border text-text-primary px-4 h-11 rounded-xl text-sm font-bold hover:bg-surface-raised transition-all"
+          >
+            <ArrowRightLeft className="w-4 h-4 text-warning" />
+            Nuevo Traslado
+          </Link>
+          <Link 
             href="/admin/inventory/movements/receipts"
             className="flex items-center gap-2 border border-border text-text-primary px-4 h-11 rounded-xl text-sm font-bold hover:bg-surface-raised transition-all"
           >
