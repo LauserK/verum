@@ -168,26 +168,26 @@ export default function KardexPage() {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap gap-2">
           <button 
             onClick={() => setShowHistory(true)}
-            className="px-5 h-11 bg-surface-raised border border-border text-text-primary rounded-xl font-bold text-sm hover:bg-surface transition-all flex items-center gap-2"
+            className="p-2.5 bg-surface-raised border border-border text-primary rounded-xl hover:bg-surface transition-all shadow-sm"
+            title="Ver Historial Documentos"
           >
-            <History className="w-4 h-4 text-primary" />
-            Ver Historial Documentos
+            <History className="w-5 h-5" />
           </button>
           <Link 
             href="/admin/inventory/movements/receipts"
-            className="px-5 h-11 border border-primary text-primary rounded-xl font-bold text-sm hover:bg-primary/5 transition-all flex items-center gap-2"
+            className="flex items-center gap-2 border border-border text-text-primary px-4 h-11 rounded-xl text-sm font-bold hover:bg-surface-raised transition-all"
           >
-            <Plus className="w-4 h-4" />
+            <ArrowUpRight className="w-4 h-4 text-success" />
             Registrar Ingreso
           </Link>
           <Link 
             href="/admin/inventory/movements/issues"
-            className="px-5 h-11 bg-primary text-text-inverse rounded-xl font-bold text-sm hover:bg-primary-hover transition-all flex items-center gap-2 shadow-lg shadow-primary/20"
+            className="flex items-center gap-2 border border-border text-text-primary px-4 h-11 rounded-xl text-sm font-bold hover:bg-surface-raised transition-all"
           >
-            <ArrowDownRight className="w-4 h-4" />
+            <ArrowDownRight className="w-4 h-4 text-error" />
             Registrar Egreso
           </Link>
         </div>
