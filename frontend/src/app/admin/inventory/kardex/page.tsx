@@ -155,6 +155,23 @@ export default function KardexPage() {
     }
   }
 
+  async function handlePrintFromModal(doc: any) {
+    setFetchingDetail(true);
+    try {
+        const detail = await fetchMovementDetail(doc);
+        if (detail) {
+            setPrintData(detail);
+        }
+    } catch (error: any) {
+        setErrorModal({
+            isOpen: true,
+            message: `No se pudo generar el PDF: ${error.message}`
+        });
+    } finally {
+        setFetchingDetail(false);
+    }
+  }
+
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-20 px-4">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -306,6 +323,7 @@ export default function KardexPage() {
         isOpen={showHistory}
         onClose={() => setShowHistory(false)}
         onViewDetail={handleShowDetail}
+        onPrint={handlePrintFromModal}
       />
 
       {/* Detail Modal */}
