@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { adminApi, StockMovement, InventoryItem, Warehouse } from '@/lib/api';
-import { Loader2, ArrowLeft, Printer, ArrowUpRight, ArrowDownRight, History, Search, Plus } from 'lucide-react';
+import { Loader2, ArrowLeft, Printer, ArrowUpRight, ArrowDownRight, History, Search, Plus, ArrowRightLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useReactToPrint } from 'react-to-print';
 import { MovementPrint } from '@/components/inventory/MovementPrint';
