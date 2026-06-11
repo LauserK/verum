@@ -88,7 +88,9 @@ export default function KardexPage() {
 
   async function fetchMovementDetail(movement: any) {
     const referenceId = movement.reference_id || movement.id;
-    const referenceType = movement.reference_type || (movement.type === 'receipt' ? 'purchase_receipt' : 'issue_document');
+    const referenceType = movement.reference_type || 
+        (movement.type === 'receipt' ? 'purchase_receipt' : 
+        (movement.type === 'transfer' ? 'transfer_document' : 'issue_document'));
     
     try {
         if (referenceType === 'purchase_receipt') {
@@ -110,8 +112,23 @@ export default function KardexPage() {
                     lot: l.lot_number
                 }))
             };
+        } else if (referenceType === 'transfer_document' || movement.movement_type?.includes('transfer')) {
+            const detail = await adminApi.getTransferDetail(referenceId);
+            return {
+                type: 'transfer',
+                id: detail.header.id,
+                warehouseName: detail.header.origin?.name || 'Origen',
+                destinationName: detail.header.destination?.name || 'Destino',
+                notes: detail.header.notes,
+                createdAt: detail.header.created_at,
+                lines: detail.lines.map((l: any) => ({
+                    itemName: l.items?.name || 'Artículo',
+                    qty: l.qty_sent_presentation,
+                    uom: l.uom_presentations?.name || l.items?.uom_base?.name || 'Unidad',
+                    lot: `TR-${detail.header.id.replace(/-/g, '').slice(0, 8)}`
+                }))
+            };
         } else {
-            // Updated to use the specific detail endpoint for issue documents
             const detail = await adminApi.getIssueDocument(referenceId);
             return {
                 type: 'issue',
@@ -123,7 +140,7 @@ export default function KardexPage() {
                 lines: detail.lines.map((l: any) => ({
                     itemName: l.items?.name || 'Artículo',
                     qty: l.qty_presentation,
-                    uom: l.uom_presentations?.name || l.items?.uom_base?.name || 'Unidad Base',
+                    uom: l.uom_presentations?.name || l.items?.uom_base?.name || 'Unidad',
                     lot: null
                 }))
             };

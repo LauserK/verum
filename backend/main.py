@@ -4316,7 +4316,7 @@ async def create_transfer(doc: TransferCreate, org_id: str = Depends(get_active_
             lot_data = {
                 "warehouse_id": str(doc.destination_warehouse_id),
                 "item_id": str(line.item_id),
-                "lot_number": f"TR-{transfer_id.hex[:8]}",
+                "lot_number": f"TR-{str(transfer_id).replace('-', '')[:8]}",
                 "qty_base": total_to_move,
                 "unit_cost_base": weighted_unit_cost,
                 "received_at": datetime.now(CARACAS_TZ).isoformat()
@@ -4349,8 +4349,6 @@ async def create_transfer(doc: TransferCreate, org_id: str = Depends(get_active_
                     "item_id": str(line.item_id),
                     "qty_base": total_to_move
                 }).execute()
-
-    return header_res.data[0]
 
     return header_res.data[0]
 
@@ -4398,7 +4396,7 @@ async def confirm_transfer(transfer_id: UUID, doc: TransferConfirm, org_id: str 
             lot_data = {
                 "warehouse_id": header["destination_warehouse_id"],
                 "item_id": orig_line["item_id"],
-                "lot_number": f"TR-{transfer_id.hex[:8]}",
+                "lot_number": f"TR-{str(transfer_id).replace('-', '')[:8]}",
                 "qty_base": qty_received_base,
                 "unit_cost_base": float(orig_line["unit_cost_base"]),
                 "received_at": datetime.now(CARACAS_TZ).isoformat()
