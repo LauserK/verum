@@ -572,7 +572,7 @@ class TransferResponse(BaseModel):
 class RecipeIngredientBase(BaseModel):
     item_id: UUID
     qty_base: Decimal
-    presentation_id: UUID
+    presentation_id: Optional[UUID] = None
     order_index: int
     notes: Optional[str] = None
 
@@ -584,7 +584,7 @@ class RecipeStepBase(BaseModel):
 class RecipeCreate(BaseModel):
     item_id: UUID
     yield_qty_base: Decimal
-    yield_presentation_id: UUID
+    yield_presentation_id: Optional[UUID] = None
     ingredients: List[RecipeIngredientBase]
     steps: List[RecipeStepBase]
 
@@ -592,7 +592,7 @@ class RecipeResponse(BaseModel):
     id: UUID
     item_id: UUID
     yield_qty_base: Decimal
-    yield_presentation_id: UUID
+    yield_presentation_id: Optional[UUID] = None
     ingredients: List[Dict] # Detailed ingredient info
     steps: List[Dict]      # Detailed step info
     is_active: bool
@@ -601,7 +601,7 @@ class RecipeResponse(BaseModel):
 class CalculateProductionNeedsRequest(BaseModel):
     item_id: UUID
     target_qty: Decimal
-    target_uom_id: UUID
+    target_uom_id: Optional[UUID] = None
     warehouse_id: UUID
 
 class IngredientDeficit(BaseModel):
@@ -615,3 +615,23 @@ class ProductionNeedsResponse(BaseModel):
     status: str # "OK" or "DEFICIT"
     ingredients: List[Dict] # Scaled ingredients
     deficits: List[IngredientDeficit]
+
+class ProductionOrderCreate(BaseModel):
+    item_id: UUID
+    warehouse_id: UUID
+    qty_ordered_base: Decimal
+    presentation_id: Optional[UUID] = None
+    scheduled_date: str # YYYY-MM-DD
+
+class ProductionOrderResponse(BaseModel):
+    id: UUID
+    order_number: str
+    item_id: UUID
+    recipe_id: UUID
+    warehouse_id: UUID
+    qty_ordered_base: Decimal
+    presentation_id: Optional[UUID] = None
+    status: str
+    priority: str
+    scheduled_date: Optional[str]
+    created_at: Optional[datetime]

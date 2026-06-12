@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { getProfile, type Profile } from '@/lib/api'
 import { logout } from '@/app/login/actions'
-import { LayoutDashboard, ClipboardCheck, Users, Building2, Box, Clock, LogOut, ChevronLeft, Moon, Sun } from 'lucide-react'
+import { LayoutDashboard, ClipboardCheck, Users, Building2, Box, Clock, LogOut, ChevronLeft, Moon, Sun, ChefHat } from 'lucide-react'
 import { useTranslations } from '@/components/I18nProvider'
 import { useTheme } from '@/components/ThemeProvider'
 import { useVenue } from '@/components/VenueContext'
@@ -23,6 +23,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         { href: '/admin/dashboard', label: t('nav.dashboard'), icon: LayoutDashboard },
         { href: '/admin/checklists/dashboard', label: t('nav.checklists'), icon: ClipboardCheck },
         { href: '/admin/inventory', label: t('nav.inventory'), icon: Box },
+        { href: '/admin/production', label: t('nav.production'), icon: ChefHat },
         { href: '/admin/attendance', label: t('nav.attendance'), icon: Clock },
         { href: '/admin/venues', label: t('nav.company'), icon: Building2 },
         { href: '/admin/team', label: t('nav.team'), icon: Users },

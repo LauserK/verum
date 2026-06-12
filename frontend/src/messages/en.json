@@ -20,6 +20,7 @@
     "templates": "Templates",
     "submissions": "Submissions",
     "inventory": "Inventory",
+    "production": "Production",
     "attendance": "Attendance",
     "company": "Company",
     "team": "Team",
@@ -212,6 +213,13 @@
       "transfer_out": "Transfer (-)",
       "initial": "Initial Balance"
     }
+  },
+  "production": {
+    "title": "Production",
+    "dashboard": "Dashboard",
+    "recipes": "Recipes / Tech Sheets",
+    "orders": "Production Orders",
+    "newOrder": "New Order"
   },
   "history": {
     "title": "History",

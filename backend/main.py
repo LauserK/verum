@@ -41,7 +41,8 @@ from schemas import (
     IssueDocumentCreate, IssueDocumentResponse,
     StockMovementResponse,
     TransferCreate, TransferConfirm, TransferResponse,
-    RecipeCreate, RecipeResponse, CalculateProductionNeedsRequest, ProductionNeedsResponse
+    RecipeCreate, RecipeResponse, CalculateProductionNeedsRequest, ProductionNeedsResponse,
+    ProductionOrderCreate, ProductionOrderResponse
 )
 
 CARACAS_TZ = pytz.timezone("America/Caracas")
@@ -4632,5 +4633,65 @@ async def calculate_production_needs(
         "ingredients": scaled_ingredients,
         "deficits": deficits
     }
+
+@app.post("/production/orders", response_model=ProductionOrderResponse, tags=["Production"])
+async def create_production_order(
+    order: ProductionOrderCreate, 
+    org_id: str = Depends(get_active_org_id), 
+    user=Depends(get_current_user), 
+    db=Depends(get_db), 
+    _=Depends(require_permission("production.create"))
+):
+    # 1. Validate recipe exists
+    recipe_res = db.table("recipes").select("id, yield_qty_base").eq("item_id", str(order.item_id)).execute()
+    if not recipe_res.data:
+        raise HTTPException(status_code=400, detail="No existe una receta para este artículo")
+    recipe = recipe_res.data[0]
+
+    # 2. Generate order number (OP-YYYYMMDD-XXXX)
+    today_date = datetime.now(CARACAS_TZ).strftime("%Y-%m-%d")
+    today_str = datetime.now(CARACAS_TZ).strftime("%Y%m%d")
+    
+    # Simple count for the day
+    count_res = db.table("production_orders").select("id", count="exact").gte("created_at", today_date).execute()
+    count = (count_res.count or 0) + 1
+    order_number = f"OP-{today_str}-{count:04d}"
+
+    # 3. Create order header
+    order_data = {
+        "org_id": org_id,
+        "order_number": order_number,
+        "item_id": str(order.item_id),
+        "recipe_id": recipe["id"],
+        "warehouse_id": str(order.warehouse_id),
+        "qty_ordered_base": float(order.qty_ordered_base),
+        "presentation_id": str(order.presentation_id),
+        "scheduled_date": order.scheduled_date,
+        "created_by": user.id,
+        "status": "pending",
+        "priority": "normal"
+    }
+    
+    res = db.table("production_orders").insert(order_data).execute()
+    if not res.data:
+        raise HTTPException(status_code=400, detail="Error al crear la orden de producción")
+    
+    created_order = res.data[0]
+    order_id = created_order["id"]
+
+    # 4. Create scaled consumptions (Planned)
+    yield_qty_base = Decimal(str(recipe["yield_qty_base"]))
+    scale_factor = order.qty_ordered_base / yield_qty_base if yield_qty_base > 0 else Decimal("0")
+
+    ing_res = db.table("recipe_ingredients").select("item_id, qty_base").eq("recipe_id", recipe["id"]).execute()
+    for ing in (ing_res.data or []):
+        planned_qty = Decimal(str(ing["qty_base"])) * scale_factor
+        db.table("production_order_consumptions").insert({
+            "order_id": order_id,
+            "item_id": ing["item_id"],
+            "qty_planned_base": float(planned_qty)
+        }).execute()
+
+    return created_order
 
 

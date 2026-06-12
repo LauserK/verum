@@ -29,6 +29,7 @@
     "templates": "Plantillas",
     "submissions": "Envíos",
     "inventory": "Inventario",
+    "production": "Producción",
     "attendance": "Asistencia",
     "company": "Empresa",
     "team": "Equipo",
@@ -222,6 +223,13 @@
       "transfer_out": "Traspaso (-)",
       "initial": "Saldo Inicial"
     }
+  },
+  "production": {
+    "title": "Producción",
+    "dashboard": "Panel de Control",
+    "recipes": "Recetas / Fichas Técnicas",
+    "orders": "Órdenes de Producción",
+    "newOrder": "Nueva Orden"
   },
   "history": {
     "title": "Historial",

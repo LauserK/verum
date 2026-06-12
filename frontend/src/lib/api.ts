@@ -752,6 +752,100 @@ export const adminApi = {
 
     updateItemCategory: (id: string, data: Partial<ItemCategory>): Promise<ItemCategory> =>
         fetchWithAuth(`/inventory/item-categories/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+
+    // M19: Recipes & Production
+    getRecipe: (itemId: string): Promise<RecipeResponse> =>
+        fetchWithAuth(`/production/recipes/${itemId}`),
+
+    saveRecipe: (data: RecipeCreate): Promise<RecipeResponse> =>
+        fetchWithAuth('/production/recipes', { method: 'POST', body: JSON.stringify(data) }),
+
+    calculateProductionNeeds: (data: CalculateProductionNeedsRequest): Promise<ProductionNeedsResponse> =>
+        fetchWithAuth('/production/calculate-needs', { method: 'POST', body: JSON.stringify(data) }),
+
+    createProductionOrder: (data: ProductionOrderCreate): Promise<ProductionOrderResponse> =>
+        fetchWithAuth('/production/orders', { method: 'POST', body: JSON.stringify(data) }),
+}
+
+// ── Recipe Types (M19) ─────────────────────────────
+
+export interface RecipeIngredient {
+    item_id: string
+    qty_base: number
+    presentation_id: string | null
+    order_index: number
+    notes?: string
+    // UI helpful fields
+    item_name?: string
+    presentation_name?: string
+}
+
+export interface RecipeStep {
+    order_index: number
+    description: string
+    estimated_time_minutes: number
+}
+
+export interface RecipeCreate {
+    item_id: string
+    yield_qty_base: number
+    yield_presentation_id: string | null
+    ingredients: RecipeIngredient[]
+    steps: RecipeStep[]
+}
+
+export interface RecipeResponse {
+    id: string
+    item_id: string
+    yield_qty_base: number
+    yield_presentation_id: string | null
+    ingredients: any[]
+    steps: any[]
+    is_active: boolean
+    created_at: string
+}
+
+export interface CalculateProductionNeedsRequest {
+    item_id: string
+    target_qty: number
+    target_uom_id: string | null
+    warehouse_id: string
+}
+
+export interface IngredientDeficit {
+    item_id: string
+    item_name: string
+    needed_base_qty: number
+    available_base_qty: number
+    deficit_base_qty: number
+}
+
+export interface ProductionNeedsResponse {
+    status: 'OK' | 'DEFICIT'
+    ingredients: any[]
+    deficits: IngredientDeficit[]
+}
+
+export interface ProductionOrderCreate {
+    item_id: string
+    warehouse_id: string
+    qty_ordered_base: number
+    presentation_id: string | null
+    scheduled_date: string
+}
+
+export interface ProductionOrderResponse {
+    id: string
+    order_number: string
+    item_id: string
+    recipe_id: string
+    warehouse_id: string
+    qty_ordered_base: number
+    presentation_id: string | null
+    status: string
+    priority: string
+    scheduled_date?: string
+    created_at?: string
 }
 
 // Super Admin CRUD
