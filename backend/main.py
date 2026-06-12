@@ -8,8 +8,9 @@ import io
 import csv
 import uuid
 from uuid import UUID
+from decimal import Decimal
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 from schemas import (
     SyncResponse, VenueInfo, ProfileResponse, ChecklistItem,
@@ -40,7 +41,7 @@ from schemas import (
     IssueDocumentCreate, IssueDocumentResponse,
     StockMovementResponse,
     TransferCreate, TransferConfirm, TransferResponse,
-    RecipeCreate, RecipeResponse
+    RecipeCreate, RecipeResponse, CalculateProductionNeedsRequest, ProductionNeedsResponse
 )
 
 CARACAS_TZ = pytz.timezone("America/Caracas")
@@ -4565,5 +4566,71 @@ async def get_recipe_by_item_id(item_id: UUID, db=Depends(get_db), _=Depends(req
     recipe["steps"] = step_res.data or []
     
     return recipe
+
+
+@app.post("/production/calculate-needs", response_model=ProductionNeedsResponse, tags=["Production"])
+async def calculate_production_needs(
+    req: CalculateProductionNeedsRequest, 
+    db=Depends(get_db), 
+    _=Depends(require_permission("production.view"))
+):
+    # 1. Fetch the recipe
+    recipe_res = db.table("recipes").select("*").eq("item_id", str(req.item_id)).execute()
+    if not recipe_res.data:
+        raise HTTPException(status_code=404, detail="Recipe not found for this item")
+    recipe = recipe_res.data[0]
+    
+    # 2. Fetch target presentation for conversion
+    pres_res = db.table("uom_presentations").select("conversion_factor").eq("id", str(req.target_uom_id)).execute()
+    if not pres_res.data:
+        raise HTTPException(status_code=404, detail="Target UOM presentation not found")
+    conversion_factor = Decimal(str(pres_res.data[0]["conversion_factor"]))
+    
+    # 3. Calculate target qty in base units
+    target_base_qty = req.target_qty * conversion_factor
+    
+    # 4. Scaling factor
+    yield_qty_base = Decimal(str(recipe["yield_qty_base"]))
+    if yield_qty_base == 0:
+        raise HTTPException(status_code=400, detail="Recipe yield_qty_base cannot be zero")
+        
+    scale_factor = target_base_qty / yield_qty_base
+    
+    # 5. Fetch ingredients
+    ing_res = db.table("recipe_ingredients").select("*, items(name)").eq("recipe_id", recipe["id"]).execute()
+    ingredients = ing_res.data or []
+    
+    scaled_ingredients = []
+    deficits = []
+    
+    for ing in ingredients:
+        needed_base_qty = Decimal(str(ing["qty_base"])) * scale_factor
+        
+        # 6. Check stock
+        stock_res = db.table("stock").select("qty_base, qty_reserved").eq("warehouse_id", str(req.warehouse_id)).eq("item_id", ing["item_id"]).execute()
+        
+        available_qty = Decimal("0")
+        if stock_res.data:
+            available_qty = Decimal(str(stock_res.data[0]["qty_base"])) - Decimal(str(stock_res.data[0]["qty_reserved"]))
+        
+        deficit_qty = max(Decimal("0"), needed_base_qty - available_qty)
+        
+        scaled_ing = {
+            "item_id": ing["item_id"],
+            "item_name": ing["items"]["name"] if ing.get("items") else "Unknown",
+            "needed_base_qty": needed_base_qty,
+            "available_base_qty": available_qty,
+            "deficit_base_qty": deficit_qty
+        }
+        scaled_ingredients.append(scaled_ing)
+        
+        if deficit_qty > 0:
+            deficits.append(scaled_ing)
+            
+    return {
+        "status": "DEFICIT" if deficits else "OK",
+        "ingredients": scaled_ingredients,
+        "deficits": deficits
+    }
 
 

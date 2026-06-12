@@ -603,3 +603,15 @@ class CalculateProductionNeedsRequest(BaseModel):
     target_qty: Decimal
     target_uom_id: UUID
     warehouse_id: UUID
+
+class IngredientDeficit(BaseModel):
+    item_id: UUID
+    item_name: str
+    needed_base_qty: Decimal
+    available_base_qty: Decimal
+    deficit_base_qty: Decimal
+
+class ProductionNeedsResponse(BaseModel):
+    status: str # "OK" or "DEFICIT"
+    ingredients: List[Dict] # Scaled ingredients
+    deficits: List[IngredientDeficit]
