@@ -2,15 +2,17 @@
 
 import { useState, useEffect } from 'react';
 import { adminApi, Warehouse } from '@/lib/api';
-import { Plus, Warehouse as WarehouseIcon, X, Save, Loader2 } from 'lucide-react';
+import { Plus, Warehouse as WarehouseIcon, X, Save, Loader2, MapPin } from 'lucide-react';
 import { useTranslations } from '@/components/I18nProvider';
+import { useVenue } from '@/components/VenueContext';
 
 export default function WarehousesPage() {
   const { t } = useTranslations('inventory.warehouses');
+  const { availableVenues } = useVenue();
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [newWarehouse, setNewWarehouse] = useState<{ name: string; type: Warehouse['type'] }>({ name: '', type: 'storage' });
+  const [newWarehouse, setNewWarehouse] = useState<{ name: string; type: Warehouse['type']; venue_id: string }>({ name: '', type: 'storage', venue_id: '' });
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -133,6 +135,23 @@ export default function WarehousesPage() {
                   <option value="point_of_sale">{t('types.point_of_sale')}</option>
                   <option value="transit">{t('types.transit')}</option>
                 </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Asociar a Sede (Opcional)</label>
+                <div className="relative">
+                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary" />
+                  <select 
+                    value={newWarehouse.venue_id || ''}
+                    onChange={e => setNewWarehouse({...newWarehouse, venue_id: e.target.value})}
+                    className="w-full bg-surface border border-border rounded-xl pl-10 pr-4 h-11 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all appearance-none cursor-pointer"
+                  >
+                    <option value="">No asociar a ninguna sede</option>
+                    {availableVenues.map(v => (
+                      <option key={v.id} value={v.id}>{v.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <p className="text-[10px] text-text-secondary mt-1">Requerido si el tipo de almacén es Producción o Punto de Venta.</p>
               </div>
             </div>
 
