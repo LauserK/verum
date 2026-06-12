@@ -7,6 +7,7 @@ import { useVenue } from '@/components/VenueContext'
 import { ArrowLeft, Save, Loader2, Package, Warehouse as WarehouseIcon, Calendar, Search } from 'lucide-react'
 import Link from 'next/link'
 import ScalerPanel from '@/components/production/ScalerPanel'
+import ConfirmationModal from '@/components/ConfirmationModal'
 import { format } from 'date-fns'
 
 export default function NewProductionOrderPage() {
@@ -14,6 +15,7 @@ export default function NewProductionOrderPage() {
     const { availableVenues } = useVenue()
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
+    const [errorModal, setErrorModal] = useState({ isOpen: false, message: '' })
     const [items, setItems] = useState<InventoryItem[]>([])
     
     // Form state
@@ -89,8 +91,8 @@ export default function NewProductionOrderPage() {
     }
 
     async function handleSave() {
-        if (!itemId || !warehouseId || !targetQty || !targetUomId || !scheduledDate) {
-            alert('Por favor completa todos los campos obligatorios.')
+        if (!itemId || !warehouseId || !targetQty || !scheduledDate) {
+            setErrorModal({ isOpen: true, message: 'Por favor completa todos los campos obligatorios.' })
             return
         }
 
@@ -104,13 +106,13 @@ export default function NewProductionOrderPage() {
                 item_id: itemId,
                 warehouse_id: warehouseId,
                 qty_ordered_base: qtyBase,
-                presentation_id: targetUomId,
+                presentation_id: targetUomId || null,
                 scheduled_date: scheduledDate
             })
             router.push('/admin/production/orders')
         } catch (err: any) {
             console.error('Error creating production order:', err)
-            alert(err.message || 'Error al crear la orden de producción')
+            setErrorModal({ isOpen: true, message: err?.message || 'Error al crear la orden de producción' })
         } finally {
             setSaving(false)
         }
@@ -120,6 +122,16 @@ export default function NewProductionOrderPage() {
 
     return (
         <div className="max-w-4xl mx-auto space-y-6 pb-20 px-4">
+            <ConfirmationModal 
+                isOpen={errorModal.isOpen}
+                title="Error"
+                message={errorModal.message}
+                confirmLabel="Entendido"
+                cancelLabel=""
+                onConfirm={() => setErrorModal({ ...errorModal, isOpen: false })}
+                onCancel={() => setErrorModal({ ...errorModal, isOpen: false })}
+            />
+
             <div className="flex items-center gap-4">
                 <Link href="/admin/production/orders" className="p-2 hover:bg-surface-raised rounded-full transition-colors">
                     <ArrowLeft className="w-5 h-5 text-text-secondary" />

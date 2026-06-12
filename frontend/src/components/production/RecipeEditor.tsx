@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { Plus, Trash2, Save, ChevronLeft, Search, Loader2, Package } from 'lucide-react'
 import { adminApi, InventoryItem, UOMPresentation, RecipeIngredient, RecipeStep, RecipeCreate, RecipeResponse } from '@/lib/api'
 import { useRouter } from 'next/navigation'
+import ConfirmationModal from '@/components/ConfirmationModal'
 
 interface RecipeEditorProps {
   itemId: string
@@ -15,6 +16,7 @@ export default function RecipeEditor({ itemId, initialData, itemName }: RecipeEd
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [errorModal, setErrorModal] = useState({ isOpen: false, message: '' })
   
   // Yield state
   const [yieldQty, setYieldQty] = useState(initialData?.yield_qty_base || 1)
@@ -177,9 +179,9 @@ export default function RecipeEditor({ itemId, initialData, itemName }: RecipeEd
       
       await adminApi.saveRecipe(recipeData)
       router.back()
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving recipe:', error)
-      alert('Error al guardar la receta')
+      setErrorModal({ isOpen: true, message: error?.message || 'Error al guardar la receta' })
     } finally {
       setSaving(false)
     }
@@ -195,6 +197,16 @@ export default function RecipeEditor({ itemId, initialData, itemName }: RecipeEd
 
   return (
     <div className="space-y-6">
+      <ConfirmationModal 
+        isOpen={errorModal.isOpen}
+        title="Error"
+        message={errorModal.message}
+        confirmLabel="Entendido"
+        cancelLabel=""
+        onConfirm={() => setErrorModal({ ...errorModal, isOpen: false })}
+        onCancel={() => setErrorModal({ ...errorModal, isOpen: false })}
+      />
+
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button 
