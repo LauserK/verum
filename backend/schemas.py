@@ -1,7 +1,8 @@
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict
 from uuid import UUID
 from datetime import datetime
+from decimal import Decimal
 
 # ── Models ───────────────────────────────────────────────
 
@@ -565,3 +566,40 @@ class TransferResponse(BaseModel):
     origin_warehouse_id: UUID
     destination_warehouse_id: UUID
     created_at: datetime
+
+# ── Recipes & Production (M19) ───────────────────────────
+
+class RecipeIngredientBase(BaseModel):
+    item_id: UUID
+    qty_base: Decimal
+    presentation_id: UUID
+    order_index: int
+    notes: Optional[str] = None
+
+class RecipeStepBase(BaseModel):
+    order_index: int
+    description: str
+    estimated_time_minutes: int = 0
+
+class RecipeCreate(BaseModel):
+    item_id: UUID
+    yield_qty_base: Decimal
+    yield_presentation_id: UUID
+    ingredients: List[RecipeIngredientBase]
+    steps: List[RecipeStepBase]
+
+class RecipeResponse(BaseModel):
+    id: UUID
+    item_id: UUID
+    yield_qty_base: Decimal
+    yield_presentation_id: UUID
+    ingredients: List[Dict] # Detailed ingredient info
+    steps: List[Dict]      # Detailed step info
+    is_active: bool
+    created_at: datetime
+
+class CalculateProductionNeedsRequest(BaseModel):
+    item_id: UUID
+    target_qty: Decimal
+    target_uom_id: UUID
+    warehouse_id: UUID
