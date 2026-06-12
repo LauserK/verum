@@ -39,7 +39,8 @@ from schemas import (
     PurchaseReceiptCreate, PurchaseReceiptResponse,
     IssueDocumentCreate, IssueDocumentResponse,
     StockMovementResponse,
-    TransferCreate, TransferConfirm, TransferResponse
+    TransferCreate, TransferConfirm, TransferResponse,
+    RecipeCreate, RecipeResponse
 )
 
 CARACAS_TZ = pytz.timezone("America/Caracas")
@@ -4482,5 +4483,87 @@ async def get_transfer_detail(transfer_id: UUID, db=Depends(get_db), _=Depends(r
         "header": res_header.data[0],
         "lines": res_lines.data
     }
+
+
+# ── Production: Recipes Endpoints (M19) ───────────────────
+
+@app.post("/production/recipes", response_model=RecipeResponse, tags=["Production"])
+async def create_recipe(recipe: RecipeCreate, org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("production.manage_recipes"))):
+    # 1. Create the recipe header
+    recipe_data = {
+        "org_id": org_id,
+        "item_id": str(recipe.item_id),
+        "yield_qty_base": float(recipe.yield_qty_base),
+        "yield_presentation_id": str(recipe.yield_presentation_id),
+        "is_active": True
+    }
+    
+    # Use upsert to allow updating an existing recipe for the same item_id
+    res = db.table("recipes").upsert(recipe_data, on_conflict="item_id").execute()
+    if not res.data:
+        raise HTTPException(status_code=400, detail="Error creating recipe header")
+    
+    recipe_id = res.data[0]["id"]
+    
+    # 2. Process ingredients
+    # First, clear existing ones if it's an update
+    db.table("recipe_ingredients").delete().eq("recipe_id", recipe_id).execute()
+    
+    for ing in recipe.ingredients:
+        ing_data = {
+            "recipe_id": recipe_id,
+            "item_id": str(ing.item_id),
+            "qty_base": float(ing.qty_base),
+            "presentation_id": str(ing.presentation_id),
+            "order_index": ing.order_index
+        }
+        db.table("recipe_ingredients").insert(ing_data).execute()
+        
+    # 3. Process steps
+    # Clear existing ones
+    db.table("recipe_steps").delete().eq("recipe_id", recipe_id).execute()
+    
+    for step in recipe.steps:
+        step_data = {
+            "recipe_id": recipe_id,
+            "order_index": step.order_index,
+            "description": step.description,
+            "estimated_time_minutes": step.estimated_time_minutes
+        }
+        db.table("recipe_steps").insert(step_data).execute()
+        
+    return await get_recipe_by_item_id(recipe.item_id, db)
+
+@app.get("/production/recipes/{item_id}", response_model=RecipeResponse, tags=["Production"])
+async def get_recipe_by_item_id(item_id: UUID, db=Depends(get_db), _=Depends(require_permission("production.view"))):
+    # 1. Get header
+    res = db.table("recipes") \
+        .select("*") \
+        .eq("item_id", str(item_id)) \
+        .execute()
+        
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+        
+    recipe = res.data[0]
+    recipe_id = recipe["id"]
+    
+    # 2. Get ingredients
+    ing_res = db.table("recipe_ingredients") \
+        .select("*, items(name, uom_base(name)), uom_presentations(name)") \
+        .eq("recipe_id", recipe_id) \
+        .order("order_index") \
+        .execute()
+    recipe["ingredients"] = ing_res.data or []
+    
+    # 3. Get steps
+    step_res = db.table("recipe_steps") \
+        .select("*") \
+        .eq("recipe_id", recipe_id) \
+        .order("order_index") \
+        .execute()
+    recipe["steps"] = step_res.data or []
+    
+    return recipe
 
 
