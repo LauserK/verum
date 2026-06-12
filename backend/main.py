@@ -4496,7 +4496,7 @@ async def create_recipe(recipe: RecipeCreate, org_id: str = Depends(get_active_o
         "org_id": org_id,
         "item_id": str(recipe.item_id),
         "yield_qty_base": float(recipe.yield_qty_base),
-        "yield_presentation_id": str(recipe.yield_presentation_id),
+        "yield_presentation_id": str(recipe.yield_presentation_id) if recipe.yield_presentation_id else None,
         "is_active": True
     }
     
@@ -4516,7 +4516,7 @@ async def create_recipe(recipe: RecipeCreate, org_id: str = Depends(get_active_o
             "recipe_id": recipe_id,
             "item_id": str(ing.item_id),
             "qty_base": float(ing.qty_base),
-            "presentation_id": str(ing.presentation_id),
+            "presentation_id": str(ing.presentation_id) if ing.presentation_id else None,
             "order_index": ing.order_index
         }
         db.table("recipe_ingredients").insert(ing_data).execute()
@@ -4582,10 +4582,12 @@ async def calculate_production_needs(
     recipe = recipe_res.data[0]
     
     # 2. Fetch target presentation for conversion
-    pres_res = db.table("uom_presentations").select("conversion_factor").eq("id", str(req.target_uom_id)).execute()
-    if not pres_res.data:
-        raise HTTPException(status_code=404, detail="Target UOM presentation not found")
-    conversion_factor = Decimal(str(pres_res.data[0]["conversion_factor"]))
+    conversion_factor = Decimal("1.0")
+    if req.target_uom_id:
+        pres_res = db.table("uom_presentations").select("conversion_factor").eq("id", str(req.target_uom_id)).execute()
+        if not pres_res.data:
+            raise HTTPException(status_code=404, detail="Target UOM presentation not found")
+        conversion_factor = Decimal(str(pres_res.data[0]["conversion_factor"]))
     
     # 3. Calculate target qty in base units
     target_base_qty = req.target_qty * conversion_factor
@@ -4665,7 +4667,7 @@ async def create_production_order(
         "recipe_id": recipe["id"],
         "warehouse_id": str(order.warehouse_id),
         "qty_ordered_base": float(order.qty_ordered_base),
-        "presentation_id": str(order.presentation_id),
+        "presentation_id": str(order.presentation_id) if order.presentation_id else None,
         "scheduled_date": order.scheduled_date,
         "created_by": user.id,
         "status": "pending",
