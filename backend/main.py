@@ -34,7 +34,7 @@ from schemas import (
     SuperAdminUserOrgAdd, SuperAdminUserOrgUpdate,
     SuperAdminUserInOrg, SuperAdminOrgDetail,
     EditAttendanceDayRequest,
-    WarehouseCreate, WarehouseResponse, ItemCreate, ItemUpdate, ItemResponse,
+    WarehouseCreate, WarehouseUpdate, WarehouseResponse, ItemCreate, ItemUpdate, ItemResponse,
     UOMBase, UOMPresentationCreate, UOMPresentationResponse,
     ItemCategoryCreate, ItemCategoryResponse,
     PurchaseReceiptCreate, PurchaseReceiptResponse,
