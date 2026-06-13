@@ -4564,7 +4564,7 @@ async def create_recipe(recipe: RecipeCreate, org_id: str = Depends(get_active_o
 async def get_recipe_by_item_id(item_id: UUID, db=Depends(get_db), _=Depends(require_permission("production.view"))):
     # 1. Get header
     res = db.table("recipes") \
-        .select("*") \
+        .select("*, yield_presentation:yield_presentation_id(name, conversion_factor)") \
         .eq("item_id", str(item_id)) \
         .execute()
         
@@ -4745,7 +4745,7 @@ async def get_kds_orders(
     _=Depends(require_permission("production.view"))
 ):
     res = db.table("production_orders")\
-        .select("*, items(name, uom_base(name)), recipes(id)")\
+        .select("*, items(name, uom_base(name)), recipes(id), uom_presentations(name, conversion_factor)")\
         .eq("org_id", org_id)\
         .eq("warehouse_id", str(warehouse_id))\
         .in_("status", ["pending", "in_progress", "paused"])\

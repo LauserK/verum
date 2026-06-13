@@ -1,9 +1,9 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { adminApi, Warehouse, Profile } from '@/lib/api'
+import { adminApi, getProfile, Warehouse, Profile } from '@/lib/api'
 import { useVenue } from '@/components/VenueContext'
-import { Loader2, ChefHat, Clock, MapPin, LayoutGrid, Package, X, AlertTriangle, Home } from 'lucide-react'
+import { Loader2, ChefHat, Clock, MapPin, LayoutGrid, Package, X, AlertTriangle, Home, ChevronDown } from 'lucide-react'
 import Link from 'next/link'
 
 export default function KDSPage() {
@@ -14,6 +14,7 @@ export default function KDSPage() {
     const [selectedVenueId, setSelectedVenueId] = useState('')
     const [productionWarehouse, setProductionWarehouse] = useState<Warehouse | null>(null)
     const [saving, setSaving] = useState(false)
+    const [showVenueDropdown, setShowVenueDropdown] = useState(false)
 
     // Detail Modal State
     const [selectedOrder, setSelectedOrder] = useState<any>(null)
@@ -26,15 +27,39 @@ export default function KDSPage() {
     const [varianceError, setVarianceError] = useState<any>(null)
 
     useEffect(() => {
-        const storedProfile = localStorage.getItem('profile')
-        if (storedProfile) {
-            setProfile(JSON.parse(storedProfile))
+        async function initProfile() {
+            const storedProfile = localStorage.getItem('profile')
+            if (storedProfile) {
+                try {
+                    setProfile(JSON.parse(storedProfile))
+                } catch (e) {
+                    await fetchProfile()
+                }
+            } else {
+                await fetchProfile()
+            }
         }
-        
+        initProfile()
+    }, [])
+
+    useEffect(() => {
         if (availableVenues.length > 0 && !selectedVenueId) {
             setSelectedVenueId(availableVenues[0].id)
         }
     }, [availableVenues])
+
+    async function fetchProfile() {
+        try {
+            const p = await getProfile()
+            console.log('Fetched profile:', p)
+            setProfile(p)
+            localStorage.setItem('profile', JSON.stringify(p))
+            return p
+        } catch (err) {
+            console.error('Error fetching profile:', err)
+            return null
+        }
+    }
 
     useEffect(() => {
         if (selectedVenueId) {
@@ -135,19 +160,56 @@ export default function KDSPage() {
                     </div>
                     <div>
                         <h1 className="text-2xl font-bold tracking-tight">KDS Producción</h1>
-                        <div className="flex items-center gap-4 mt-0.5">
-                            <select 
-                                value={selectedVenueId}
-                                onChange={e => setSelectedVenueId(e.target.value)}
-                                className="bg-transparent border-none text-sm text-text-secondary font-medium outline-none cursor-pointer hover:text-primary transition-colors p-0"
-                            >
-                                {availableVenues.map(v => (
-                                    <option key={v.id} value={v.id}>{v.name}</option>
-                                ))}
-                            </select>
+                        <div className="flex items-center gap-4 mt-1.5 relative">
+                            {/* Custom Styled Dropdown */}
+                            <div className="relative">
+                                <button 
+                                    onClick={() => setShowVenueDropdown(!showVenueDropdown)}
+                                    className={`
+                                        flex items-center gap-2 px-4 py-1.5 rounded-xl border transition-all duration-300
+                                        ${showVenueDropdown ? 'bg-surface-raised border-primary shadow-lg shadow-primary/10' : 'bg-surface/50 border-border hover:border-primary/50'}
+                                    `}
+                                >
+                                    <MapPin className={`w-3.5 h-3.5 ${showVenueDropdown ? 'text-primary animate-bounce' : 'text-primary/60'}`} />
+                                    <span className="text-sm text-text-primary font-black tracking-tight">
+                                        {availableVenues.find(v => v.id === selectedVenueId)?.name || 'Seleccionar Sede'}
+                                    </span>
+                                    <ChevronDown className={`w-4 h-4 text-text-secondary transition-transform duration-300 ${showVenueDropdown ? 'rotate-180 text-primary' : ''}`} />
+                                </button>
+
+                                {showVenueDropdown && (
+                                    <>
+                                        <div 
+                                            className="fixed inset-0 z-[105]" 
+                                            onClick={() => setShowVenueDropdown(false)}
+                                        />
+                                        <div className="absolute top-full left-0 mt-2 w-64 bg-surface border border-border rounded-2xl shadow-2xl z-[110] overflow-hidden animate-in slide-in-from-top-2 duration-200">
+                                            <div className="p-2 space-y-1">
+                                                {availableVenues.map(v => (
+                                                    <button
+                                                        key={v.id}
+                                                        onClick={() => {
+                                                            setSelectedVenueId(v.id)
+                                                            setShowVenueDropdown(false)
+                                                        }}
+                                                        className={`
+                                                            w-full text-left px-4 py-3 rounded-xl flex items-center justify-between transition-all
+                                                            ${selectedVenueId === v.id ? 'bg-primary/10 text-primary' : 'text-text-secondary hover:bg-surface-raised hover:text-text-primary'}
+                                                        `}
+                                                    >
+                                                        <span className="font-bold text-sm">{v.name}</span>
+                                                        {selectedVenueId === v.id && <div className="w-1.5 h-1.5 rounded-full bg-primary" />}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                            
                             <span className="text-border">|</span>
-                            <div className="flex items-center gap-1.5 text-xs text-text-secondary uppercase font-bold tracking-widest">
-                                <Clock className="w-3.5 h-3.5" />
+                            <div className="flex items-center gap-1.5 text-xs text-text-secondary uppercase font-black tracking-[0.1em]">
+                                <Clock className="w-3.5 h-3.5 text-primary/60" />
                                 {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </div>
                         </div>
@@ -166,11 +228,11 @@ export default function KDSPage() {
                     {profile && (
                         <div className="flex items-center gap-3 bg-surface-raised px-4 py-2 rounded-2xl border border-border shadow-sm">
                             <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center font-bold text-text-inverse shadow-lg shadow-primary/30">
-                                {profile.full_name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2)}
+                                {(profile.full_name || 'U').split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2)}
                             </div>
                             <div className="leading-tight">
-                                <p className="font-bold text-sm">{profile.full_name}</p>
-                                <p className="text-[10px] text-text-secondary uppercase font-bold">{profile.role}</p>
+                                <p className="font-bold text-sm">{profile.full_name || 'Usuario'}</p>
+                                <p className="text-[10px] text-text-secondary uppercase font-bold">{profile.role || 'Operador'}</p>
                             </div>
                         </div>
                     )}
@@ -227,8 +289,14 @@ export default function KDSPage() {
                                 <div className="flex-1">
                                     <h3 className="text-xl font-bold text-text-primary leading-tight mb-2">{order.items?.name}</h3>
                                     <p className="text-4xl font-black text-text-primary tracking-tighter">
-                                        {Number(order.qty_ordered_base).toLocaleString()}
-                                        <span className="text-lg text-text-secondary ml-1.5 font-bold uppercase">{order.items?.uom_base?.name}</span>
+                                        {/* Show quantity in requested unit if presentation exists */}
+                                        {order.uom_presentations ? 
+                                            (Number(order.qty_ordered_base) / Number(order.uom_presentations.conversion_factor)).toLocaleString(undefined, { maximumFractionDigits: 2 }) : 
+                                            Number(order.qty_ordered_base).toLocaleString()
+                                        }
+                                        <span className="text-lg text-text-secondary ml-1.5 font-bold uppercase">
+                                            {order.uom_presentations?.name || order.items?.uom_base?.name}
+                                        </span>
                                     </p>
                                 </div>
 
@@ -292,14 +360,24 @@ export default function KDSPage() {
                                 ) : (
                                     <div className="space-y-3">
                                         {(recipeData?.ingredients || []).map((ing: any, i: number) => {
-                                            const factor = Number(selectedOrder.qty_ordered_base) / Number(recipeData.yield_qty_base);
+                                            // 1. Get the real yield in base units for the recipe
+                                            // The recipe yields 'yield_qty_base' (in the item's base unit).
+                                            const yieldBase = Number(recipeData.yield_qty_base);
+                                            
+                                            // 2. The order is also in base units
+                                            const orderBase = Number(selectedOrder.qty_ordered_base);
+                                            
+                                            // 3. Factor is simply order/yield because both are in base units
+                                            const factor = orderBase / yieldBase;
+                                            
+                                            // 4. Scale ingredient
                                             const scaledQty = Number(ing.qty_base) * factor;
                                             
                                             return (
                                                 <div key={i} className="flex justify-between items-center bg-surface-raised p-4 rounded-2xl border border-border/50">
                                                     <span className="font-bold text-text-primary">{ing.items?.name || 'Ingrediente'}</span>
                                                     <span className="font-mono text-primary font-black bg-primary/5 px-3 py-1 rounded-lg">
-                                                        {scaledQty.toLocaleString()} {ing.items?.uom_base?.name}
+                                                        {scaledQty.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })} {ing.items?.uom_base?.name}
                                                     </span>
                                                 </div>
                                             );
