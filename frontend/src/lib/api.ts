@@ -1007,6 +1007,8 @@ export interface InventoryItem {
     last_purchase_cost_updated_at: string | null
     is_active: boolean
     created_at: string
+    yield_alert_enabled?: boolean
+    yield_alert_threshold_pct?: number | null
 }
 
 export interface Warehouse {

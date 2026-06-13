@@ -3914,13 +3914,16 @@ async def get_item_presentations(
     item_id: UUID, 
     db=Depends(get_db), 
     org_id: str = Depends(get_active_org_id),
-    current_user: dict = Depends(get_current_user)
+    current_user = Depends(get_current_user)
 ):
+    # Safely get user id
+    user_id = getattr(current_user, "id", None) or current_user.get("id")
+    
     # Allow if has inventory.view OR production.view OR production.execute
-    has_inv = await resolve_permission(current_user["id"], "inventory.view", db, org_id)
-    has_prod_v = await resolve_permission(current_user["id"], "production.view", db, org_id)
-    has_prod_e = await resolve_permission(current_user["id"], "production.execute", db, org_id)
-
+    has_inv = await resolve_permission(user_id, "inventory.view", db, org_id)
+    has_prod_v = await resolve_permission(user_id, "production.view", db, org_id)
+    has_prod_e = await resolve_permission(user_id, "production.execute", db, org_id)
+    
     if not (has_inv or has_prod_v or has_prod_e):
         raise HTTPException(status_code=403, detail="Not enough permissions")
 
@@ -3930,22 +3933,22 @@ async def get_item_presentations(
         raise HTTPException(status_code=404, detail="Item not found")
 
     base_uom_id = item_res.data["base_uom_id"]
-    org_id = item_res.data["org_id"]
+    item_org_id = item_res.data["org_id"]
 
-    # 2. Get enabled presentations for this item
-    res_enabled = db.table("item_uom_presentations") \
-        .select("presentation_id") \
-        .eq("item_id", str(item_id)) \
-        .execute()
-    enabled_ids = [r["presentation_id"] for r in res_enabled.data]
-
-    # 3. Get all global presentations for this base unit
-    # 4. Get all org-specific presentations for this base unit
-    res_all = db.table("uom_presentations") \
+    # 2. Get all global presentations for this base unit OR org-specific ones OR those with no org_id (global fallback)
+    query = db.table("uom_presentations") \
         .select("*") \
         .eq("base_uom_id", base_uom_id) \
-        .or_(f"is_global.eq.true,org_id.eq.{org_id}") \
-        .execute()
+        .or_(f"is_global.eq.true,org_id.eq.{item_org_id},org_id.is.null")
+    
+    res_all = query.execute()
+    
+    print(f"DEBUG: get_item_presentations for item {item_id}")
+    print(f"  base_uom_id: {base_uom_id}")
+    print(f"  item_org_id: {item_org_id}")
+    print(f"  Found {len(res_all.data or [])} presentations")
+    for p in (res_all.data or []):
+        print(f"    - {p['name']} (global={p['is_global']}, org={p['org_id']})")
 
     return res_all.data or []
 @app.post("/inventory/items/{item_id}/presentations/{pres_id}", tags=["Inventory"])

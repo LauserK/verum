@@ -223,6 +223,45 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
                           </select>
                       </div>
                   </div>
+
+                  <h3 className="text-lg font-bold text-text-primary mt-10 mb-6 flex items-center gap-2">
+                      <Scale className="w-5 h-5 text-primary" />
+                      Control de Producción
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                      <div className="bg-surface-raised p-5 rounded-2xl border border-border flex items-center justify-between">
+                          <div>
+                              <p className="font-bold text-text-primary">Alerta de Rendimiento</p>
+                              <p className="text-xs text-text-secondary">Notificar si la producción real difiere de la esperada.</p>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                              <input 
+                                type="checkbox" 
+                                checked={item.yield_alert_enabled} 
+                                onChange={(e) => handleUpdateItem({ yield_alert_enabled: e.target.checked })}
+                                className="sr-only peer" 
+                              />
+                              <div className="w-11 h-6 bg-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                          </label>
+                      </div>
+
+                      {item.yield_alert_enabled && (
+                          <div className="animate-in slide-in-from-right-2 duration-300">
+                              <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Umbral de Varianza Permitido (%)</label>
+                              <div className="relative">
+                                  <input 
+                                    type="number" 
+                                    step="0.1"
+                                    defaultValue={item.yield_alert_threshold_pct || 0}
+                                    onBlur={(e) => handleUpdateItem({ yield_alert_threshold_pct: parseFloat(e.target.value) || 0 })}
+                                    className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm outline-none focus:border-primary font-bold text-primary"
+                                  />
+                                  <div className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-text-disabled">%</div>
+                              </div>
+                              <p className="text-[10px] text-text-secondary mt-2 px-1">Ej: 5.0 significa que se alertará si la producción varía más de un 5%.</p>
+                          </div>
+                      )}
+                  </div>
               </div>
           )}
 

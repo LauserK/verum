@@ -27,6 +27,7 @@ export default function KDSPage() {
     const [varianceError, setVarianceError] = useState<any>(null)
     const [productionPresentations, setProductionPresentations] = useState<any[]>([])
     const [selectedCompletionUomId, setSelectedCompletionUomId] = useState('')
+    const [loadingCompletionData, setLoadingCompletionData] = useState(false)
 
     useEffect(() => {
         async function initProfile() {
@@ -118,19 +119,31 @@ export default function KDSPage() {
         } else if (order.status === 'in_progress') {
             setCompletingOrder(order)
             setVarianceError(null)
+            setLoadingCompletionData(true)
             
-            // Set initial quantity in the requested unit if possible
-            const pres = Array.isArray(order.uom_presentations) ? order.uom_presentations[0] : order.uom_presentations;
-            if (pres) {
-                setQtyProduced(Number(order.qty_ordered_base) / Number(pres.conversion_factor))
-                setSelectedCompletionUomId(pres.id)
-            } else {
-                setQtyProduced(order.qty_ordered_base)
-                setSelectedCompletionUomId('')
-            }
+            try {
+                // 1. Fetch recipe data if not already present
+                let currentRecipe = recipeData;
+                if (!currentRecipe || currentRecipe.item_id !== order.item_id) {
+                    currentRecipe = await adminApi.getRecipe(order.item_id);
+                    setRecipeData(currentRecipe);
+                }
 
-            // Fetch all available presentations for this item
-            adminApi.getItemPresentations(order.item_id).then(setProductionPresentations).catch(console.error)
+                // 2. Fetch all available presentations for this item
+                const presentations = await adminApi.getItemPresentations(order.item_id);
+                setProductionPresentations(presentations);
+
+                // 3. Set smart defaults
+                const recipeYieldPresId = currentRecipe?.yield_presentation_id || '';
+                setSelectedCompletionUomId(recipeYieldPresId);
+
+                const yieldFactor = presentations.find(p => p.id === recipeYieldPresId)?.conversion_factor || 1;
+                setQtyProduced(Number(order.qty_ordered_base) / yieldFactor);
+            } catch (err) {
+                console.error('Error loading completion data:', err);
+            } finally {
+                setLoadingCompletionData(false)
+            }
         }
     }
 
@@ -465,7 +478,15 @@ export default function KDSPage() {
             {/* Completion Modal */}
             {completingOrder && !varianceError && (
                 <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-surface border border-border rounded-3xl w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+                    <div className="bg-surface border border-border rounded-3xl w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 relative">
+                        {/* Loading Overlay */}
+                        {loadingCompletionData && (
+                            <div className="absolute inset-0 bg-surface/60 backdrop-blur-[2px] z-[130] flex flex-col items-center justify-center gap-3">
+                                <Loader2 className="w-10 h-10 animate-spin text-primary" />
+                                <p className="text-xs font-black text-primary uppercase tracking-widest animate-pulse">Cargando información...</p>
+                            </div>
+                        )}
+
                         <div className="p-6 border-b border-border bg-surface-raised/50">
                             <h2 className="text-xl font-bold text-text-primary">Finalizar Producción</h2>
                             <p className="text-sm text-text-secondary mt-1">{completingOrder.items?.name}</p>
@@ -476,6 +497,7 @@ export default function KDSPage() {
                                     <label className="block text-xs font-black text-text-secondary uppercase tracking-widest">Unidad de Medida</label>
                                     <select 
                                         value={selectedCompletionUomId}
+                                        disabled={loadingCompletionData}
                                         onChange={e => {
                                             const oldFactor = productionPresentations.find(p => p.id === selectedCompletionUomId)?.conversion_factor || 1;
                                             const newFactor = productionPresentations.find(p => p.id === e.target.value)?.conversion_factor || 1;
@@ -483,9 +505,9 @@ export default function KDSPage() {
                                             setQtyProduced(currentBase / newFactor);
                                             setSelectedCompletionUomId(e.target.value);
                                         }}
-                                        className="w-full bg-surface border border-border rounded-xl px-4 h-12 text-sm text-text-primary outline-none focus:ring-2 focus:ring-primary/20 transition-all appearance-none cursor-pointer"
+                                        className="w-full bg-surface border border-border rounded-xl px-4 h-12 text-sm text-text-primary outline-none focus:ring-2 focus:ring-primary/20 transition-all appearance-none cursor-pointer disabled:opacity-50"
                                     >
-                                        <option value="">{completingOrder.items?.uom_base?.name || 'Unidad Base'}</option>
+                                        <option value="">{loadingCompletionData ? 'Cargando...' : (completingOrder.items?.uom_base?.name || 'Unidad Base')}</option>
                                         {productionPresentations.map(p => (
                                             <option key={p.id} value={p.id}>{p.name}</option>
                                         ))}
@@ -498,20 +520,21 @@ export default function KDSPage() {
                                         <input 
                                             type="number"
                                             value={qtyProduced}
+                                            disabled={loadingCompletionData}
                                             onChange={e => setQtyProduced(parseFloat(e.target.value) || 0)}
-                                            className="flex-1 bg-surface border border-border rounded-xl px-4 h-14 text-2xl font-black text-primary outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                                            className="flex-1 bg-surface border border-border rounded-xl px-4 h-14 text-2xl font-black text-primary outline-none focus:ring-2 focus:ring-primary/20 transition-all disabled:opacity-50"
                                             autoFocus
                                         />
                                         <div className="bg-surface-raised border border-border px-4 h-14 rounded-xl flex items-center justify-center min-w-[80px]">
                                             <span className="text-sm font-black text-text-secondary uppercase tracking-tighter">
-                                                {productionPresentations.find(p => p.id === selectedCompletionUomId)?.name || completingOrder.items?.uom_base?.name}
+                                                {loadingCompletionData ? '...' : (productionPresentations.find(p => p.id === selectedCompletionUomId)?.name || completingOrder.items?.uom_base?.name)}
                                             </span>
                                         </div>
                                     </div>
                                     <p className="text-[10px] text-text-secondary mt-2 flex justify-between">
                                         <span>Planificado: {Number(completingOrder.qty_ordered_base).toLocaleString()} {completingOrder.items?.uom_base?.name}</span>
                                         <span className="font-bold text-primary">
-                                            Base Actual: {(qtyProduced * (productionPresentations.find(p => p.id === selectedCompletionUomId)?.conversion_factor || 1)).toLocaleString()} {completingOrder.items?.uom_base?.name}
+                                            Base Actual: {loadingCompletionData ? '...' : (qtyProduced * (productionPresentations.find(p => p.id === selectedCompletionUomId)?.conversion_factor || 1)).toLocaleString()} {completingOrder.items?.uom_base?.name}
                                         </span>
                                     </p>
                                 </div>
@@ -526,7 +549,7 @@ export default function KDSPage() {
                             </button>
                             <button 
                                 onClick={() => handleFinalize(false)}
-                                disabled={saving || qtyProduced <= 0}
+                                disabled={saving || loadingCompletionData || qtyProduced <= 0}
                                 className="flex-1 h-12 bg-success text-text-inverse rounded-xl font-bold text-sm hover:bg-success-dark transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-success/20"
                             >
                                 {saving && <Loader2 className="w-4 h-4 animate-spin" />}
