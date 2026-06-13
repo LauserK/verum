@@ -481,6 +481,12 @@ class WarehouseCreate(BaseModel):
     venue_id: Optional[UUID] = None
     type: str
 
+class WarehouseUpdate(BaseModel):
+    name: Optional[str] = None
+    venue_id: Optional[UUID] = None
+    type: Optional[str] = None
+    is_active: Optional[bool] = None
+
 class WarehouseResponse(WarehouseCreate):
     id: UUID
     org_id: UUID

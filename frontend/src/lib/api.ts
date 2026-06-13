@@ -658,6 +658,9 @@ export const adminApi = {
     createInventoryWarehouse: (data: Partial<Warehouse>): Promise<Warehouse> =>
         fetchWithAuth('/inventory/warehouses', { method: 'POST', body: JSON.stringify(data) }),
 
+    updateInventoryWarehouse: (id: string, data: Partial<Warehouse>): Promise<Warehouse> =>
+        fetchWithAuth(`/inventory/warehouses/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
     getUOMBase: (): Promise<UOMBase[]> =>
         fetchWithAuth('/inventory/uom-base'),
 

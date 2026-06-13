@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { adminApi, Warehouse } from '@/lib/api';
-import { Plus, Warehouse as WarehouseIcon, X, Save, Loader2, MapPin } from 'lucide-react';
+import { Plus, Warehouse as WarehouseIcon, X, Save, Loader2, MapPin, Edit2 } from 'lucide-react';
 import { useTranslations } from '@/components/I18nProvider';
 import { useVenue } from '@/components/VenueContext';
+import ConfirmationModal from '@/components/ConfirmationModal';
 
 export default function WarehousesPage() {
   const { t } = useTranslations('inventory.warehouses');
@@ -12,8 +13,10 @@ export default function WarehousesPage() {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [newWarehouse, setNewWarehouse] = useState<{ name: string; type: Warehouse['type']; venue_id: string }>({ name: '', type: 'storage', venue_id: '' });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [newWarehouse, setNewWarehouse] = useState<{ name: string; type: Warehouse['type']; venue_id: string; is_active?: boolean }>({ name: '', type: 'storage', venue_id: '', is_active: true });
   const [saving, setSaving] = useState(false);
+  const [errorModal, setErrorModal] = useState({ isOpen: false, message: '' });
 
   useEffect(() => {
     loadWarehouses();
@@ -30,16 +33,33 @@ export default function WarehousesPage() {
     }
   }
 
-  async function handleCreate() {
+  function openCreateModal() {
+    setEditingId(null);
+    setNewWarehouse({ name: '', type: 'storage', venue_id: '', is_active: true });
+    setShowModal(true);
+  }
+
+  function openEditModal(wh: Warehouse) {
+    setEditingId(wh.id);
+    setNewWarehouse({ name: wh.name, type: wh.type, venue_id: wh.venue_id || '', is_active: wh.is_active });
+    setShowModal(true);
+  }
+
+  async function handleSave() {
     if (!newWarehouse.name.trim()) return;
     setSaving(true);
     try {
-      await adminApi.createInventoryWarehouse(newWarehouse);
+      if (editingId) {
+        await adminApi.updateInventoryWarehouse(editingId, newWarehouse);
+      } else {
+        await adminApi.createInventoryWarehouse(newWarehouse);
+      }
       setShowModal(false);
-      setNewWarehouse({ name: '', type: 'storage' });
+      setNewWarehouse({ name: '', type: 'storage', venue_id: '', is_active: true });
       await loadWarehouses();
-    } catch (error) {
-      alert('Error al crear almacén');
+    } catch (error: any) {
+      console.error('Error saving warehouse:', error);
+      setErrorModal({ isOpen: true, message: error?.message || (editingId ? 'Error al actualizar almacén' : 'Error al crear almacén') });
     } finally {
       setSaving(false);
     }
@@ -55,13 +75,23 @@ export default function WarehousesPage() {
 
   return (
     <div className="space-y-6 animate-in fade-in">
+      <ConfirmationModal 
+        isOpen={errorModal.isOpen}
+        title="Error"
+        message={errorModal.message}
+        confirmLabel="Entendido"
+        cancelLabel=""
+        onConfirm={() => setErrorModal({ ...errorModal, isOpen: false })}
+        onCancel={() => setErrorModal({ ...errorModal, isOpen: false })}
+      />
+
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-text-primary">{t('title')}</h1>
           <p className="text-sm text-text-secondary mt-1">{t('subtitle')}</p>
         </div>
         <button 
-          onClick={() => setShowModal(true)}
+          onClick={openCreateModal}
           className="flex items-center gap-2 bg-primary text-text-inverse px-4 h-10 rounded-xl text-sm font-medium hover:bg-primary-hover transition-colors"
         >
           <Plus className="w-4 h-4" />
@@ -71,8 +101,15 @@ export default function WarehousesPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {warehouses.map(wh => (
-          <div key={wh.id} className="bg-surface p-5 rounded-2xl border border-border shadow-sm hover:border-border-strong transition-all">
-            <div className="flex items-start justify-between">
+          <div key={wh.id} className="bg-surface p-5 rounded-2xl border border-border shadow-sm hover:border-border-strong transition-all relative group">
+            <button 
+                onClick={() => openEditModal(wh)}
+                className="absolute top-4 right-4 p-2 text-text-secondary hover:text-primary hover:bg-primary/10 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                title="Editar Almacén"
+            >
+                <Edit2 className="w-4 h-4" />
+            </button>
+            <div className="flex items-start justify-between pr-8">
                 <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
                     <WarehouseIcon className="w-5 h-5 text-primary" />
                 </div>
@@ -85,6 +122,11 @@ export default function WarehousesPage() {
                 <p className="text-xs text-text-secondary uppercase tracking-widest mt-1 font-semibold">
                     {t(`types.${wh.type}`)}
                 </p>
+                {wh.venue_id && (
+                    <p className="text-[10px] text-text-secondary mt-2 flex items-center gap-1">
+                        <MapPin className="w-3 h-3" /> Sede vinculada
+                    </p>
+                )}
             </div>
           </div>
         ))}
@@ -106,7 +148,7 @@ export default function WarehousesPage() {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in">
           <div className="bg-surface rounded-3xl p-6 w-full max-w-md shadow-2xl border border-border animate-in zoom-in-95 duration-200">
             <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-bold text-text-primary">{t('newTitle')}</h2>
+                <h2 className="text-xl font-bold text-text-primary">{editingId ? 'Editar Almacén' : t('newTitle')}</h2>
                 <button onClick={() => setShowModal(false)} className="text-text-secondary hover:text-text-primary transition-colors">
                     <X className="w-5 h-5" />
                 </button>
@@ -163,12 +205,12 @@ export default function WarehousesPage() {
                 {t('cancel')}
               </button>
               <button 
-                onClick={handleCreate}
+                onClick={handleSave}
                 disabled={saving || !newWarehouse.name.trim()}
                 className="flex-1 px-4 h-11 bg-primary text-text-inverse rounded-xl font-bold text-sm hover:bg-primary-hover transition-all flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                {t('create')}
+                {editingId ? 'Guardar Cambios' : t('create')}
               </button>
             </div>
           </div>

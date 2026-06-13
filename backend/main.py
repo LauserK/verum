@@ -3681,6 +3681,30 @@ async def create_warehouse(warehouse: WarehouseCreate, org_id: str = Depends(get
         raise HTTPException(status_code=400, detail="Error creating warehouse")
     return res.data[0]
 
+@app.put("/inventory/warehouses/{warehouse_id}", response_model=WarehouseResponse, tags=["Inventory"])
+async def update_warehouse(warehouse_id: UUID, warehouse: WarehouseUpdate, org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.manage_warehouses"))):
+    update_data = {}
+    if warehouse.name is not None:
+        update_data["name"] = warehouse.name
+    if warehouse.type is not None:
+        update_data["type"] = warehouse.type
+    if warehouse.is_active is not None:
+        update_data["is_active"] = warehouse.is_active
+    
+    if "venue_id" in warehouse.model_dump(exclude_unset=True):
+         val = warehouse.model_dump(exclude_unset=True)["venue_id"]
+         update_data["venue_id"] = str(val) if val else None
+
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No data to update")
+
+    res = db.table("warehouses").update(update_data).eq("id", str(warehouse_id)).eq("org_id", org_id).execute()
+    
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Warehouse not found or not in org")
+
+    return res.data[0]
+
 @app.get("/inventory/warehouses", response_model=List[WarehouseResponse], tags=["Inventory"])
 async def list_warehouses(org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
     res = db.table("warehouses").select("*").eq("org_id", org_id).execute()
