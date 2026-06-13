@@ -835,6 +835,7 @@ export interface ProductionOrderCreate {
     qty_ordered_base: number
     presentation_id: string | null
     scheduled_date: string
+    priority: string
 }
 
 export interface ProductionOrderResponse {

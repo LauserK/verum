@@ -25,6 +25,7 @@ export default function NewProductionOrderPage() {
     const [targetQty, setTargetQty] = useState<number>(1)
     const [targetUomId, setTargetUomId] = useState('')
     const [scheduledDate, setScheduledDate] = useState(format(new Date(), 'yyyy-MM-dd'))
+    const [priority, setPriority] = useState('normal')
     
     // Search state
     const [searchQuery, setSearchQuery] = useState('')
@@ -107,7 +108,8 @@ export default function NewProductionOrderPage() {
                 warehouse_id: warehouseId,
                 qty_ordered_base: qtyBase,
                 presentation_id: targetUomId || null,
-                scheduled_date: scheduledDate
+                scheduled_date: scheduledDate,
+                priority: priority
             })
             router.push('/admin/production/orders')
         } catch (err: any) {
@@ -143,8 +145,8 @@ export default function NewProductionOrderPage() {
             </div>
 
             <div className="bg-surface rounded-2xl border border-border p-6 shadow-sm space-y-8">
-                {/* Header Section: Venue, Warehouse, Date */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Header Section: Venue, Warehouse, Date, Priority */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div>
                         <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Sede</label>
                         <select 
@@ -186,6 +188,20 @@ export default function NewProductionOrderPage() {
                                 className="w-full bg-surface border border-border rounded-xl pl-10 pr-4 h-11 text-sm text-text-primary outline-none focus:border-primary"
                             />
                         </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Prioridad</label>
+                        <select 
+                            value={priority}
+                            onChange={e => setPriority(e.target.value)}
+                            className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary outline-none focus:border-primary"
+                        >
+                            <option value="low">Baja</option>
+                            <option value="normal">Normal</option>
+                            <option value="high">Alta</option>
+                            <option value="urgent">Urgente</option>
+                        </select>
                     </div>
                 </div>
 
