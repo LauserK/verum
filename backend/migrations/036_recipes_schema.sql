@@ -72,7 +72,8 @@ create table if not exists production_orders (
   catering_request_id uuid references catering_requests(id) on delete set null,
   notes               text,
   created_by          uuid references profiles(id),
-  assigned_to         uuid references profiles(id)
+  assigned_to         uuid references profiles(id),
+  created_at          timestamp with time zone default now()
 );
 
 create table if not exists production_order_consumptions (

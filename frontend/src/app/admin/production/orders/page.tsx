@@ -19,9 +19,12 @@ export default function ProductionOrdersPage() {
                     <h1 className="text-3xl font-black text-text-primary tracking-tight">
                         {t('production.orders')}
                     </h1>
-                    <button className="px-6 h-11 bg-primary text-text-inverse rounded-xl font-bold text-sm flex items-center gap-2 opacity-50 cursor-not-allowed">
+                    <Link 
+                        href="/admin/production/orders/new"
+                        className="px-6 h-11 bg-primary text-text-inverse rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-primary-hover shadow-lg shadow-primary/20 transition-all"
+                    >
                         <Plus className="w-4 h-4" /> {t('production.newOrder')}
-                    </button>
+                    </Link>
                 </div>
             </div>
 
@@ -30,9 +33,9 @@ export default function ProductionOrdersPage() {
                 <div className="w-16 h-16 bg-surface-raised rounded-full flex items-center justify-center mx-auto mb-4">
                     <ClipboardList className="w-8 h-8 text-text-secondary" />
                 </div>
-                <h3 className="text-lg font-bold text-text-primary mb-2">Órdenes de Producción</h3>
+                <h3 className="text-lg font-bold text-text-primary mb-2">Lista de Órdenes (En Desarrollo)</h3>
                 <p className="text-text-secondary max-w-sm mx-auto">
-                    Próximamente podrás crear órdenes de producción, realizar explosión de materiales y registrar la producción terminada.
+                    Actualmente puedes crear nuevas órdenes de producción reactivas utilizando el botón superior. La vista de lista se completará en futuros hitos.
                 </p>
             </div>
         </div>

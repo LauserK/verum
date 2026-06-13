@@ -12,10 +12,14 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         if res and res.user:
             return res.user
         else:
+            print("Auth error: No user returned from Supabase")
             raise HTTPException(status_code=401, detail="Invalid token")
-    except Exception:
+    except Exception as e:
+        import traceback
+        print(f"Authentication exception: {e}")
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
+            detail=f"Could not validate credentials: {str(e)}",
             headers={"WWW-Authenticate": "Bearer"},
         )
