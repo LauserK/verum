@@ -30,7 +30,7 @@ export default function ProductionDashboard() {
             {/* Main Navigation Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {/* KDS - Destacado */}
-                <Link href="/admin/production/kds" className="bg-primary/5 border-2 border-primary/20 rounded-[40px] p-8 shadow-sm hover:border-primary transition-all group flex flex-col justify-between">
+                <Link href="/production/kds" className="bg-primary/5 border-2 border-primary/20 rounded-[40px] p-8 shadow-sm hover:border-primary transition-all group flex flex-col justify-between">
                     <div>
                         <div className="w-14 h-14 rounded-3xl bg-primary flex items-center justify-center text-text-inverse group-hover:scale-110 transition-transform shadow-lg shadow-primary/30 mb-6">
                             <Monitor className="w-7 h-7" />
