@@ -641,3 +641,6 @@ class ProductionOrderResponse(BaseModel):
     priority: str
     scheduled_date: Optional[str]
     created_at: Optional[datetime]
+
+class OrderStatusUpdate(BaseModel):
+    status: str # pending, in_progress, paused, cancelled

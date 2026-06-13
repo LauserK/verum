@@ -42,7 +42,7 @@ from schemas import (
     StockMovementResponse,
     TransferCreate, TransferConfirm, TransferResponse,
     RecipeCreate, RecipeResponse, CalculateProductionNeedsRequest, ProductionNeedsResponse,
-    ProductionOrderCreate, ProductionOrderResponse
+    ProductionOrderCreate, ProductionOrderResponse, OrderStatusUpdate
 )
 
 CARACAS_TZ = pytz.timezone("America/Caracas")
@@ -4719,5 +4719,39 @@ async def create_production_order(
         }).execute()
 
     return created_order
+
+@app.patch("/production/orders/{order_id}/status", response_model=ProductionOrderResponse, tags=["Production"])
+async def update_production_order_status(
+    order_id: UUID, 
+    req: OrderStatusUpdate, 
+    org_id: str = Depends(get_active_org_id), 
+    db=Depends(get_db), 
+    current_user = Depends(require_permission("production.execute"))
+):
+    update_data = {"status": req.status}
+    if req.status == "in_progress":
+        update_data["started_at"] = datetime.now(CARACAS_TZ).isoformat()
+        
+    res = db.table("production_orders").update(update_data).eq("id", str(order_id)).eq("org_id", org_id).execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return res.data[0]
+
+@app.get("/production/orders/kds", tags=["Production"])
+async def get_kds_orders(
+    warehouse_id: UUID, 
+    org_id: str = Depends(get_active_org_id), 
+    db=Depends(get_db), 
+    _=Depends(require_permission("production.view"))
+):
+    res = db.table("production_orders")\
+        .select("*, items(name, uom_base:uom_base_id(name)), recipes(id)")\
+        .eq("org_id", org_id)\
+        .eq("warehouse_id", str(warehouse_id))\
+        .in_("status", ["pending", "in_progress", "paused"])\
+        .order("priority", desc=True)\
+        .order("scheduled_date")\
+        .execute()
+    return res.data
 
 
