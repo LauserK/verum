@@ -3,7 +3,8 @@
 import React, { useState, useEffect } from 'react'
 import { adminApi, Warehouse, Profile } from '@/lib/api'
 import { useVenue } from '@/components/VenueContext'
-import { Loader2, ChefHat, Clock, MapPin, LayoutGrid, Package, X, AlertTriangle } from 'lucide-react'
+import { Loader2, ChefHat, Clock, MapPin, LayoutGrid, Package, X, AlertTriangle, Home } from 'lucide-react'
+import Link from 'next/link'
 
 export default function KDSPage() {
     const { availableVenues } = useVenue()
@@ -106,7 +107,6 @@ export default function KDSPage() {
             await loadKDSData()
         } catch (err: any) {
             console.error('Error finalizing order:', err)
-            // Backend returns error details in message for now
             if (err.message?.includes('VARIANCE_EXCEEDED')) {
                 try {
                     const errorDetails = JSON.parse(err.message)
@@ -123,10 +123,13 @@ export default function KDSPage() {
     }
 
     return (
-        <div className="min-h-screen bg-bg text-text-primary flex flex-col p-4 md:p-6">
+        <div className="fixed inset-0 bg-bg text-text-primary flex flex-col p-4 md:p-6 z-[100] overflow-hidden">
             {/* KDS Header */}
             <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-6 border-b border-border mb-6">
                 <div className="flex items-center gap-3">
+                    <Link href="/" className="p-3 bg-surface hover:bg-surface-raised border border-border text-text-secondary hover:text-primary rounded-2xl transition-all shadow-sm">
+                        <Home className="w-6 h-6" />
+                    </Link>
                     <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center">
                         <ChefHat className="w-7 h-7 text-primary" />
                     </div>
@@ -162,7 +165,7 @@ export default function KDSPage() {
 
                     {profile && (
                         <div className="flex items-center gap-3 bg-surface-raised px-4 py-2 rounded-2xl border border-border shadow-sm">
-                            <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center font-bold text-text-inverse shadow-lg shadow-primary/20">
+                            <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center font-bold text-text-inverse shadow-lg shadow-primary/30">
                                 {profile.full_name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2)}
                             </div>
                             <div className="leading-tight">
@@ -255,7 +258,7 @@ export default function KDSPage() {
 
             {/* Detail Modal */}
             {selectedOrder && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-surface border border-border rounded-[40px] w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col animate-in zoom-in-95 duration-200">
                         <div className="p-8 border-b border-border flex justify-between items-start bg-surface-raised/50">
                             <div>
@@ -350,9 +353,9 @@ export default function KDSPage() {
                 </div>
             )}
 
-            {/* Completion Modal (Input Quantity) */}
+            {/* Completion Modal */}
             {completingOrder && !varianceError && (
-                <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-surface border border-border rounded-3xl w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
                         <div className="p-6 border-b border-border bg-surface-raised/50">
                             <h2 className="text-xl font-bold text-text-primary">Finalizar Producción</h2>
@@ -394,9 +397,9 @@ export default function KDSPage() {
                 </div>
             )}
 
-            {/* Variance Alert Modal (Soft-Block) */}
+            {/* Variance Alert Modal */}
             {varianceError && (
-                <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-surface border-2 border-warning/30 rounded-[40px] w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
                         <div className="bg-warning/10 p-8 text-center border-b border-warning/20">
                             <div className="w-20 h-20 bg-warning/20 rounded-full flex items-center justify-center mx-auto mb-6 text-warning">
@@ -424,105 +427,7 @@ export default function KDSPage() {
                             </div>
 
                             <div className="bg-surface-raised p-4 rounded-2xl text-xs text-text-secondary leading-relaxed border border-border/50">
-                                <strong>Nota:</strong> Al procesar con esta diferencia, se generará una alerta automática en el panel de supervisión para su auditoría.
-                            </div>
-                        </div>
-
-                        <div className="p-8 pt-0 flex flex-col gap-3">
-                            <button 
-                                onClick={() => setVarianceError(null)}
-                                className="w-full h-14 bg-surface-raised text-text-primary rounded-2xl font-black text-sm hover:bg-border transition-colors uppercase tracking-widest"
-                            >
-                                Corregir Cantidad
-                            </button>
-                            <button 
-                                onClick={() => handleFinalize(true)}
-                                disabled={saving}
-                                className="w-full h-14 bg-warning text-text-inverse rounded-2xl font-black text-sm hover:bg-warning-dark transition-all flex items-center justify-center gap-3 shadow-lg shadow-warning/20 uppercase tracking-widest"
-                            >
-                                {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-                                Sí, Procesar con Alerta
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Completion Modal (Input Quantity) */}
-            {completingOrder && !varianceError && (
-                <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-surface border border-border rounded-3xl w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
-                        <div className="p-6 border-b border-border bg-surface-raised/50">
-                            <h2 className="text-xl font-bold text-text-primary">Finalizar Producción</h2>
-                            <p className="text-sm text-text-secondary mt-1">{completingOrder.items?.name}</p>
-                        </div>
-                        <div className="p-6 space-y-4">
-                            <div>
-                                <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Cantidad Real Producida</label>
-                                <div className="flex items-center gap-3">
-                                    <input 
-                                        type="number"
-                                        value={qtyProduced}
-                                        onChange={e => setQtyProduced(parseFloat(e.target.value) || 0)}
-                                        className="flex-1 bg-surface border border-border rounded-xl px-4 h-14 text-2xl font-black text-primary outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-                                        autoFocus
-                                    />
-                                    <span className="text-xl font-bold text-text-secondary uppercase">{completingOrder.items?.uom_base?.name}</span>
-                                </div>
-                                <p className="text-[10px] text-text-secondary mt-2">Cantidad planificada: {Number(completingOrder.qty_ordered_base).toLocaleString()} {completingOrder.items?.uom_base?.name}</p>
-                            </div>
-                        </div>
-                        <div className="p-6 bg-surface-raised/50 flex gap-3">
-                            <button 
-                                onClick={() => setCompletingOrder(null)}
-                                className="flex-1 h-12 border border-border text-text-primary rounded-xl font-bold text-sm hover:bg-surface transition-colors"
-                            >
-                                Cancelar
-                            </button>
-                            <button 
-                                onClick={() => handleFinalize(false)}
-                                disabled={saving || qtyProduced <= 0}
-                                className="flex-1 h-12 bg-success text-text-inverse rounded-xl font-bold text-sm hover:bg-success-dark transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                            >
-                                {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-                                Confirmar
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Variance Alert Modal (Soft-Block) */}
-            {varianceError && (
-                <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-surface border-2 border-warning/30 rounded-[40px] w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
-                        <div className="bg-warning/10 p-8 text-center border-b border-warning/20">
-                            <div className="w-20 h-20 bg-warning/20 rounded-full flex items-center justify-center mx-auto mb-6 text-warning">
-                                <AlertTriangle className="w-10 h-10" />
-                            </div>
-                            <h2 className="text-2xl font-black text-text-primary mb-2 tracking-tight">Desviación de Rendimiento</h2>
-                            <p className="text-warning font-bold text-sm">La cantidad producida está fuera del límite permitido.</p>
-                        </div>
-                        
-                        <div className="p-8 space-y-6">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="p-4 bg-surface-raised rounded-2xl border border-border text-center">
-                                    <p className="text-[10px] font-black text-text-secondary uppercase mb-1">Esperado</p>
-                                    <p className="text-lg font-bold text-text-primary">{Number(completingOrder.qty_ordered_base).toLocaleString()}</p>
-                                </div>
-                                <div className="p-4 bg-surface-raised rounded-2xl border border-warning/30 text-center">
-                                    <p className="text-[10px] font-black text-warning uppercase mb-1">Real</p>
-                                    <p className="text-lg font-bold text-warning">{qtyProduced.toLocaleString()}</p>
-                                </div>
-                            </div>
-
-                            <div className="flex justify-between items-center px-2">
-                                <span className="text-xs font-black text-text-secondary uppercase tracking-widest">Varianza Detectada</span>
-                                <span className="text-xl font-black text-error">{varianceError.variance_pct.toFixed(2)}%</span>
-                            </div>
-
-                            <div className="bg-surface-raised p-4 rounded-2xl text-xs text-text-secondary leading-relaxed border border-border/50">
-                                <strong>Nota:</strong> Al procesar con esta diferencia, se generará una alerta automática en el panel de supervisión para su auditoría.
+                                <strong>Nota:</strong> Al procesar con esta diferencia, se generará una alerta automática en el panel de supervisión.
                             </div>
                         </div>
 
