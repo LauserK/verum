@@ -137,8 +137,12 @@ export default function KDSPage() {
     async function handleFinalize(ignoreVariance = false) {
         setSaving(true)
         try {
+            // Convert to base units using the selected UOM
+            const factor = productionPresentations.find(p => p.id === selectedCompletionUomId)?.conversion_factor || 1;
+            const qtyBase = qtyProduced * factor;
+
             await adminApi.completeProductionOrder(completingOrder.id, {
-                qty_produced_base: qtyProduced,
+                qty_produced_base: qtyBase,
                 ignore_variance: ignoreVariance
             })
             setCompletingOrder(null)
@@ -365,7 +369,6 @@ export default function KDSPage() {
                                 <h2 className="text-4xl font-black text-text-primary tracking-tight">{selectedOrder.items?.name}</h2>
                                 <p className="text-primary font-black text-2xl mt-2 tracking-tighter uppercase">
                                     OBJETIVO: {(() => {
-                                        // Postgrest might return an object or an array for joined tables
                                         const pres = Array.isArray(selectedOrder.uom_presentations) ? selectedOrder.uom_presentations[0] : selectedOrder.uom_presentations;
                                         if (pres) {
                                             return (Number(selectedOrder.qty_ordered_base) / Number(pres.conversion_factor)).toLocaleString(undefined, { maximumFractionDigits: 2 });
@@ -386,7 +389,6 @@ export default function KDSPage() {
                         </div>
 
                         <div className="p-8 overflow-y-auto grid grid-cols-1 lg:grid-cols-2 gap-12 flex-1">
-                            {/* Ingredients */}
                             <section>
                                 <h3 className="text-xs font-black text-text-secondary uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
                                     <Package className="w-4 h-4" /> Ingredientes a Usar
@@ -396,11 +398,9 @@ export default function KDSPage() {
                                 ) : (
                                     <div className="space-y-3">
                                         {(recipeData?.ingredients || []).map((ing: any, i: number) => {
-                                            // Handle yield_presentation as object or array
                                             const yieldPres = Array.isArray(recipeData.yield_presentation) ? recipeData.yield_presentation[0] : recipeData.yield_presentation;
                                             const yieldFactor = yieldPres?.conversion_factor || 1;
                                             const yieldBase = Number(recipeData.yield_qty_base) * yieldFactor;
-                                            
                                             const orderBase = Number(selectedOrder.qty_ordered_base);
                                             const factor = yieldBase > 0 ? orderBase / yieldBase : 0;
                                             const scaledQty = Number(ing.qty_base) * factor;
@@ -418,7 +418,6 @@ export default function KDSPage() {
                                 )}
                             </section>
 
-                            {/* Steps */}
                             <section>
                                 <h3 className="text-xs font-black text-text-secondary uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
                                     <Clock className="w-4 h-4" /> Pasos de Elaboración
@@ -471,20 +470,51 @@ export default function KDSPage() {
                             <h2 className="text-xl font-bold text-text-primary">Finalizar Producción</h2>
                             <p className="text-sm text-text-secondary mt-1">{completingOrder.items?.name}</p>
                         </div>
-                        <div className="p-6 space-y-4">
-                            <div>
-                                <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Cantidad Real Producida</label>
-                                <div className="flex items-center gap-3">
-                                    <input 
-                                        type="number"
-                                        value={qtyProduced}
-                                        onChange={e => setQtyProduced(parseFloat(e.target.value) || 0)}
-                                        className="flex-1 bg-surface border border-border rounded-xl px-4 h-14 text-2xl font-black text-primary outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-                                        autoFocus
-                                    />
-                                    <span className="text-xl font-bold text-text-secondary uppercase">{completingOrder.items?.uom_base?.name}</span>
+                        <div className="p-6 space-y-6">
+                            <div className="grid grid-cols-1 gap-4">
+                                <div className="space-y-2">
+                                    <label className="block text-xs font-black text-text-secondary uppercase tracking-widest">Unidad de Medida</label>
+                                    <select 
+                                        value={selectedCompletionUomId}
+                                        onChange={e => {
+                                            const oldFactor = productionPresentations.find(p => p.id === selectedCompletionUomId)?.conversion_factor || 1;
+                                            const newFactor = productionPresentations.find(p => p.id === e.target.value)?.conversion_factor || 1;
+                                            const currentBase = qtyProduced * oldFactor;
+                                            setQtyProduced(currentBase / newFactor);
+                                            setSelectedCompletionUomId(e.target.value);
+                                        }}
+                                        className="w-full bg-surface border border-border rounded-xl px-4 h-12 text-sm text-text-primary outline-none focus:ring-2 focus:ring-primary/20 transition-all appearance-none cursor-pointer"
+                                    >
+                                        <option value="">{completingOrder.items?.uom_base?.name || 'Unidad Base'}</option>
+                                        {productionPresentations.map(p => (
+                                            <option key={p.id} value={p.id}>{p.name}</option>
+                                        ))}
+                                    </select>
                                 </div>
-                                <p className="text-[10px] text-text-secondary mt-2">Cantidad planificada: {Number(completingOrder.qty_ordered_base).toLocaleString()} {completingOrder.items?.uom_base?.name}</p>
+
+                                <div className="space-y-2">
+                                    <label className="block text-xs font-black text-text-secondary uppercase tracking-widest">Cantidad Real Producida</label>
+                                    <div className="flex items-center gap-3">
+                                        <input 
+                                            type="number"
+                                            value={qtyProduced}
+                                            onChange={e => setQtyProduced(parseFloat(e.target.value) || 0)}
+                                            className="flex-1 bg-surface border border-border rounded-xl px-4 h-14 text-2xl font-black text-primary outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                                            autoFocus
+                                        />
+                                        <div className="bg-surface-raised border border-border px-4 h-14 rounded-xl flex items-center justify-center min-w-[80px]">
+                                            <span className="text-sm font-black text-text-secondary uppercase tracking-tighter">
+                                                {productionPresentations.find(p => p.id === selectedCompletionUomId)?.name || completingOrder.items?.uom_base?.name}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <p className="text-[10px] text-text-secondary mt-2 flex justify-between">
+                                        <span>Planificado: {Number(completingOrder.qty_ordered_base).toLocaleString()} {completingOrder.items?.uom_base?.name}</span>
+                                        <span className="font-bold text-primary">
+                                            Base Actual: {(qtyProduced * (productionPresentations.find(p => p.id === selectedCompletionUomId)?.conversion_factor || 1)).toLocaleString()} {completingOrder.items?.uom_base?.name}
+                                        </span>
+                                    </p>
+                                </div>
                             </div>
                         </div>
                         <div className="p-6 bg-surface-raised/50 flex gap-3">
@@ -497,10 +527,10 @@ export default function KDSPage() {
                             <button 
                                 onClick={() => handleFinalize(false)}
                                 disabled={saving || qtyProduced <= 0}
-                                className="flex-1 h-12 bg-success text-text-inverse rounded-xl font-bold text-sm hover:bg-success-dark transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                                className="flex-1 h-12 bg-success text-text-inverse rounded-xl font-bold text-sm hover:bg-success-dark transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-success/20"
                             >
                                 {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-                                Confirmar
+                                Finalizar
                             </button>
                         </div>
                     </div>
@@ -527,7 +557,9 @@ export default function KDSPage() {
                                 </div>
                                 <div className="p-4 bg-surface-raised rounded-2xl border border-warning/30 text-center">
                                     <p className="text-[10px] font-black text-warning uppercase mb-1">Real</p>
-                                    <p className="text-lg font-bold text-warning">{qtyProduced.toLocaleString()}</p>
+                                    <p className="text-lg font-bold text-warning">
+                                        {(qtyProduced * (productionPresentations.find(p => p.id === selectedCompletionUomId)?.conversion_factor || 1)).toLocaleString()}
+                                    </p>
                                 </div>
                             </div>
 

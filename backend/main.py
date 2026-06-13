@@ -3910,12 +3910,25 @@ async def delete_uom_presentation(pres_id: UUID, db=Depends(get_db), _=Depends(r
     return {"ok": True}
 
 @app.get("/inventory/items/{item_id}/presentations", tags=["Inventory"])
-async def get_item_presentations(item_id: UUID, db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
+async def get_item_presentations(
+    item_id: UUID, 
+    db=Depends(get_db), 
+    org_id: str = Depends(get_active_org_id),
+    current_user: dict = Depends(get_current_user)
+):
+    # Allow if has inventory.view OR production.view OR production.execute
+    has_inv = await resolve_permission(current_user["id"], "inventory.view", db, org_id)
+    has_prod_v = await resolve_permission(current_user["id"], "production.view", db, org_id)
+    has_prod_e = await resolve_permission(current_user["id"], "production.execute", db, org_id)
+
+    if not (has_inv or has_prod_v or has_prod_e):
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+
     # 1. Get the item to know its base_uom_id
     item_res = db.table("items").select("base_uom_id, org_id").eq("id", str(item_id)).single().execute()
     if not item_res.data:
         raise HTTPException(status_code=404, detail="Item not found")
-    
+
     base_uom_id = item_res.data["base_uom_id"]
     org_id = item_res.data["org_id"]
 
@@ -3933,9 +3946,8 @@ async def get_item_presentations(item_id: UUID, db=Depends(get_db), _=Depends(re
         .eq("base_uom_id", base_uom_id) \
         .or_(f"is_global.eq.true,org_id.eq.{org_id}") \
         .execute()
-    
-    return res_all.data or []
 
+    return res_all.data or []
 @app.post("/inventory/items/{item_id}/presentations/{pres_id}", tags=["Inventory"])
 async def enable_item_presentation(item_id: UUID, pres_id: UUID, db=Depends(get_db), _=Depends(require_permission("inventory.manage_items"))):
     db.table("item_uom_presentations").upsert({
