@@ -768,6 +768,15 @@ export const adminApi = {
 
     createProductionOrder: (data: ProductionOrderCreate): Promise<ProductionOrderResponse> =>
         fetchWithAuth('/production/orders', { method: 'POST', body: JSON.stringify(data) }),
+
+    getKDSOrders: (warehouseId: string): Promise<any[]> =>
+        fetchWithAuth(`/production/orders/kds?warehouse_id=${warehouseId}`),
+
+    updateOrderStatus: (id: string, status: string): Promise<any> =>
+        fetchWithAuth(`/production/orders/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+
+    completeProductionOrder: (id: string, data: { qty_produced_base: number, ignore_variance: boolean }): Promise<any> =>
+        fetchWithAuth(`/production/orders/${id}/complete`, { method: 'POST', body: JSON.stringify(data) }),
 }
 
 // ── Recipe Types (M19) ─────────────────────────────
