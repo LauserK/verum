@@ -599,8 +599,9 @@ class RecipeResponse(BaseModel):
     item_id: UUID
     yield_qty_base: Decimal
     yield_presentation_id: Optional[UUID] = None
-    ingredients: List[Dict] # Detailed ingredient info
-    steps: List[Dict]      # Detailed step info
+    yield_presentation: Optional[Dict] = None # Added for scaling info
+    ingredients: List[Dict]
+    steps: List[Dict]
     is_active: bool
     created_at: datetime
 
@@ -637,6 +638,7 @@ class ProductionOrderResponse(BaseModel):
     warehouse_id: UUID
     qty_ordered_base: Decimal
     presentation_id: Optional[UUID] = None
+    uom_presentations: Optional[Dict] = None # Added for unit conversion info in KDS
     status: str
     priority: str
     scheduled_date: Optional[str]

@@ -25,6 +25,8 @@ export default function KDSPage() {
     const [completingOrder, setCompletingOrder] = useState<any>(null)
     const [qtyProduced, setQtyProduced] = useState(0)
     const [varianceError, setVarianceError] = useState<any>(null)
+    const [productionPresentations, setProductionPresentations] = useState<any[]>([])
+    const [selectedCompletionUomId, setSelectedCompletionUomId] = useState('')
 
     useEffect(() => {
         async function initProfile() {
@@ -115,8 +117,20 @@ export default function KDSPage() {
             }
         } else if (order.status === 'in_progress') {
             setCompletingOrder(order)
-            setQtyProduced(order.qty_ordered_base)
             setVarianceError(null)
+            
+            // Set initial quantity in the requested unit if possible
+            const pres = Array.isArray(order.uom_presentations) ? order.uom_presentations[0] : order.uom_presentations;
+            if (pres) {
+                setQtyProduced(Number(order.qty_ordered_base) / Number(pres.conversion_factor))
+                setSelectedCompletionUomId(pres.id)
+            } else {
+                setQtyProduced(order.qty_ordered_base)
+                setSelectedCompletionUomId('')
+            }
+
+            // Fetch all available presentations for this item
+            adminApi.getItemPresentations(order.item_id).then(setProductionPresentations).catch(console.error)
         }
     }
 
@@ -304,7 +318,19 @@ export default function KDSPage() {
                                     {order.status === 'in_progress' ? (
                                         <div className="flex items-center gap-2">
                                             <span className="w-2 h-2 rounded-full bg-success animate-pulse"></span>
-                                            <span className="text-[10px] font-bold text-success uppercase">En Proceso</span>
+                                            <div>
+                                                <p className="text-[10px] font-bold text-success uppercase">En Proceso</p>
+                                                <p className="text-[10px] font-mono text-text-secondary">
+                                                    {(() => {
+                                                        const start = new Date(order.started_at).getTime();
+                                                        const now = new Date().getTime();
+                                                        const diff = Math.max(0, now - start);
+                                                        const hours = Math.floor(diff / (1000 * 60 * 60));
+                                                        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                                                        return `${hours}h ${minutes}m`;
+                                                    })()}
+                                                </p>
+                                            </div>
                                         </div>
                                     ) : (
                                         <span className="text-[10px] font-bold text-text-secondary uppercase">Pendiente</span>
@@ -338,7 +364,17 @@ export default function KDSPage() {
                                 </div>
                                 <h2 className="text-4xl font-black text-text-primary tracking-tight">{selectedOrder.items?.name}</h2>
                                 <p className="text-primary font-black text-2xl mt-2 tracking-tighter uppercase">
-                                    OBJETIVO: {Number(selectedOrder.qty_ordered_base).toLocaleString()} {selectedOrder.items?.uom_base?.name}
+                                    OBJETIVO: {(() => {
+                                        // Postgrest might return an object or an array for joined tables
+                                        const pres = Array.isArray(selectedOrder.uom_presentations) ? selectedOrder.uom_presentations[0] : selectedOrder.uom_presentations;
+                                        if (pres) {
+                                            return (Number(selectedOrder.qty_ordered_base) / Number(pres.conversion_factor)).toLocaleString(undefined, { maximumFractionDigits: 2 });
+                                        }
+                                        return Number(selectedOrder.qty_ordered_base).toLocaleString();
+                                    })()} {(() => {
+                                        const pres = Array.isArray(selectedOrder.uom_presentations) ? selectedOrder.uom_presentations[0] : selectedOrder.uom_presentations;
+                                        return pres?.name || selectedOrder.items?.uom_base?.name;
+                                    })()}
                                 </p>
                             </div>
                             <button 
@@ -360,17 +396,13 @@ export default function KDSPage() {
                                 ) : (
                                     <div className="space-y-3">
                                         {(recipeData?.ingredients || []).map((ing: any, i: number) => {
-                                            // 1. Get the real yield in base units for the recipe
-                                            // The recipe yields 'yield_qty_base' (in the item's base unit).
-                                            const yieldBase = Number(recipeData.yield_qty_base);
+                                            // Handle yield_presentation as object or array
+                                            const yieldPres = Array.isArray(recipeData.yield_presentation) ? recipeData.yield_presentation[0] : recipeData.yield_presentation;
+                                            const yieldFactor = yieldPres?.conversion_factor || 1;
+                                            const yieldBase = Number(recipeData.yield_qty_base) * yieldFactor;
                                             
-                                            // 2. The order is also in base units
                                             const orderBase = Number(selectedOrder.qty_ordered_base);
-                                            
-                                            // 3. Factor is simply order/yield because both are in base units
-                                            const factor = orderBase / yieldBase;
-                                            
-                                            // 4. Scale ingredient
+                                            const factor = yieldBase > 0 ? orderBase / yieldBase : 0;
                                             const scaledQty = Number(ing.qty_base) * factor;
                                             
                                             return (
