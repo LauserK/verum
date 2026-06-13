@@ -15,6 +15,7 @@ export default function NewProductionOrderPage() {
     const { availableVenues } = useVenue()
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
+    const [loadingItemData, setLoadingItemData] = useState(false)
     const [errorModal, setErrorModal] = useState({ isOpen: false, message: '' })
     const [items, setItems] = useState<InventoryItem[]>([])
     
@@ -54,6 +55,7 @@ export default function NewProductionOrderPage() {
     // Handle venue change to find production warehouse
     useEffect(() => {
         if (venueId) {
+            setLoadingItemData(true)
             adminApi.getInventoryWarehouses().then(whs => {
                 const prodWh = whs.find(w => w.venue_id === venueId && w.type === 'production')
                 setProductionWarehouse(prodWh || null)
@@ -62,7 +64,7 @@ export default function NewProductionOrderPage() {
                 } else {
                     setWarehouseId('')
                 }
-            })
+            }).finally(() => setLoadingItemData(false))
         } else {
             setProductionWarehouse(null)
             setWarehouseId('')
@@ -72,13 +74,14 @@ export default function NewProductionOrderPage() {
     // Handle item selection to load presentations
     useEffect(() => {
         if (itemId) {
+            setLoadingItemData(true)
             adminApi.getItemPresentations(itemId).then(pres => {
                 setPresentations(pres)
                 // Set default presentation if available, otherwise stay at "" (base unit)
                 const def = pres.find(p => p.is_default)
                 if (def) setTargetUomId(def.id)
                 else setTargetUomId('')
-            })
+            }).finally(() => setLoadingItemData(false))
         } else {
             setPresentations([])
             setTargetUomId('')
@@ -152,7 +155,8 @@ export default function NewProductionOrderPage() {
                         <select 
                             value={venueId}
                             onChange={e => setVenueId(e.target.value)}
-                            className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary outline-none focus:border-primary appearance-none"
+                            disabled={loadingItemData}
+                            className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary outline-none focus:border-primary appearance-none disabled:opacity-50"
                         >
                             <option value="">Seleccionar Sede</option>
                             {availableVenues.map(v => (
@@ -167,12 +171,12 @@ export default function NewProductionOrderPage() {
                             <WarehouseIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary" />
                             <input 
                                 type="text"
-                                value={productionWarehouse?.name || 'Selecciona sede...'}
+                                value={productionWarehouse?.name || (loadingItemData ? 'Cargando...' : 'Selecciona sede...')}
                                 readOnly
                                 className="w-full bg-surface-raised border border-border rounded-xl pl-10 pr-4 h-11 text-sm text-text-primary outline-none"
                             />
                         </div>
-                        {venueId && !productionWarehouse && (
+                        {venueId && !productionWarehouse && !loadingItemData && (
                             <p className="text-[10px] text-error mt-1 font-medium">Esta sede no tiene almacén de tipo 'production'</p>
                         )}
                     </div>
@@ -185,7 +189,8 @@ export default function NewProductionOrderPage() {
                                 type="date"
                                 value={scheduledDate}
                                 onChange={e => setScheduledDate(e.target.value)}
-                                className="w-full bg-surface border border-border rounded-xl pl-10 pr-4 h-11 text-sm text-text-primary outline-none focus:border-primary"
+                                disabled={loadingItemData}
+                                className="w-full bg-surface border border-border rounded-xl pl-10 pr-4 h-11 text-sm text-text-primary outline-none focus:border-primary disabled:opacity-50"
                             />
                         </div>
                     </div>
@@ -195,7 +200,8 @@ export default function NewProductionOrderPage() {
                         <select 
                             value={priority}
                             onChange={e => setPriority(e.target.value)}
-                            className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary outline-none focus:border-primary"
+                            disabled={loadingItemData}
+                            className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary outline-none focus:border-primary disabled:opacity-50"
                         >
                             <option value="low">Baja</option>
                             <option value="normal">Normal</option>
@@ -210,20 +216,26 @@ export default function NewProductionOrderPage() {
                     <div className="md:col-span-6 relative">
                         <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Producto a Producir</label>
                         <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary" />
+                            {loadingItemData ? (
+                                <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary animate-spin" />
+                            ) : (
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary" />
+                            )}
                             <input 
                                 type="text"
                                 value={searchQuery}
-                                onFocus={() => setShowSuggestions(true)}
+                                onFocus={() => !loadingItemData && setShowSuggestions(true)}
                                 onChange={e => {
                                     setSearchQuery(e.target.value)
                                     setShowSuggestions(true)
                                     if (!e.target.value) setItemId('')
                                 }}
-                                placeholder="Buscar producto con receta..."
-                                className="w-full bg-surface border border-border rounded-xl pl-10 pr-4 h-11 text-sm text-text-primary outline-none focus:border-primary"
+                                disabled={loadingItemData}
+                                placeholder={loadingItemData ? "Actualizando información..." : "Buscar producto con receta..."}
+                                className="w-full bg-surface border border-border rounded-xl pl-10 pr-4 h-11 text-sm text-text-primary outline-none focus:border-primary disabled:opacity-50"
                             />
                         </div>
+                        {/* ... suggestions ... */}
                         
                         {showSuggestions && searchQuery.length > 0 && (
                             <div className="absolute z-50 w-full mt-1 bg-surface border border-border rounded-xl shadow-xl max-h-60 overflow-y-auto">
@@ -267,10 +279,10 @@ export default function NewProductionOrderPage() {
                         <select 
                             value={targetUomId}
                             onChange={e => setTargetUomId(e.target.value)}
-                            className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary outline-none focus:border-primary appearance-none"
-                            disabled={!itemId}
+                            className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary outline-none focus:border-primary appearance-none disabled:opacity-50"
+                            disabled={!itemId || loadingItemData}
                         >
-                            <option value="">{items.find(i => i.id === itemId)?.uom_name || 'Unidad Base'}</option>
+                            <option value="">{loadingItemData ? 'Cargando...' : (items.find(i => i.id === itemId)?.uom_name || 'Unidad Base')}</option>
                             {presentations.map(p => (
                                 <option key={p.id} value={p.id}>{p.name}</option>
                             ))}

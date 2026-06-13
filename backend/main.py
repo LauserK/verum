@@ -4745,7 +4745,7 @@ async def get_kds_orders(
     _=Depends(require_permission("production.view"))
 ):
     res = db.table("production_orders")\
-        .select("*, items(name, uom_base:uom_base_id(name)), recipes(id)")\
+        .select("*, items(name, uom_base(name)), recipes(id)")\
         .eq("org_id", org_id)\
         .eq("warehouse_id", str(warehouse_id))\
         .in_("status", ["pending", "in_progress", "paused"])\
