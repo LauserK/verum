@@ -42,7 +42,7 @@ from schemas import (
     StockMovementResponse,
     TransferCreate, TransferConfirm, TransferResponse,
     RecipeCreate, RecipeResponse, CalculateProductionNeedsRequest, ProductionNeedsResponse,
-    ProductionOrderCreate, ProductionOrderResponse, OrderStatusUpdate
+    ProductionOrderCreate, ProductionOrderResponse, OrderStatusUpdate, OrderCompleteRequest
 )
 
 CARACAS_TZ = pytz.timezone("America/Caracas")
@@ -4753,5 +4753,48 @@ async def get_kds_orders(
         .order("scheduled_date")\
         .execute()
     return res.data
+
+@app.post("/production/orders/{order_id}/complete", tags=["Production"])
+async def complete_production_order(
+    order_id: UUID, 
+    req: OrderCompleteRequest, 
+    org_id: str = Depends(get_active_org_id), 
+    db=Depends(get_db), 
+    current_user = Depends(require_permission("production.execute"))
+):
+    # 1. Fetch Order & Item
+    order_res = db.table("production_orders").select("*, items(yield_alert_enabled, yield_alert_threshold_pct)").eq("id", str(order_id)).execute()
+    if not order_res.data: 
+        raise HTTPException(status_code=404, detail="Order not found")
+    order = order_res.data[0]
+    
+    # 2. Check Variance
+    expected_qty = Decimal(str(order["qty_ordered_base"]))
+    actual_qty = req.qty_produced_base
+    variance_pct = ((actual_qty - expected_qty) / expected_qty) * 100
+    
+    item = order["items"]
+    if item.get("yield_alert_enabled") and not req.ignore_variance:
+        threshold = Decimal(str(item.get("yield_alert_threshold_pct") or "0"))
+        if abs(variance_pct) > threshold:
+            raise HTTPException(
+                status_code=409, 
+                detail={
+                    "code": "VARIANCE_EXCEEDED", 
+                    "variance_pct": float(variance_pct), 
+                    "threshold": float(threshold)
+                }
+            )
+            
+    # 3. Mark completed
+    db.table("production_orders").update({
+        "status": "completed", 
+        "qty_produced_base": float(actual_qty),
+        "yield_variance_pct": float(variance_pct),
+        "yield_alert_triggered": True if abs(variance_pct) > Decimal(str(item.get("yield_alert_threshold_pct") or "100")) else False,
+        "completed_at": datetime.now(CARACAS_TZ).isoformat()
+    }).eq("id", str(order_id)).execute()
+    
+    return {"status": "success", "variance_pct": float(variance_pct)}
 
 

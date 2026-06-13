@@ -644,3 +644,7 @@ class ProductionOrderResponse(BaseModel):
 
 class OrderStatusUpdate(BaseModel):
     status: str # pending, in_progress, paused, cancelled
+
+class OrderCompleteRequest(BaseModel):
+    qty_produced_base: Decimal
+    ignore_variance: bool = False
