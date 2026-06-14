@@ -113,7 +113,7 @@ export default function ProductionOrdersPage() {
                                             <div>
                                                 <p className="text-[10px] font-black text-text-secondary uppercase tracking-widest mb-1">Rendimiento Real</p>
                                                 <p className="text-3xl font-black text-text-primary tracking-tighter">
-                                                    {detailData.qty_produced_base ? Number(detailData.qty_produced_base).toLocaleString() : '---'}
+                                                    {detailData.qty_produced_base !== null && detailData.qty_produced_base !== undefined ? Number(detailData.qty_produced_base).toLocaleString() : '---'}
                                                     <span className="text-lg text-text-secondary ml-1 font-bold">{detailData.items?.uom_base?.name}</span>
                                                 </p>
                                                 <p className="text-xs text-text-secondary mt-1">Objetivo: {Number(detailData.qty_ordered_base).toLocaleString()} {detailData.items?.uom_base?.name}</p>
