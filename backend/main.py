@@ -4776,7 +4776,7 @@ async def get_production_orders(
     _=Depends(require_permission("production.view"))
 ):
     res = db.table("production_orders")\
-        .select("*, items(name, uom_base(name)), warehouses(name)")\
+        .select("*, items(name, uom_base(name)), warehouses!production_orders_warehouse_id_fkey(name)")\
         .eq("org_id", org_id)\
         .order("created_at", desc=True)\
         .execute()
