@@ -833,6 +833,7 @@ export interface CalculateProductionNeedsRequest {
 export interface IngredientDeficit {
     item_id: string
     item_name: string
+    uom_name: string // Added field
     needed_base_qty: number
     available_base_qty: number
     deficit_base_qty: number
@@ -840,7 +841,14 @@ export interface IngredientDeficit {
 
 export interface ProductionNeedsResponse {
     status: 'OK' | 'DEFICIT'
-    ingredients: any[]
+    ingredients: Array<{
+        item_id: string
+        item_name: string
+        uom_name: string
+        needed_base_qty: number
+        available_base_qty: number
+        deficit_base_qty: number
+    }>
     deficits: IngredientDeficit[]
 }
 

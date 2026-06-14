@@ -83,6 +83,7 @@ export default function ScalerPanel({
                             <tr>
                                 <th className="px-4 py-2 text-left text-xs font-medium text-text-secondary uppercase">Ingrediente</th>
                                 <th className="px-4 py-2 text-right text-xs font-medium text-text-secondary uppercase">Necesario</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-text-secondary uppercase">Unidad</th>
                                 <th className="px-4 py-2 text-right text-xs font-medium text-text-secondary uppercase">Disponible</th>
                                 <th className="px-4 py-2 text-center text-xs font-medium text-text-secondary uppercase">Estado</th>
                             </tr>
@@ -91,13 +92,14 @@ export default function ScalerPanel({
                             {needs.ingredients.map((ing) => (
                                 <tr key={ing.item_id}>
                                     <td className="px-4 py-3 text-sm font-medium text-text-primary">{ing.item_name}</td>
-                                    <td className="px-4 py-3 text-sm text-right text-text-secondary">{Number(ing.needed_base_qty).toLocaleString()}</td>
-                                    <td className="px-4 py-3 text-sm text-right text-text-secondary">{Number(ing.available_base_qty).toLocaleString()}</td>
+                                    <td className="px-4 py-3 text-sm text-right text-text-secondary font-mono">{Number(ing.needed_base_qty).toLocaleString()}</td>
+                                    <td className="px-4 py-3 text-xs text-left text-text-secondary uppercase font-bold">{ing.uom_name}</td>
+                                    <td className="px-4 py-3 text-sm text-right text-text-secondary font-mono">{Number(ing.available_base_qty).toLocaleString()}</td>
                                     <td className="px-4 py-3 text-sm text-center">
                                         {ing.deficit_base_qty > 0 ? (
                                             <div className="flex items-center justify-center text-error gap-1">
                                                 <AlertCircle className="h-4 w-4" />
-                                                <span className="font-semibold">-{Number(ing.deficit_base_qty).toLocaleString()}</span>
+                                                <span className="font-semibold font-mono">-{Number(ing.deficit_base_qty).toLocaleString()}</span>
                                             </div>
                                         ) : (
                                             <div className="flex items-center justify-center text-success">

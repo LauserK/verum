@@ -4637,7 +4637,7 @@ async def calculate_production_needs(
         
     scale_factor = target_base_qty / yield_qty_base if yield_qty_base > 0 else Decimal("0")
     
-    ing_res = db.table("recipe_ingredients").select("*, items(name)").eq("recipe_id", recipe["id"]).execute()
+    ing_res = db.table("recipe_ingredients").select("*, items(name, uom_base(name))").eq("recipe_id", recipe["id"]).execute()
     ingredients = ing_res.data or []
     
     scaled_ingredients = []
@@ -4654,6 +4654,7 @@ async def calculate_production_needs(
         scaled_ing = {
             "item_id": ing["item_id"],
             "item_name": ing["items"]["name"] if ing.get("items") else "Unknown",
+            "uom_name": ing["items"]["uom_base"]["name"] if ing.get("items") and ing["items"].get("uom_base") else "",
             "needed_base_qty": needed_base_qty,
             "available_base_qty": available_qty,
             "deficit_base_qty": deficit_qty
