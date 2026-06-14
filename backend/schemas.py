@@ -652,9 +652,14 @@ class ProductionOrderResponse(BaseModel):
 class OrderStatusUpdate(BaseModel):
     status: str # pending, in_progress, paused, cancelled
 
+class OrderConsumptionUpdate(BaseModel):
+    item_id: UUID
+    qty_actual_base: Decimal
+
 class OrderCompleteRequest(BaseModel):
     qty_produced_base: Decimal
     ignore_variance: bool = False
+    consumptions: Optional[List[OrderConsumptionUpdate]] = None
 
 class ProductionOrderDetailResponse(ProductionOrderResponse):
     started_at: Optional[datetime] = None

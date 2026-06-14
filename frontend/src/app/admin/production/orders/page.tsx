@@ -195,17 +195,23 @@ export default function ProductionOrdersPage() {
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-border/50">
-                                                    {detailData.consumptions.map((c, i) => (
-                                                        <tr key={i} className="hover:bg-bg/30 transition-colors">
-                                                            <td className="px-6 py-4 font-bold text-text-primary">{c.items?.name}</td>
-                                                            <td className="px-6 py-4 font-mono text-right text-text-secondary">
-                                                                {Number(c.qty_planned_base).toLocaleString()} {c.items?.uom_base?.name}
-                                                            </td>
-                                                            <td className="px-6 py-4 font-mono text-right font-black text-primary">
-                                                                {Number(c.qty_planned_base).toLocaleString()} {c.items?.uom_base?.name}
-                                                            </td>
-                                                        </tr>
-                                                    ))}
+                                                    {detailData.consumptions.map((c, i) => {
+                                                        const hasDifference = Math.abs(Number(c.qty_actual_base) - Number(c.qty_planned_base)) > 0.001;
+                                                        return (
+                                                            <tr key={i} className="hover:bg-bg/30 transition-colors">
+                                                                <td className="px-6 py-4 font-bold text-text-primary">{c.items?.name}</td>
+                                                                <td className="px-6 py-4 font-mono text-right text-text-secondary">
+                                                                    {Number(c.qty_planned_base).toLocaleString()} {c.items?.uom_base?.name}
+                                                                </td>
+                                                                <td className={`px-6 py-4 font-mono text-right font-black ${hasDifference ? 'text-error' : 'text-primary'}`}>
+                                                                    <div className="flex items-center justify-end gap-1.5">
+                                                                        {hasDifference && <AlertTriangle className="w-3 h-3" />}
+                                                                        {Number(c.qty_actual_base || c.qty_planned_base).toLocaleString()} {c.items?.uom_base?.name}
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
                                                 </tbody>
                                             </table>
                                         </div>

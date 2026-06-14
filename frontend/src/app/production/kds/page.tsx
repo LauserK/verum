@@ -28,6 +28,7 @@ export default function KDSPage() {
     const [productionPresentations, setProductionPresentations] = useState<any[]>([])
     const [selectedCompletionUomId, setSelectedCompletionUomId] = useState('')
     const [loadingCompletionData, setLoadingCompletionData] = useState(false)
+    const [actualConsumptions, setActualConsumptions] = useState<any[]>([])
     const [now, setNow] = useState(new Date())
 
     useEffect(() => {
@@ -128,22 +129,25 @@ export default function KDSPage() {
             setLoadingCompletionData(true)
             
             try {
-                // 1. Fetch recipe data if not already present
-                let currentRecipe = recipeData;
-                if (!currentRecipe || currentRecipe.item_id !== order.item_id) {
-                    currentRecipe = await adminApi.getRecipe(order.item_id);
-                    setRecipeData(currentRecipe);
-                }
+                // 1. Fetch full order detail to get planned consumptions
+                const detail = await adminApi.getProductionOrderDetail(order.id);
+                setActualConsumptions(detail.consumptions.map(c => ({
+                    item_id: c.item_id,
+                    item_name: c.items?.name,
+                    uom_name: c.items?.uom_base?.name,
+                    qty_planned_base: c.qty_planned_base,
+                    qty_actual_base: c.qty_planned_base // Default to planned
+                })));
 
                 // 2. Fetch all available presentations for this item
                 const presentations = await adminApi.getItemPresentations(order.item_id);
                 setProductionPresentations(presentations);
 
                 // 3. Set smart defaults
-                const recipeYieldPresId = currentRecipe?.yield_presentation_id || '';
-                setSelectedCompletionUomId(recipeYieldPresId);
+                // Try to find the presentation used in the order
+                setSelectedCompletionUomId(order.presentation_id || '');
 
-                const yieldFactor = presentations.find(p => p.id === recipeYieldPresId)?.conversion_factor || 1;
+                const yieldFactor = presentations.find(p => p.id === order.presentation_id)?.conversion_factor || 1;
                 setQtyProduced(Number(order.qty_ordered_base) / yieldFactor);
             } catch (err) {
                 console.error('Error loading completion data:', err);
@@ -162,7 +166,11 @@ export default function KDSPage() {
 
             await adminApi.completeProductionOrder(completingOrder.id, {
                 qty_produced_base: qtyBase,
-                ignore_variance: ignoreVariance
+                ignore_variance: ignoreVariance,
+                consumptions: actualConsumptions.map(c => ({
+                    item_id: c.item_id,
+                    qty_actual_base: Number(c.qty_actual_base)
+                }))
             })
             setCompletingOrder(null)
             setSelectedOrder(null)
@@ -497,52 +505,95 @@ export default function KDSPage() {
                             <h2 className="text-xl font-bold text-text-primary">Finalizar Producción</h2>
                             <p className="text-sm text-text-secondary mt-1">{completingOrder.items?.name}</p>
                         </div>
-                        <div className="p-6 space-y-6">
-                            <div className="grid grid-cols-1 gap-4">
+                        <div className="p-6 space-y-6 max-h-[60vh] overflow-y-auto">
+                            <div className="grid grid-cols-1 gap-6">
                                 <div className="space-y-2">
-                                    <label className="block text-xs font-black text-text-secondary uppercase tracking-widest">Unidad de Medida</label>
-                                    <select 
-                                        value={selectedCompletionUomId}
-                                        disabled={loadingCompletionData}
-                                        onChange={e => {
-                                            const oldFactor = productionPresentations.find(p => p.id === selectedCompletionUomId)?.conversion_factor || 1;
-                                            const newFactor = productionPresentations.find(p => p.id === e.target.value)?.conversion_factor || 1;
-                                            const currentBase = qtyProduced * oldFactor;
-                                            setQtyProduced(currentBase / newFactor);
-                                            setSelectedCompletionUomId(e.target.value);
-                                        }}
-                                        className="w-full bg-surface border border-border rounded-xl px-4 h-12 text-sm text-text-primary outline-none focus:ring-2 focus:ring-primary/20 transition-all appearance-none cursor-pointer disabled:opacity-50"
-                                    >
-                                        <option value="">{loadingCompletionData ? 'Cargando...' : (completingOrder.items?.uom_base?.name || 'Unidad Base')}</option>
-                                        {productionPresentations.map(p => (
-                                            <option key={p.id} value={p.id}>{p.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <label className="block text-xs font-black text-text-secondary uppercase tracking-widest">Cantidad Real Producida</label>
-                                    <div className="flex items-center gap-3">
-                                        <input 
-                                            type="number"
-                                            value={qtyProduced}
-                                            disabled={loadingCompletionData}
-                                            onChange={e => setQtyProduced(parseFloat(e.target.value) || 0)}
-                                            className="flex-1 bg-surface border border-border rounded-xl px-4 h-14 text-2xl font-black text-primary outline-none focus:ring-2 focus:ring-primary/20 transition-all disabled:opacity-50"
-                                            autoFocus
-                                        />
-                                        <div className="bg-surface-raised border border-border px-4 h-14 rounded-xl flex items-center justify-center min-w-[80px]">
-                                            <span className="text-sm font-black text-text-secondary uppercase tracking-tighter">
-                                                {loadingCompletionData ? '...' : (productionPresentations.find(p => p.id === selectedCompletionUomId)?.name || completingOrder.items?.uom_base?.name)}
-                                            </span>
+                                    <label className="block text-xs font-black text-text-secondary uppercase tracking-widest">Rendimiento Final</label>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="space-y-1">
+                                            <p className="text-[10px] font-bold text-text-secondary uppercase">Unidad</p>
+                                            <select 
+                                                value={selectedCompletionUomId}
+                                                disabled={loadingCompletionData}
+                                                onChange={e => {
+                                                    const oldFactor = productionPresentations.find(p => p.id === selectedCompletionUomId)?.conversion_factor || 1;
+                                                    const newFactor = productionPresentations.find(p => p.id === e.target.value)?.conversion_factor || 1;
+                                                    const currentBase = qtyProduced * oldFactor;
+                                                    setQtyProduced(currentBase / newFactor);
+                                                    setSelectedCompletionUomId(e.target.value);
+                                                }}
+                                                className="w-full bg-surface border border-border rounded-xl px-3 h-12 text-sm text-text-primary outline-none focus:ring-2 focus:ring-primary/20 transition-all appearance-none cursor-pointer disabled:opacity-50"
+                                            >
+                                                <option value="">{loadingCompletionData ? 'Cargando...' : (completingOrder.items?.uom_base?.name || 'Unidad Base')}</option>
+                                                {productionPresentations.map(p => (
+                                                    <option key={p.id} value={p.id}>{p.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <p className="text-[10px] font-bold text-text-secondary uppercase">Cantidad</p>
+                                            <input 
+                                                type="number"
+                                                value={qtyProduced}
+                                                disabled={loadingCompletionData}
+                                                onChange={e => setQtyProduced(parseFloat(e.target.value) || 0)}
+                                                className="w-full bg-surface border border-border rounded-xl px-4 h-12 text-xl font-black text-primary outline-none focus:ring-2 focus:ring-primary/20 transition-all disabled:opacity-50"
+                                            />
                                         </div>
                                     </div>
-                                    <p className="text-[10px] text-text-secondary mt-2 flex justify-between">
-                                        <span>Planificado: {Number(completingOrder.qty_ordered_base).toLocaleString()} {completingOrder.items?.uom_base?.name}</span>
+                                    <p className="text-[10px] text-text-secondary flex justify-between px-1">
+                                        <span>Plan: {Number(completingOrder.qty_ordered_base).toLocaleString()} {completingOrder.items?.uom_base?.name}</span>
                                         <span className="font-bold text-primary">
-                                            Base Actual: {loadingCompletionData ? '...' : (qtyProduced * (productionPresentations.find(p => p.id === selectedCompletionUomId)?.conversion_factor || 1)).toLocaleString()} {completingOrder.items?.uom_base?.name}
+                                            Base: {loadingCompletionData ? '...' : (qtyProduced * (productionPresentations.find(p => p.id === selectedCompletionUomId)?.conversion_factor || 1)).toLocaleString()} {completingOrder.items?.uom_base?.name}
                                         </span>
                                     </p>
+                                </div>
+
+                                {/* Actual Consumptions Table */}
+                                <div className="space-y-3 pt-4 border-t border-border">
+                                    <div className="flex justify-between items-center">
+                                        <label className="block text-xs font-black text-text-secondary uppercase tracking-widest">Insumos Consumidos</label>
+                                        <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded">Ajustable</span>
+                                    </div>
+                                    
+                                    <div className="bg-surface-raised rounded-2xl border border-border overflow-hidden">
+                                        <table className="w-full text-left text-xs">
+                                            <thead className="bg-bg/50 border-b border-border">
+                                                <tr>
+                                                    <th className="px-3 py-2 font-bold text-text-secondary uppercase">Ingrediente</th>
+                                                    <th className="px-3 py-2 text-right font-bold text-text-secondary uppercase">Uso Real</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-border/50">
+                                                {actualConsumptions.map((cons, idx) => (
+                                                    <tr key={cons.item_id}>
+                                                        <td className="px-3 py-3">
+                                                            <p className="font-bold text-text-primary">{cons.item_name}</p>
+                                                            <p className="text-[9px] text-text-secondary uppercase">Receta: {Number(cons.qty_planned_base).toLocaleString()} {cons.uom_name}</p>
+                                                        </td>
+                                                        <td className="px-3 py-3 text-right w-32">
+                                                            <div className="relative">
+                                                                <input 
+                                                                    type="number"
+                                                                    value={cons.qty_actual_base}
+                                                                    onChange={e => {
+                                                                        const val = parseFloat(e.target.value) || 0;
+                                                                        const next = [...actualConsumptions];
+                                                                        next[idx].qty_actual_base = val;
+                                                                        setActualConsumptions(next);
+                                                                    }}
+                                                                    className="w-full bg-surface border border-border rounded-lg pl-2 pr-8 h-9 font-mono font-bold text-primary text-right focus:ring-2 focus:ring-primary/20 outline-none"
+                                                                />
+                                                                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[8px] font-black text-text-secondary uppercase pointer-events-none">
+                                                                    {cons.uom_name}
+                                                                </span>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
                             </div>
                         </div>

@@ -781,8 +781,19 @@ export const adminApi = {
     updateOrderStatus: (id: string, status: string): Promise<any> =>
         fetchWithAuth(`/production/orders/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
 
-    completeProductionOrder: (id: string, data: { qty_produced_base: number, ignore_variance: boolean }): Promise<any> =>
+    completeProductionOrder: (id: string, data: OrderCompleteRequest): Promise<any> =>
         fetchWithAuth(`/production/orders/${id}/complete`, { method: 'POST', body: JSON.stringify(data) }),
+}
+
+// ── Production Types (M20) ─────────────────────────
+
+export interface OrderCompleteRequest {
+    qty_produced_base: number
+    ignore_variance?: boolean
+    consumptions?: Array<{
+        item_id: string
+        qty_actual_base: number
+    }>
 }
 
 // ── Recipe Types (M19) ─────────────────────────────
@@ -833,7 +844,7 @@ export interface CalculateProductionNeedsRequest {
 export interface IngredientDeficit {
     item_id: string
     item_name: string
-    uom_name: string // Added field
+    uom_name: string
     needed_base_qty: number
     available_base_qty: number
     deficit_base_qty: number

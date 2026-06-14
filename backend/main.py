@@ -4788,6 +4788,7 @@ async def complete_production_order(
         if abs(variance_pct) > threshold:
             raise HTTPException(status_code=409, detail={"code": "VARIANCE_EXCEEDED", "variance_pct": float(variance_pct), "threshold": float(threshold)})
             
+    # 1. Update Order Header
     db.table("production_orders").update({
         "status": "completed", 
         "qty_produced_base": float(req.qty_produced_base),
@@ -4797,4 +4798,18 @@ async def complete_production_order(
         "assigned_to": current_user.id
     }).eq("id", str(order_id)).execute()
     
+    # 2. Update Actual Consumptions if provided
+    if req.consumptions:
+        for cons in req.consumptions:
+            db.table("production_order_consumptions").update({
+                "qty_actual_base": float(cons.qty_actual_base)
+            }).eq("order_id", str(order_id)).eq("item_id", str(cons.item_id)).execute()
+    else:
+        # Fallback: assume actual = planned
+        planned_cons = db.table("production_order_consumptions").select("item_id, qty_planned_base").eq("order_id", str(order_id)).execute()
+        for p in (planned_cons.data or []):
+            db.table("production_order_consumptions").update({
+                "qty_actual_base": p["qty_planned_base"]
+            }).eq("order_id", str(order_id)).eq("item_id", p["item_id"]).execute()
+
     return {"status": "success", "variance_pct": float(variance_pct)}
