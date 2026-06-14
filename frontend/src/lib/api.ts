@@ -772,6 +772,9 @@ export const adminApi = {
     getKDSOrders: (warehouseId: string): Promise<any[]> =>
         fetchWithAuth(`/production/orders/kds?warehouse_id=${warehouseId}`),
 
+    getProductionOrders: (): Promise<any[]> =>
+        fetchWithAuth('/production/orders'),
+
     updateOrderStatus: (id: string, status: string): Promise<any> =>
         fetchWithAuth(`/production/orders/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
 

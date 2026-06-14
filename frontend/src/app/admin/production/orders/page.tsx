@@ -21,20 +21,8 @@ export default function ProductionOrdersPage() {
     async function loadOrders() {
         setLoading(true)
         try {
-            // Fetch all orders. We don't have a generic "getAllOrders" yet, 
-            // but we can use getInventoryWarehouses + getKDSOrders for each, 
-            // OR we should have a generic endpoint. 
-            // Let's assume for now we use a generic fetch if available or just one warehouse for MVP.
-            const whs = await adminApi.getInventoryWarehouses()
-            const allOrders = []
-            for (const wh of whs) {
-                if (wh.type === 'production') {
-                    const whOrders = await adminApi.getKDSOrders(wh.id)
-                    allOrders.push(...whOrders.map((o: any) => ({ ...o, warehouse_name: wh.name })))
-                }
-            }
-            // Sort by creation date
-            setOrders(allOrders.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()))
+            const allOrders = await adminApi.getProductionOrders()
+            setOrders(allOrders)
         } catch (err) {
             console.error('Error loading orders:', err)
         } finally {
@@ -161,7 +149,7 @@ export default function ProductionOrdersPage() {
                                             <p className="text-sm text-text-primary">{format(new Date(order.scheduled_date || order.created_at), 'dd MMM yyyy', { locale: es })}</p>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <p className="text-xs text-text-secondary">{order.warehouse_name}</p>
+                                            <p className="text-xs text-text-secondary">{order.warehouses?.name}</p>
                                         </td>
                                     </tr>
                                 ))}

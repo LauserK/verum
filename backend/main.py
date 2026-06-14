@@ -4769,6 +4769,19 @@ async def get_kds_orders(
         .execute()
     return res.data
 
+@app.get("/production/orders", tags=["Production"])
+async def get_production_orders(
+    org_id: str = Depends(get_active_org_id), 
+    db=Depends(get_db), 
+    _=Depends(require_permission("production.view"))
+):
+    res = db.table("production_orders")\
+        .select("*, items(name, uom_base(name)), warehouses(name)")\
+        .eq("org_id", org_id)\
+        .order("created_at", desc=True)\
+        .execute()
+    return res.data
+
 @app.post("/production/orders/{order_id}/complete", tags=["Production"])
 async def complete_production_order(
     order_id: UUID, 
