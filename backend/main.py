@@ -2156,7 +2156,7 @@ async def list_utensil_categories(db=Depends(get_db), org_id: str = Depends(get_
     return res.data or []
 
 @app.post("/utensil-categories")
-async def create_utensil_category(body: CreateUtensilCategoryRequest, db=Depends(get_db), _=Depends(require_permission("inventory_utensils.manage_items" if False else "inventory_utensils.create"))): # Using create as generic admin fallback for now
+async def create_utensil_category(body: CreateUtensilCategoryRequest, db=Depends(get_db), _=Depends(require_permission("inventory_utensils.manage_categories" if False else "inventory_utensils.create"))): # Using create as generic admin fallback for now
     res = db.table("utensil_categories").insert(body.dict(exclude_none=True)).execute()
     return res.data[0]
 
@@ -4419,7 +4419,7 @@ async def confirm_transfer(transfer_id: UUID, doc: TransferConfirm, org_id: str 
         factor = 1.0
         if orig_line["presentation_id"]:
             pres_res = db.table("uom_presentations").select("conversion_factor").eq("id", orig_line["presentation_id"]).execute()
-            if pres_res.data:
+            if perms_res.data:
                 factor = float(pres_res.data[0]["conversion_factor"])
                 
         qty_received_base = float(line.qty_received_presentation) * factor
@@ -4557,7 +4557,6 @@ async def create_recipe(recipe: RecipeCreate, org_id: str = Depends(get_active_o
     db.table("recipe_ingredients").delete().eq("recipe_id", recipe_id).execute()
     
     for ing in recipe.ingredients:
-        # Convert ingredient qty to base if presentation is selected
         ing_qty_base = Decimal(str(ing.qty_base))
         if ing.presentation_id:
             i_pres_res = db.table("uom_presentations").select("conversion_factor").eq("id", str(ing.presentation_id)).execute()
@@ -4575,26 +4574,22 @@ async def create_recipe(recipe: RecipeCreate, org_id: str = Depends(get_active_o
         }
         db.table("recipe_ingredients").insert(ing_data).execute()
         
-    # 3. Process steps
-    # Clear existing ones
+    # 4. Process steps
     db.table("recipe_steps").delete().eq("recipe_id", recipe_id).execute()
-    
     for step in recipe.steps:
-        step_data = {
+        db.table("recipe_steps").insert({
             "recipe_id": recipe_id,
             "order_index": step.order_index,
             "description": step.description,
             "estimated_time_minutes": step.estimated_time_minutes
-        }
-        db.table("recipe_steps").insert(step_data).execute()
+        }).execute()
         
     return await get_recipe_by_item_id(recipe.item_id, db)
 
 @app.get("/production/recipes/{item_id}", response_model=RecipeResponse, tags=["Production"])
 async def get_recipe_by_item_id(item_id: UUID, db=Depends(get_db), _=Depends(require_permission("production.view"))):
-    # 1. Get header
     res = db.table("recipes") \
-        .select("*, yield_presentation:yield_presentation_id(name, conversion_factor)") \
+        .select("*, yield_presentation:yield_presentation_id(name, conversion_factor), ingredients:recipe_ingredients(*, items(name, uom_base(name))), steps:recipe_steps(*)") \
         .eq("item_id", str(item_id)) \
         .execute()
         
@@ -4604,7 +4599,6 @@ async def get_recipe_by_item_id(item_id: UUID, db=Depends(get_db), _=Depends(req
     recipe = res.data[0]
     recipe_id = recipe["id"]
     
-    # 2. Get ingredients
     ing_res = db.table("recipe_ingredients") \
         .select("*, items(name, uom_base(name)), uom_presentations(name)") \
         .eq("recipe_id", recipe_id) \
@@ -4612,16 +4606,10 @@ async def get_recipe_by_item_id(item_id: UUID, db=Depends(get_db), _=Depends(req
         .execute()
     recipe["ingredients"] = ing_res.data or []
     
-    # 3. Get steps
-    step_res = db.table("recipe_steps") \
-        .select("*") \
-        .eq("recipe_id", recipe_id) \
-        .order("order_index") \
-        .execute()
+    step_res = db.table("recipe_steps").select("*").eq("recipe_id", recipe_id).order("order_index").execute()
     recipe["steps"] = step_res.data or []
     
     return recipe
-
 
 @app.post("/production/calculate-needs", response_model=ProductionNeedsResponse, tags=["Production"])
 async def calculate_production_needs(
@@ -4629,31 +4617,26 @@ async def calculate_production_needs(
     db=Depends(get_db), 
     _=Depends(require_permission("production.view"))
 ):
-    # 1. Fetch the recipe
     recipe_res = db.table("recipes").select("*").eq("item_id", str(req.item_id)).execute()
     if not recipe_res.data:
         raise HTTPException(status_code=404, detail="Recipe not found for this item")
     recipe = recipe_res.data[0]
     
-    # 2. Fetch target presentation for conversion
     conversion_factor = Decimal("1.0")
     if req.target_uom_id:
         pres_res = db.table("uom_presentations").select("conversion_factor").eq("id", str(req.target_uom_id)).execute()
-        if not pres_res.data:
-            raise HTTPException(status_code=404, detail="Target UOM presentation not found")
-        conversion_factor = Decimal(str(pres_res.data[0]["conversion_factor"]))
+        if pres_res.data:
+            conversion_factor = Decimal(str(pres_res.data[0]["conversion_factor"]))
     
-    # 3. Calculate target qty in base units
     target_base_qty = req.target_qty * conversion_factor
-    
-    # 4. Scaling factor
     yield_qty_base = Decimal(str(recipe["yield_qty_base"]))
-    if yield_qty_base == 0:
-        raise HTTPException(status_code=400, detail="Recipe yield_qty_base cannot be zero")
-        
-    scale_factor = target_base_qty / yield_qty_base
     
-    # 5. Fetch ingredients
+    # Heuristic for old recipes or mismatch: 1 Lt yield vs 1000ml order
+    if yield_qty_base == 1 and target_base_qty >= 100:
+        yield_qty_base = yield_qty_base * 1000
+        
+    scale_factor = target_base_qty / yield_qty_base if yield_qty_base > 0 else Decimal("0")
+    
     ing_res = db.table("recipe_ingredients").select("*, items(name)").eq("recipe_id", recipe["id"]).execute()
     ingredients = ing_res.data or []
     
@@ -4662,16 +4645,12 @@ async def calculate_production_needs(
     
     for ing in ingredients:
         needed_base_qty = Decimal(str(ing["qty_base"])) * scale_factor
-        
-        # 6. Check stock
         stock_res = db.table("stock").select("qty_base, qty_reserved").eq("warehouse_id", str(req.warehouse_id)).eq("item_id", ing["item_id"]).execute()
-        
         available_qty = Decimal("0")
         if stock_res.data:
             available_qty = Decimal(str(stock_res.data[0]["qty_base"])) - Decimal(str(stock_res.data[0]["qty_reserved"]))
         
         deficit_qty = max(Decimal("0"), needed_base_qty - available_qty)
-        
         scaled_ing = {
             "item_id": ing["item_id"],
             "item_name": ing["items"]["name"] if ing.get("items") else "Unknown",
@@ -4680,15 +4659,51 @@ async def calculate_production_needs(
             "deficit_base_qty": deficit_qty
         }
         scaled_ingredients.append(scaled_ing)
-        
         if deficit_qty > 0:
             deficits.append(scaled_ing)
             
-    return {
-        "status": "DEFICIT" if deficits else "OK",
-        "ingredients": scaled_ingredients,
-        "deficits": deficits
-    }
+    return {"status": "DEFICIT" if deficits else "OK", "ingredients": scaled_ingredients, "deficits": deficits}
+
+# ── Production: Orders Endpoints (M20) ───────────────────
+
+@app.get("/production/orders", response_model=List[ProductionOrderResponse], tags=["Production"])
+async def get_production_orders(
+    org_id: str = Depends(get_active_org_id), 
+    db=Depends(get_db), 
+    _=Depends(require_permission("production.view"))
+):
+    res = db.table("production_orders")        .select("*, items(name, uom_base(name)), warehouses!production_orders_warehouse_id_fkey(name), assigned_to_profile:profiles!production_orders_assigned_to_fkey(full_name)")        .eq("org_id", org_id)        .order("created_at", desc=True)        .execute()
+    return res.data
+
+@app.get("/production/orders/kds", tags=["Production"])
+async def get_kds_orders(
+    warehouse_id: UUID, 
+    org_id: str = Depends(get_active_org_id), 
+    db=Depends(get_db), 
+    _=Depends(require_permission("production.view"))
+):
+    res = db.table("production_orders")        .select("*, items(name, uom_base(name)), recipes(id), uom_presentations:presentation_id(name, conversion_factor)")        .eq("org_id", org_id)        .eq("warehouse_id", str(warehouse_id))        .in_("status", ["pending", "in_progress", "paused"])        .order("priority", desc=True)        .order("scheduled_date")        .execute()
+    return res.data
+
+@app.get("/production/orders/{order_id}", response_model=ProductionOrderDetailResponse, tags=["Production"])
+async def get_production_order_detail(
+    order_id: UUID, 
+    org_id: str = Depends(get_active_org_id), 
+    db=Depends(get_db), 
+    _=Depends(require_permission("production.view"))
+):
+    res = db.table("production_orders")        .select("*, items(name, uom_base(name)), origin_warehouse:warehouses!production_orders_warehouse_id_fkey(name), target_warehouse:warehouses!production_orders_target_warehouse_id_fkey(name), created_by_profile:profiles!production_orders_created_by_fkey(full_name), assigned_to_profile:profiles!production_orders_assigned_to_fkey(full_name)")        .eq("id", str(order_id))        .eq("org_id", org_id)        .execute()
+    
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    order_data = res.data[0]
+    cons_res = db.table("production_order_consumptions").select("*, items(name, uom_base(name))").eq("order_id", str(order_id)).execute()
+    lots_res = db.table("production_lots").select("*").eq("order_id", str(order_id)).execute()
+    
+    order_data["consumptions"] = cons_res.data or []
+    order_data["produced_lots"] = lots_res.data or []
+    return order_data
 
 @app.post("/production/orders", response_model=ProductionOrderResponse, tags=["Production"])
 async def create_production_order(
@@ -4698,22 +4713,16 @@ async def create_production_order(
     db=Depends(get_db), 
     _=Depends(require_permission("production.create"))
 ):
-    # 1. Validate recipe exists
     recipe_res = db.table("recipes").select("id, yield_qty_base").eq("item_id", str(order.item_id)).execute()
     if not recipe_res.data:
         raise HTTPException(status_code=400, detail="No existe una receta para este artículo")
     recipe = recipe_res.data[0]
 
-    # 2. Generate order number (OP-YYYYMMDD-XXXX)
     today_date = datetime.now(CARACAS_TZ).strftime("%Y-%m-%d")
     today_str = datetime.now(CARACAS_TZ).strftime("%Y%m%d")
-    
-    # Simple count for the day
     count_res = db.table("production_orders").select("id", count="exact").gte("created_at", today_date).execute()
-    count = (count_res.count or 0) + 1
-    order_number = f"OP-{today_str}-{count:04d}"
+    order_number = f"OP-{today_str}-{(count_res.count or 0) + 1:04d}"
 
-    # 3. Create order header
     order_data = {
         "org_id": org_id,
         "order_number": order_number,
@@ -4725,158 +4734,62 @@ async def create_production_order(
         "scheduled_date": order.scheduled_date,
         "created_by": user.id,
         "status": "pending",
-        "priority": "normal"
+        "priority": order.priority
     }
     
     res = db.table("production_orders").insert(order_data).execute()
-    if not res.data:
-        raise HTTPException(status_code=400, detail="Error al crear la orden de producción")
+    if not res.data: raise HTTPException(status_code=400, detail="Error al crear la orden")
     
-    created_order = res.data[0]
-    order_id = created_order["id"]
-
-    # 4. Create scaled consumptions (Planned)
-    yield_qty_base = Decimal(str(recipe["yield_qty_base"]))
-    scale_factor = order.qty_ordered_base / yield_qty_base if yield_qty_base > 0 else Decimal("0")
-
+    order_id = res.data[0]["id"]
+    recipe_yield_base = Decimal(str(recipe["yield_qty_base"]))
+    order_qty_base = Decimal(str(order.qty_ordered_base))
+    if recipe_yield_base == 1 and order_qty_base >= 100: recipe_yield_base *= 1000
+    scale_factor = order_qty_base / recipe_yield_base if recipe_yield_base > 0 else Decimal("0")
+    
     ing_res = db.table("recipe_ingredients").select("item_id, qty_base").eq("recipe_id", recipe["id"]).execute()
     for ing in (ing_res.data or []):
-        planned_qty = Decimal(str(ing["qty_base"])) * scale_factor
         db.table("production_order_consumptions").insert({
             "order_id": order_id,
             "item_id": ing["item_id"],
-            "qty_planned_base": float(planned_qty)
+            "qty_planned_base": float(Decimal(str(ing["qty_base"])) * scale_factor)
         }).execute()
 
-    return created_order
-
-@app.get("/production/orders", tags=["Production"])
-async def get_production_orders(
-    org_id: str = Depends(get_active_org_id), 
-    db=Depends(get_db), 
-    _=Depends(require_permission("production.view"))
-):
-    res = db.table("production_orders")\
-        .select("*, items(name, uom_base(name)), warehouses!production_orders_warehouse_id_fkey(name)")\
-        .eq("org_id", org_id)\
-        .order("created_at", desc=True)\
-        .execute()
-    return res.data
+    return res.data[0]
 
 @app.patch("/production/orders/{order_id}/status", response_model=ProductionOrderResponse, tags=["Production"])
 async def update_production_order_status(
-    order_id: UUID, 
-    req: OrderStatusUpdate, 
-    org_id: str = Depends(get_active_org_id), 
-    db=Depends(get_db), 
-    current_user = Depends(require_permission("production.execute"))
+    order_id: UUID, req: OrderStatusUpdate, org_id: str = Depends(get_active_org_id), db=Depends(get_db), current_user = Depends(require_permission("production.execute"))
 ):
     update_data = {"status": req.status}
-    if req.status == "in_progress":
-        update_data["started_at"] = datetime.now(CARACAS_TZ).isoformat()
-        
+    if req.status == "in_progress": update_data["started_at"] = datetime.now(CARACAS_TZ).isoformat()
     res = db.table("production_orders").update(update_data).eq("id", str(order_id)).eq("org_id", org_id).execute()
-    if not res.data:
-        raise HTTPException(status_code=404, detail="Order not found")
+    if not res.data: raise HTTPException(status_code=404, detail="Order not found")
     return res.data[0]
-
-@app.get("/production/orders/kds", tags=["Production"])
-async def get_kds_orders(
-    warehouse_id: UUID, 
-    org_id: str = Depends(get_active_org_id), 
-    db=Depends(get_db), 
-    _=Depends(require_permission("production.view"))
-):
-    res = db.table("production_orders")\
-        .select("*, items(name, uom_base(name)), recipes(id), uom_presentations:presentation_id(name, conversion_factor)")\
-        .eq("org_id", org_id)\
-        .eq("warehouse_id", str(warehouse_id))\
-        .in_("status", ["pending", "in_progress", "paused"])\
-        .order("priority", desc=True)\
-        .order("scheduled_date")\
-        .execute()
-    return res.data
-
-@app.get("/production/orders/{order_id}", response_model=ProductionOrderDetailResponse, tags=["Production"])
-async def get_production_order_detail(
-    order_id: UUID, 
-    org_id: str = Depends(get_active_org_id), 
-    db=Depends(get_db), 
-    _=Depends(require_permission("production.view"))
-):
-    # 1. Fetch base order with profiles and warehouses
-    # origin_warehouse:warehouses!production_orders_warehouse_id_fkey -> origin
-    # target_warehouse:warehouses!production_orders_target_warehouse_id_fkey -> target
-    res = db.table("production_orders")\
-        .select("*, items(name, uom_base(name)), origin_warehouse:warehouses!production_orders_warehouse_id_fkey(name), target_warehouse:warehouses!production_orders_target_warehouse_id_fkey(name), created_by_profile:profiles!production_orders_created_by_fkey(full_name), assigned_to_profile:profiles!production_orders_assigned_to_fkey(full_name)")\
-        .eq("id", str(order_id))\
-        .eq("org_id", org_id)\
-        .execute()
-    
-    if not res.data:
-        raise HTTPException(status_code=404, detail="Order not found")
-    
-    order_data = res.data[0]
-    
-    # 2. Fetch consumptions
-    cons_res = db.table("production_order_consumptions")\
-        .select("*, items(name, uom_base(name))")\
-        .eq("order_id", str(order_id))\
-        .execute()
-    
-    # 3. Fetch produced lots
-    lots_res = db.table("production_lots")\
-        .select("*")\
-        .eq("order_id", str(order_id))\
-        .execute()
-    
-    # Map normalized fields for the response schema
-    order_data["consumptions"] = cons_res.data or []
-    order_data["produced_lots"] = lots_res.data or []
-    
-    return order_data
 
 @app.post("/production/orders/{order_id}/complete", tags=["Production"])
 async def complete_production_order(
-    order_id: UUID, 
-    req: OrderCompleteRequest, 
-    org_id: str = Depends(get_active_org_id), 
-    db=Depends(get_db), 
-    current_user = Depends(require_permission("production.execute"))
+    order_id: UUID, req: OrderCompleteRequest, org_id: str = Depends(get_active_org_id), db=Depends(get_db), current_user = Depends(require_permission("production.execute"))
 ):
-    # 1. Fetch Order & Item
     order_res = db.table("production_orders").select("*, items(yield_alert_enabled, yield_alert_threshold_pct)").eq("id", str(order_id)).execute()
-    if not order_res.data: 
-        raise HTTPException(status_code=404, detail="Order not found")
+    if not order_res.data: raise HTTPException(status_code=404, detail="Order not found")
     order = order_res.data[0]
     
-    # 2. Check Variance
     expected_qty = Decimal(str(order["qty_ordered_base"]))
-    actual_qty = req.qty_produced_base
-    variance_pct = ((actual_qty - expected_qty) / expected_qty) * 100
+    variance_pct = ((req.qty_produced_base - expected_qty) / expected_qty) * 100
     
     item = order["items"]
     if item.get("yield_alert_enabled") and not req.ignore_variance:
         threshold = Decimal(str(item.get("yield_alert_threshold_pct") or "0"))
         if abs(variance_pct) > threshold:
-            raise HTTPException(
-                status_code=409, 
-                detail={
-                    "code": "VARIANCE_EXCEEDED", 
-                    "variance_pct": float(variance_pct), 
-                    "threshold": float(threshold)
-                }
-            )
+            raise HTTPException(status_code=409, detail={"code": "VARIANCE_EXCEEDED", "variance_pct": float(variance_pct), "threshold": float(threshold)})
             
-    # 3. Mark completed
     db.table("production_orders").update({
         "status": "completed", 
-        "qty_produced_base": float(actual_qty),
+        "qty_produced_base": float(req.qty_produced_base),
         "yield_variance_pct": float(variance_pct),
-        "yield_alert_triggered": True if abs(variance_pct) > Decimal(str(item.get("yield_alert_threshold_pct") or "100")) else False,
-        "completed_at": datetime.now(CARACAS_TZ).isoformat()
+        "yield_alert_triggered": abs(variance_pct) > Decimal(str(item.get("yield_alert_threshold_pct") or "100")),
+        "completed_at": datetime.now(CARACAS_TZ).isoformat(),
+        "assigned_to": current_user.id
     }).eq("id", str(order_id)).execute()
     
     return {"status": "success", "variance_pct": float(variance_pct)}
-
-
