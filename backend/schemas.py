@@ -650,3 +650,16 @@ class OrderStatusUpdate(BaseModel):
 class OrderCompleteRequest(BaseModel):
     qty_produced_base: Decimal
     ignore_variance: bool = False
+
+class ProductionOrderDetailResponse(ProductionOrderResponse):
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    yield_alert_triggered: bool = False
+    yield_variance_pct: Optional[float] = None
+    notes: Optional[str] = None
+    created_by_profile: Optional[Dict] = None
+    assigned_to_profile: Optional[Dict] = None
+    origin_warehouse: Optional[Dict] = None
+    target_warehouse: Optional[Dict] = None
+    consumptions: List[Dict] = []
+    produced_lots: List[Dict] = []

@@ -4769,18 +4769,46 @@ async def get_kds_orders(
         .execute()
     return res.data
 
-@app.get("/production/orders", tags=["Production"])
-async def get_production_orders(
+@app.get("/production/orders/{order_id}", response_model=ProductionOrderDetailResponse, tags=["Production"])
+async def get_production_order_detail(
+    order_id: UUID, 
     org_id: str = Depends(get_active_org_id), 
     db=Depends(get_db), 
     _=Depends(require_permission("production.view"))
 ):
+    # 1. Fetch base order with profiles and warehouses
+    # warehouses!production_orders_warehouse_id_fkey -> origin
+    # warehouses!production_orders_target_warehouse_id_fkey -> target
     res = db.table("production_orders")\
-        .select("*, items(name, uom_base(name)), warehouses!production_orders_warehouse_id_fkey(name)")\
+        .select("*, items(name, uom_base(name)), warehouses!production_orders_warehouse_id_fkey(name), warehouses!production_orders_target_warehouse_id_fkey(name), created_by_profile:profiles!production_orders_created_by_fkey(full_name), assigned_to_profile:profiles!production_orders_assigned_to_fkey(full_name)")\
+        .eq("id", str(order_id))\
         .eq("org_id", org_id)\
-        .order("created_at", desc=True)\
         .execute()
-    return res.data
+    
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    order_data = res.data[0]
+    
+    # 2. Fetch consumptions
+    cons_res = db.table("production_order_consumptions")\
+        .select("*, items(name, uom_base(name))")\
+        .eq("order_id", str(order_id))\
+        .execute()
+    
+    # 3. Fetch produced lots
+    lots_res = db.table("production_lots")\
+        .select("*")\
+        .eq("order_id", str(order_id))\
+        .execute()
+    
+    # Map normalized fields for the response schema
+    order_data["origin_warehouse"] = order_data.get("warehouses!production_orders_warehouse_id_fkey")
+    order_data["target_warehouse"] = order_data.get("warehouses!production_orders_target_warehouse_id_fkey")
+    order_data["consumptions"] = cons_res.data or []
+    order_data["produced_lots"] = lots_res.data or []
+    
+    return order_data
 
 @app.post("/production/orders/{order_id}/complete", tags=["Production"])
 async def complete_production_order(

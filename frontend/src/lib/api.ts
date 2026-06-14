@@ -775,6 +775,9 @@ export const adminApi = {
     getProductionOrders: (): Promise<any[]> =>
         fetchWithAuth('/production/orders'),
 
+    getProductionOrderDetail: (id: string): Promise<ProductionOrderDetailResponse> =>
+        fetchWithAuth(`/production/orders/${id}`),
+
     updateOrderStatus: (id: string, status: string): Promise<any> =>
         fetchWithAuth(`/production/orders/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
 
@@ -861,7 +864,38 @@ export interface ProductionOrderResponse {
     status: string
     priority: string
     scheduled_date?: string
-    created_at?: string
+    created_at: string
+    items?: { 
+        name: string, 
+        uom_base: { name: string },
+        yield_alert_enabled?: boolean,
+        yield_alert_threshold_pct?: number
+    }
+    warehouses?: { name: string }
+    uom_presentations?: { name: string, conversion_factor: number }
+}
+
+export interface ProductionOrderDetailResponse extends ProductionOrderResponse {
+    started_at?: string
+    completed_at?: string
+    qty_produced_base?: number
+    yield_alert_triggered: boolean
+    yield_variance_pct?: number
+    notes?: string
+    created_by_profile?: { full_name: string }
+    assigned_to_profile?: { full_name: string }
+    origin_warehouse?: { name: string }
+    target_warehouse?: { name: string }
+    consumptions: Array<{
+        item_id: string
+        qty_planned_base: number
+        qty_actual_base: number
+        items: { name: string, uom_base: { name: string } }
+    }>
+    produced_lots: Array<{
+        lot_number: string
+        qty_base: number
+    }>
 }
 
 // Super Admin CRUD
