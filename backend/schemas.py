@@ -645,7 +645,9 @@ class ProductionOrderResponse(BaseModel):
     priority: str
     scheduled_date: Optional[str]
     created_at: Optional[datetime]
-    assigned_to_profile: Optional[Dict] = None # Added for audit info
+    items: Optional[Dict] = None
+    warehouses: Optional[Dict] = None
+    assigned_to_profile: Optional[Dict] = None
 
 class OrderStatusUpdate(BaseModel):
     status: str # pending, in_progress, paused, cancelled

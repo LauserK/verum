@@ -4673,7 +4673,11 @@ async def get_production_orders(
     db=Depends(get_db), 
     _=Depends(require_permission("production.view"))
 ):
-    res = db.table("production_orders")        .select("*, items(name, uom_base(name)), warehouses!production_orders_warehouse_id_fkey(name), assigned_to_profile:profiles!production_orders_assigned_to_fkey(full_name)")        .eq("org_id", org_id)        .order("created_at", desc=True)        .execute()
+    res = db.table("production_orders")\
+        .select("*, items(name, uom_base(name)), warehouses:warehouses!production_orders_warehouse_id_fkey(name), assigned_to_profile:profiles!production_orders_assigned_to_fkey(full_name)")\
+        .eq("org_id", org_id)\
+        .order("created_at", desc=True)\
+        .execute()
     return res.data
 
 @app.get("/production/orders/kds", tags=["Production"])
