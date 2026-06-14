@@ -4805,10 +4805,10 @@ async def get_production_order_detail(
     _=Depends(require_permission("production.view"))
 ):
     # 1. Fetch base order with profiles and warehouses
-    # warehouses!production_orders_warehouse_id_fkey -> origin
-    # warehouses!production_orders_target_warehouse_id_fkey -> target
+    # origin_warehouse:warehouses!production_orders_warehouse_id_fkey -> origin
+    # target_warehouse:warehouses!production_orders_target_warehouse_id_fkey -> target
     res = db.table("production_orders")\
-        .select("*, items(name, uom_base(name)), warehouses!production_orders_warehouse_id_fkey(name), warehouses!production_orders_target_warehouse_id_fkey(name), created_by_profile:profiles!production_orders_created_by_fkey(full_name), assigned_to_profile:profiles!production_orders_assigned_to_fkey(full_name)")\
+        .select("*, items(name, uom_base(name)), origin_warehouse:warehouses!production_orders_warehouse_id_fkey(name), target_warehouse:warehouses!production_orders_target_warehouse_id_fkey(name), created_by_profile:profiles!production_orders_created_by_fkey(full_name), assigned_to_profile:profiles!production_orders_assigned_to_fkey(full_name)")\
         .eq("id", str(order_id))\
         .eq("org_id", org_id)\
         .execute()
@@ -4831,8 +4831,6 @@ async def get_production_order_detail(
         .execute()
     
     # Map normalized fields for the response schema
-    order_data["origin_warehouse"] = order_data.get("warehouses!production_orders_warehouse_id_fkey")
-    order_data["target_warehouse"] = order_data.get("warehouses!production_orders_target_warehouse_id_fkey")
     order_data["consumptions"] = cons_res.data or []
     order_data["produced_lots"] = lots_res.data or []
     
