@@ -24,7 +24,7 @@ export default function ScalerPanel({
     const [error, setError] = useState<string | null>(null)
 
     const calculateNeeds = useCallback(async () => {
-        if (!itemId || !targetQty || !targetUomId || !warehouseId) return
+        if (!itemId || !targetQty || targetQty <= 0 || !warehouseId) return
 
         setLoading(true)
         setError(null)
@@ -32,7 +32,7 @@ export default function ScalerPanel({
             const data = await adminApi.calculateProductionNeeds({
                 item_id: itemId,
                 target_qty: targetQty,
-                target_uom_id: targetUomId,
+                target_uom_id: targetUomId || null,
                 warehouse_id: warehouseId
             })
             setNeeds(data)
@@ -55,7 +55,7 @@ export default function ScalerPanel({
         return () => clearTimeout(timer)
     }, [calculateNeeds])
 
-    if (!itemId || !targetQty || !targetUomId || !warehouseId) {
+    if (!itemId || !targetQty || targetQty <= 0 || !warehouseId) {
         return (
             <div className="p-4 bg-surface-raised rounded-lg text-center text-text-secondary border border-dashed border-border">
                 Selecciona un producto y sede para ver los requerimientos
