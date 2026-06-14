@@ -42,7 +42,7 @@ from schemas import (
     StockMovementResponse,
     TransferCreate, TransferConfirm, TransferResponse,
     RecipeCreate, RecipeResponse, CalculateProductionNeedsRequest, ProductionNeedsResponse,
-    ProductionOrderCreate, ProductionOrderResponse, OrderStatusUpdate, OrderCompleteRequest
+    ProductionOrderCreate, ProductionOrderResponse, ProductionOrderDetailResponse, OrderStatusUpdate, OrderCompleteRequest
 )
 
 CARACAS_TZ = pytz.timezone("America/Caracas")
@@ -4530,33 +4530,48 @@ async def get_transfer_detail(transfer_id: UUID, db=Depends(get_db), _=Depends(r
 
 @app.post("/production/recipes", response_model=RecipeResponse, tags=["Production"])
 async def create_recipe(recipe: RecipeCreate, org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("production.manage_recipes"))):
-    # 1. Create the recipe header
+    # 1. Calculate yield in base units
+    yield_qty_base = Decimal(str(recipe.yield_qty_base))
+    if recipe.yield_presentation_id:
+        pres_res = db.table("uom_presentations").select("conversion_factor").eq("id", str(recipe.yield_presentation_id)).execute()
+        if pres_res.data:
+            factor = Decimal(str(pres_res.data[0]["conversion_factor"]))
+            yield_qty_base = yield_qty_base * factor
+
+    # 2. Create the recipe header
     recipe_data = {
         "org_id": org_id,
         "item_id": str(recipe.item_id),
-        "yield_qty_base": float(recipe.yield_qty_base),
+        "yield_qty_base": float(yield_qty_base),
         "yield_presentation_id": str(recipe.yield_presentation_id) if recipe.yield_presentation_id else None,
         "is_active": True
     }
     
-    # Use upsert to allow updating an existing recipe for the same item_id
     res = db.table("recipes").upsert(recipe_data, on_conflict="item_id").execute()
     if not res.data:
         raise HTTPException(status_code=400, detail="Error creating recipe header")
     
     recipe_id = res.data[0]["id"]
     
-    # 2. Process ingredients
-    # First, clear existing ones if it's an update
+    # 3. Process ingredients
     db.table("recipe_ingredients").delete().eq("recipe_id", recipe_id).execute()
     
     for ing in recipe.ingredients:
+        # Convert ingredient qty to base if presentation is selected
+        ing_qty_base = Decimal(str(ing.qty_base))
+        if ing.presentation_id:
+            i_pres_res = db.table("uom_presentations").select("conversion_factor").eq("id", str(ing.presentation_id)).execute()
+            if i_pres_res.data:
+                i_factor = Decimal(str(i_pres_res.data[0]["conversion_factor"]))
+                ing_qty_base = ing_qty_base * i_factor
+
         ing_data = {
             "recipe_id": recipe_id,
             "item_id": str(ing.item_id),
-            "qty_base": float(ing.qty_base),
+            "qty_base": float(ing_qty_base),
             "presentation_id": str(ing.presentation_id) if ing.presentation_id else None,
-            "order_index": ing.order_index
+            "order_index": ing.order_index,
+            "notes": ing.notes
         }
         db.table("recipe_ingredients").insert(ing_data).execute()
         
@@ -4734,6 +4749,19 @@ async def create_production_order(
         }).execute()
 
     return created_order
+
+@app.get("/production/orders", tags=["Production"])
+async def get_production_orders(
+    org_id: str = Depends(get_active_org_id), 
+    db=Depends(get_db), 
+    _=Depends(require_permission("production.view"))
+):
+    res = db.table("production_orders")\
+        .select("*, items(name, uom_base(name)), warehouses!production_orders_warehouse_id_fkey(name)")\
+        .eq("org_id", org_id)\
+        .order("created_at", desc=True)\
+        .execute()
+    return res.data
 
 @app.patch("/production/orders/{order_id}/status", response_model=ProductionOrderResponse, tags=["Production"])
 async def update_production_order_status(

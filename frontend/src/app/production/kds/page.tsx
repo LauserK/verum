@@ -28,6 +28,12 @@ export default function KDSPage() {
     const [productionPresentations, setProductionPresentations] = useState<any[]>([])
     const [selectedCompletionUomId, setSelectedCompletionUomId] = useState('')
     const [loadingCompletionData, setLoadingCompletionData] = useState(false)
+    const [now, setNow] = useState(new Date())
+
+    useEffect(() => {
+        const timer = setInterval(() => setNow(new Date()), 60000)
+        return () => clearInterval(timer)
+    }, [])
 
     useEffect(() => {
         async function initProfile() {
