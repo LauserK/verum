@@ -201,12 +201,13 @@ export default function ProductionOrdersPage() {
                                                             <tr key={i} className="hover:bg-bg/30 transition-colors">
                                                                 <td className="px-6 py-4 font-bold text-text-primary">{c.items?.name}</td>
                                                                 <td className="px-6 py-4 font-mono text-right text-text-secondary">
-                                                                    {Number(c.qty_planned_base).toLocaleString()} {c.items?.uom_base?.name}
+                                                                    {Number(c.qty_planned_base).toLocaleString()}
+                                                                    <span className="ml-1 text-[8px] font-black opacity-40 uppercase">{c.items?.uom_base?.name}</span>
                                                                 </td>
                                                                 <td className={`px-6 py-4 font-mono text-right font-black ${hasDifference ? 'text-error' : 'text-primary'}`}>
                                                                     <div className="flex items-center justify-end gap-1.5">
                                                                         {hasDifference && <AlertTriangle className="w-3 h-3" />}
-                                                                        {Number(c.qty_actual_base || c.qty_planned_base).toLocaleString()} {c.items?.uom_base?.name}
+                                                                        {Number(c.qty_actual_base || c.qty_planned_base).toLocaleString()}
                                                                     </div>
                                                                 </td>
                                                             </tr>

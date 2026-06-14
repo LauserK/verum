@@ -579,7 +579,7 @@ export default function KDSPage() {
                                                                 </p>
                                                             </td>
                                                             <td className="px-3 py-3 text-right w-32">
-                                                                <div className="flex items-center justify-end gap-1.5">
+                                                                <div className="flex items-center justify-end">
                                                                     <input 
                                                                         type="number"
                                                                         value={cons.qty_actual_base}
@@ -589,11 +589,8 @@ export default function KDSPage() {
                                                                             next[idx].qty_actual_base = val;
                                                                             setActualConsumptions(next);
                                                                         }}
-                                                                        className="w-20 bg-surface border border-border rounded-lg px-2 h-9 font-mono font-bold text-primary text-right focus:ring-2 focus:ring-primary/20 outline-none"
+                                                                        className="w-24 bg-surface border border-border rounded-lg px-3 h-9 font-mono font-bold text-primary text-right focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                                                                     />
-                                                                    <span className="text-[8px] font-black text-text-secondary uppercase whitespace-nowrap">
-                                                                        {cons.uom_name}
-                                                                    </span>
                                                                 </div>
                                                             </td>
                                                         </tr>
