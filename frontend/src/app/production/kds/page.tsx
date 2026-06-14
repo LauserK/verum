@@ -557,42 +557,50 @@ export default function KDSPage() {
                                     </div>
                                     
                                     <div className="bg-surface-raised rounded-2xl border border-border overflow-hidden">
-                                        <table className="w-full text-left text-xs">
-                                            <thead className="bg-bg/50 border-b border-border">
-                                                <tr>
-                                                    <th className="px-3 py-2 font-bold text-text-secondary uppercase">Ingrediente</th>
-                                                    <th className="px-3 py-2 text-right font-bold text-text-secondary uppercase">Uso Real</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-border/50">
-                                                {actualConsumptions.map((cons, idx) => (
-                                                    <tr key={cons.item_id}>
-                                                        <td className="px-3 py-3">
-                                                            <p className="font-bold text-text-primary">{cons.item_name}</p>
-                                                            <p className="text-[9px] text-text-secondary uppercase">Receta: {Number(cons.qty_planned_base).toLocaleString()} {cons.uom_name}</p>
-                                                        </td>
-                                                        <td className="px-3 py-3 text-right w-32">
-                                                            <div className="relative">
-                                                                <input 
-                                                                    type="number"
-                                                                    value={cons.qty_actual_base}
-                                                                    onChange={e => {
-                                                                        const val = parseFloat(e.target.value) || 0;
-                                                                        const next = [...actualConsumptions];
-                                                                        next[idx].qty_actual_base = val;
-                                                                        setActualConsumptions(next);
-                                                                    }}
-                                                                    className="w-full bg-surface border border-border rounded-lg pl-2 pr-8 h-9 font-mono font-bold text-primary text-right focus:ring-2 focus:ring-primary/20 outline-none"
-                                                                />
-                                                                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[8px] font-black text-text-secondary uppercase pointer-events-none">
-                                                                    {cons.uom_name}
-                                                                </span>
-                                                            </div>
-                                                        </td>
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-left text-xs border-collapse min-w-[400px]">
+                                                <thead className="bg-bg/50 border-b border-border">
+                                                    <tr>
+                                                        <th className="px-3 py-2 font-bold text-text-secondary uppercase">Ingrediente</th>
+                                                        <th className="px-3 py-2 text-right font-bold text-text-secondary uppercase">Planificado</th>
+                                                        <th className="px-3 py-2 text-right font-bold text-text-secondary uppercase">Uso Real</th>
                                                     </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
+                                                </thead>
+                                                <tbody className="divide-y divide-border/50">
+                                                    {actualConsumptions.map((cons, idx) => (
+                                                        <tr key={cons.item_id}>
+                                                            <td className="px-3 py-3">
+                                                                <p className="font-bold text-text-primary truncate max-w-[120px]" title={cons.item_name}>{cons.item_name}</p>
+                                                            </td>
+                                                            <td className="px-3 py-3 text-right">
+                                                                <p className="font-mono text-text-secondary whitespace-nowrap">
+                                                                    {Number(cons.qty_planned_base).toLocaleString()}
+                                                                    <span className="ml-1 text-[8px] font-black opacity-50">{cons.uom_name}</span>
+                                                                </p>
+                                                            </td>
+                                                            <td className="px-3 py-3 text-right w-32">
+                                                                <div className="flex items-center justify-end gap-1.5">
+                                                                    <input 
+                                                                        type="number"
+                                                                        value={cons.qty_actual_base}
+                                                                        onChange={e => {
+                                                                            const val = parseFloat(e.target.value) || 0;
+                                                                            const next = [...actualConsumptions];
+                                                                            next[idx].qty_actual_base = val;
+                                                                            setActualConsumptions(next);
+                                                                        }}
+                                                                        className="w-20 bg-surface border border-border rounded-lg px-2 h-9 font-mono font-bold text-primary text-right focus:ring-2 focus:ring-primary/20 outline-none"
+                                                                    />
+                                                                    <span className="text-[8px] font-black text-text-secondary uppercase whitespace-nowrap">
+                                                                        {cons.uom_name}
+                                                                    </span>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
