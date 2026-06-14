@@ -629,6 +629,7 @@ class ProductionOrderCreate(BaseModel):
     qty_ordered_base: Decimal
     presentation_id: Optional[UUID] = None
     scheduled_date: str # YYYY-MM-DD
+    priority: str = "normal"
 
 class ProductionOrderResponse(BaseModel):
     id: UUID
@@ -637,12 +638,14 @@ class ProductionOrderResponse(BaseModel):
     recipe_id: UUID
     warehouse_id: UUID
     qty_ordered_base: Decimal
+    qty_produced_base: Optional[Decimal] = None
     presentation_id: Optional[UUID] = None
-    uom_presentations: Optional[Dict] = None # Added for unit conversion info in KDS
+    uom_presentations: Optional[Dict] = None
     status: str
     priority: str
     scheduled_date: Optional[str]
     created_at: Optional[datetime]
+    assigned_to_profile: Optional[Dict] = None # Added for audit info
 
 class OrderStatusUpdate(BaseModel):
     status: str # pending, in_progress, paused, cancelled
