@@ -145,3 +145,72 @@ def test_calculate_needs_scaling_liters_to_ml(client, mock_supabase, authenticat
     # Factor = (1.0 * 1000) / 1000 = 1.0
     # Aceite = 800 * 1.0 = 800
     assert float(data["ingredients"][0]["needed_base_qty"]) == 800.0
+
+def test_complete_order_rollback_on_failure(client, mock_supabase, authenticated_user_mock):
+    """
+    Verifies that if an error occurs during the complex completion process 
+    (e.g., while inserting a stock lot), the system catches the exception
+    and executes the compensating rollback commands (update status, delete movements).
+    """
+    order_id = str(uuid4())
+    
+    app.dependency_overrides[get_current_user] = lambda: authenticated_user_mock
+    app.dependency_overrides[get_active_org_id] = lambda: str(uuid4())
+    
+    # Create persistent mocks for each table to track call history
+    mock_orders = MagicMock()
+    mock_orders.select.return_value.eq.return_value.execute.return_value.data = [{
+        "id": order_id,
+        "status": "in_progress",
+        "order_number": "OP-2026-001",
+        "item_id": str(uuid4()),
+        "warehouse_id": str(uuid4()),
+        "qty_ordered_base": 100.0,
+        "items": {"yield_alert_enabled": False}
+    }]
+    mock_orders.update.return_value.eq.return_value.execute.return_value.data = [{"id": order_id}]
+    
+    mock_lots = MagicMock()
+    mock_lots.insert.side_effect = Exception("Simulated DB Unique Constraint Error")
+    mock_lots.delete.return_value.eq.return_value.execute.return_value.data = []
+    
+    mock_generic = MagicMock()
+    mock_generic.select.return_value.eq.return_value.execute.return_value.data = []
+    mock_generic.update.return_value.eq.return_value.eq.return_value.execute.return_value.data = []
+    mock_generic.insert.return_value.execute.return_value.data = []
+    mock_generic.delete.return_value.eq.return_value.eq.return_value.execute.return_value.data = []
+
+    def side_effect(table_name):
+        if table_name == "production_orders":
+            return mock_orders
+        elif table_name == "stock_lots":
+            return mock_lots
+        return mock_generic
+
+    mock_supabase.table.side_effect = side_effect
+
+    with patch("main.require_permission", return_value=lambda x: None):
+        with patch("main.check_restriction", return_value=False):
+            with patch("main.resolve_permission", return_value=True):
+                # Execute completion
+                response = client.post(f"/production/orders/{order_id}/complete", json={
+                    "qty_produced_base": 100.0, 
+                    "ignore_variance": False
+                })
+    
+    app.dependency_overrides.clear()
+    
+    # 1. Assert the endpoint caught the error and returned 500
+    assert response.status_code == 500
+    assert "Cambios revertidos" in response.json()["detail"]
+    
+    # 2. Verify that the rollback was attempted
+    # We check if production_orders.update was called twice (1 for the attempt, 1 for the rollback)
+    update_calls = mock_orders.update.call_args_list
+    assert len(update_calls) == 2
+    
+    # The payload of the second update (the rollback) should have status: in_progress
+    rollback_payload = update_calls[1][0][0] 
+    assert rollback_payload["status"] == "in_progress"
+    assert rollback_payload["qty_produced_base"] is None
+
