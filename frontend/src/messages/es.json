@@ -219,6 +219,8 @@
       "adjustment_out": "Ajuste (-)",
       "production_in": "Producción (+)",
       "production_out": "Consumo (-)",
+      "production_input": "Consumo OP (-)",
+      "production_output": "Producción OP (+)",
       "transfer_in": "Traspaso (+)",
       "transfer_out": "Traspaso (-)",
       "initial": "Saldo Inicial"

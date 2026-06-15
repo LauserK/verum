@@ -4154,7 +4154,7 @@ async def create_issue_document(doc: IssueDocumentCreate, org_id: str = Depends(
 
 @app.get("/inventory/kardex", response_model=List[StockMovementResponse], tags=["Inventory"])
 async def get_kardex(item_id: Optional[UUID] = None, warehouse_id: Optional[UUID] = None, org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
-    query = db.table("stock_movements").select("*").eq("org_id", org_id)
+    query = db.table("stock_movements").select("*, items(name, uom_base(name)), warehouses(name)").eq("org_id", org_id)
     
     if item_id:
         query = query.eq("item_id", str(item_id))
@@ -4798,18 +4798,127 @@ async def complete_production_order(
         "assigned_to": current_user.id
     }).eq("id", str(order_id)).execute()
     
-    # 2. Update Actual Consumptions if provided
-    if req.consumptions:
-        for cons in req.consumptions:
-            db.table("production_order_consumptions").update({
-                "qty_actual_base": float(cons.qty_actual_base)
-            }).eq("order_id", str(order_id)).eq("item_id", str(cons.item_id)).execute()
-    else:
-        # Fallback: assume actual = planned
+    # 2. Update Actual Consumptions & Kardex for Ingredients
+    origin_wh_id = order["warehouse_id"]
+    
+    # Resolve what to consume
+    actual_consumptions = req.consumptions
+    if not actual_consumptions:
+        # Fallback to planned if none provided
         planned_cons = db.table("production_order_consumptions").select("item_id, qty_planned_base").eq("order_id", str(order_id)).execute()
-        for p in (planned_cons.data or []):
-            db.table("production_order_consumptions").update({
-                "qty_actual_base": p["qty_planned_base"]
-            }).eq("order_id", str(order_id)).eq("item_id", p["item_id"]).execute()
+        actual_consumptions = [{"item_id": p["item_id"], "qty_actual_base": p["qty_planned_base"]} for p in (planned_cons.data or [])]
+    
+    for cons in actual_consumptions:
+        item_id = str(cons["item_id"] if isinstance(cons, dict) else cons.item_id)
+        qty_actual = float(cons["qty_actual_base"] if isinstance(cons, dict) else cons.qty_actual_base)
+        
+        # Audit update
+        db.table("production_order_consumptions").update({
+            "qty_actual_base": qty_actual
+        }).eq("order_id", str(order_id)).eq("item_id", item_id).execute()
+        
+        # Inventory Deduction (FIFO)
+        lots_res = db.table("stock_lots") \
+            .select("*") \
+            .eq("item_id", item_id) \
+            .eq("warehouse_id", origin_wh_id) \
+            .filter("qty_base", "gt", 0) \
+            .order("received_at", desc=False) \
+            .execute()
+            
+        remaining = qty_actual
+        for lot in (lots_res.data or []):
+            if remaining <= 0: break
+            lot_qty = float(lot["qty_base"])
+            consume_qty = min(remaining, lot_qty)
+            cost_of_lot = float(lot["unit_cost_base"])
+            
+            new_lot_qty = lot_qty - consume_qty
+            db.table("stock_lots").update({
+                "qty_base": new_lot_qty,
+                "is_exhausted": new_lot_qty <= 0
+            }).eq("id", lot["id"]).execute()
+            
+            db.table("stock_movements").insert({
+                "org_id": org_id,
+                "movement_type": "production_input",
+                "warehouse_id": origin_wh_id,
+                "item_id": item_id,
+                "lot_id": lot["id"],
+                "qty_base": -consume_qty,
+                "unit_cost_base": cost_of_lot,
+                "total_cost": -consume_qty * cost_of_lot,
+                "reference_id": str(order_id),
+                "reference_type": "production_order",
+                "notes": f"Consumo de OP {order['order_number']}",
+                "created_by": current_user.id
+            }).execute()
+            
+            remaining -= consume_qty
+            
+        # Update overall stock table for ingredient
+        stock_res = db.table("stock").select("id, qty_base").eq("warehouse_id", origin_wh_id).eq("item_id", item_id).execute()
+        if stock_res.data:
+            new_total_qty = max(0, float(stock_res.data[0]["qty_base"]) - qty_actual)
+            db.table("stock").update({"qty_base": new_total_qty}).eq("id", stock_res.data[0]["id"]).execute()
+            
+    # 3. Add Finished Product to Stock
+    target_wh_id = order.get("target_warehouse_id") or origin_wh_id
+    produced_item_id = str(order["item_id"])
+    qty_produced = float(req.qty_produced_base)
+    
+    # Get standard cost (last purchase cost)
+    unit_cost_produced = 0.0
+    item_meta = db.table("items").select("last_purchase_cost").eq("id", produced_item_id).execute()
+    if item_meta.data:
+        unit_cost_produced = float(item_meta.data[0]["last_purchase_cost"] or 0)
+        
+    new_lot_number = f"LOT-{order['order_number'].replace('OP-', '')}"
+    
+    lot_res = db.table("stock_lots").insert({
+        "warehouse_id": target_wh_id,
+        "item_id": produced_item_id,
+        "lot_number": new_lot_number,
+        "qty_base": qty_produced,
+        "unit_cost_base": unit_cost_produced,
+        "received_at": datetime.now(CARACAS_TZ).isoformat()
+    }).execute()
+    
+    produced_lot_id = lot_res.data[0]["id"] if lot_res.data else None
+    
+    db.table("production_lots").insert({
+        "order_id": str(order_id),
+        "item_id": produced_item_id,
+        "warehouse_id": target_wh_id,
+        "lot_number": new_lot_number,
+        "qty_base": qty_produced,
+        "unit_cost_base": unit_cost_produced,
+        "production_date": datetime.now(CARACAS_TZ).date().isoformat()
+    }).execute()
+    
+    db.table("stock_movements").insert({
+        "org_id": org_id,
+        "movement_type": "production_output",
+        "warehouse_id": target_wh_id,
+        "item_id": produced_item_id,
+        "lot_id": produced_lot_id,
+        "qty_base": qty_produced,
+        "unit_cost_base": unit_cost_produced,
+        "total_cost": qty_produced * unit_cost_produced,
+        "reference_id": str(order_id),
+        "reference_type": "production_order",
+        "notes": f"Producción OP {order['order_number']}",
+        "created_by": current_user.id
+    }).execute()
+    
+    stock_dest_res = db.table("stock").select("id, qty_base").eq("warehouse_id", target_wh_id).eq("item_id", produced_item_id).execute()
+    if stock_dest_res.data:
+        db.table("stock").update({"qty_base": float(stock_dest_res.data[0]["qty_base"]) + qty_produced}).eq("id", stock_dest_res.data[0]["id"]).execute()
+    else:
+        db.table("stock").insert({
+            "warehouse_id": target_wh_id,
+            "item_id": produced_item_id,
+            "qty_base": qty_produced
+        }).execute()
 
     return {"status": "success", "variance_pct": float(variance_pct)}

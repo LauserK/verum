@@ -506,6 +506,8 @@ class StockMovementResponse(BaseModel):
     reference_type: Optional[str] = None
     notes: Optional[str] = None
     created_at: datetime
+    items: Optional[Dict] = None
+    warehouses: Optional[Dict] = None
 
 class PurchaseReceiptLineCreate(BaseModel):
     item_id: UUID

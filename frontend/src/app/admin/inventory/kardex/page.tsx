@@ -134,6 +134,30 @@ export default function KardexPage() {
                     lot: `TR-${detail.header.id.replace(/-/g, '').slice(0, 8)}`
                 }))
             };
+        } else if (referenceType === 'production_order') {
+            const detail = await adminApi.getProductionOrderDetail(referenceId);
+            return {
+                type: 'production',
+                id: detail.id,
+                warehouseName: detail.origin_warehouse?.name || 'Almacén',
+                reason: movement.movement_type === 'production_output' ? 'Entrada (Producción)' : 'Consumo (Producción)',
+                notes: detail.notes,
+                createdAt: detail.completed_at || detail.created_at,
+                createdBy: detail.assigned_to_profile?.full_name || detail.created_by_profile?.full_name || 'Sistema',
+                lines: movement.movement_type === 'production_output' 
+                    ? [{
+                        itemName: detail.items?.name || 'Artículo',
+                        qty: detail.qty_produced_base || detail.qty_ordered_base,
+                        uom: detail.items?.uom_base?.name || 'Unidad',
+                        lot: detail.produced_lots?.[0]?.lot_number || null
+                    }]
+                    : detail.consumptions.map((c: any) => ({
+                        itemName: c.items?.name || 'Ingrediente',
+                        qty: c.qty_actual_base || c.qty_planned_base,
+                        uom: c.items?.uom_base?.name || 'Unidad',
+                        lot: null
+                    }))
+            };
         } else {
             const detail = await adminApi.getIssueDocument(referenceId);
             return {
