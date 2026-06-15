@@ -4841,7 +4841,7 @@ async def complete_production_order(
             
             db.table("stock_movements").insert({
                 "org_id": org_id,
-                "movement_type": "production_input",
+                "movement_type": "production_out",
                 "warehouse_id": origin_wh_id,
                 "item_id": item_id,
                 "lot_id": lot["id"],
@@ -4898,7 +4898,7 @@ async def complete_production_order(
     
     db.table("stock_movements").insert({
         "org_id": org_id,
-        "movement_type": "production_output",
+        "movement_type": "production_in",
         "warehouse_id": target_wh_id,
         "item_id": produced_item_id,
         "lot_id": produced_lot_id,
