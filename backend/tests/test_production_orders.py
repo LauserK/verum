@@ -65,6 +65,7 @@ def test_complete_order_variance_block(client, mock_supabase, authenticated_user
     # Mock order fetch
     mock_supabase.table().select().eq().execute.return_value.data = [{
         "id": order_id,
+        "status": "in_progress",
         "qty_ordered_base": 100.0,
         "items": {
             "yield_alert_enabled": True,

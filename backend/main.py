@@ -4779,146 +4779,181 @@ async def complete_production_order(
     if not order_res.data: raise HTTPException(status_code=404, detail="Order not found")
     order = order_res.data[0]
     
+    if order["status"] == "completed":
+        raise HTTPException(status_code=400, detail="La orden ya ha sido completada.")
+        
     expected_qty = Decimal(str(order["qty_ordered_base"]))
-    variance_pct = ((req.qty_produced_base - expected_qty) / expected_qty) * 100
+    actual_qty = req.qty_produced_base
+    variance_pct = ((actual_qty - expected_qty) / expected_qty) * 100
     
     item = order["items"]
     if item.get("yield_alert_enabled") and not req.ignore_variance:
         threshold = Decimal(str(item.get("yield_alert_threshold_pct") or "0"))
         if abs(variance_pct) > threshold:
-            raise HTTPException(status_code=409, detail={"code": "VARIANCE_EXCEEDED", "variance_pct": float(variance_pct), "threshold": float(threshold)})
+            raise HTTPException(
+                status_code=409, 
+                detail={
+                    "code": "VARIANCE_EXCEEDED", 
+                    "variance_pct": float(variance_pct), 
+                    "threshold": float(threshold)
+                }
+            )
             
-    # 1. Update Order Header
-    db.table("production_orders").update({
-        "status": "completed", 
-        "qty_produced_base": float(req.qty_produced_base),
-        "yield_variance_pct": float(variance_pct),
-        "yield_alert_triggered": abs(variance_pct) > Decimal(str(item.get("yield_alert_threshold_pct") or "100")),
-        "completed_at": datetime.now(CARACAS_TZ).isoformat(),
-        "assigned_to": current_user.id
-    }).eq("id", str(order_id)).execute()
-    
-    # 2. Update Actual Consumptions & Kardex for Ingredients
-    origin_wh_id = order["warehouse_id"]
-    
-    # Resolve what to consume
-    actual_consumptions = req.consumptions
-    if not actual_consumptions:
-        # Fallback to planned if none provided
-        planned_cons = db.table("production_order_consumptions").select("item_id, qty_planned_base").eq("order_id", str(order_id)).execute()
-        actual_consumptions = [{"item_id": p["item_id"], "qty_actual_base": p["qty_planned_base"]} for p in (planned_cons.data or [])]
-    
-    for cons in actual_consumptions:
-        item_id = str(cons["item_id"] if isinstance(cons, dict) else cons.item_id)
-        qty_actual = float(cons["qty_actual_base"] if isinstance(cons, dict) else cons.qty_actual_base)
+    # --- PSEUDO TRANSACTION BLOCK ---
+    try:
+        # 1. Update Order Header
+        db.table("production_orders").update({
+            "status": "completed", 
+            "qty_produced_base": float(req.qty_produced_base),
+            "yield_variance_pct": float(variance_pct),
+            "yield_alert_triggered": abs(variance_pct) > Decimal(str(item.get("yield_alert_threshold_pct") or "100")),
+            "completed_at": datetime.now(CARACAS_TZ).isoformat(),
+            "assigned_to": current_user.id
+        }).eq("id", str(order_id)).execute()
         
-        # Audit update
-        db.table("production_order_consumptions").update({
-            "qty_actual_base": qty_actual
-        }).eq("order_id", str(order_id)).eq("item_id", item_id).execute()
+        # 2. Update Actual Consumptions & Kardex for Ingredients
+        origin_wh_id = order["warehouse_id"]
         
-        # Inventory Deduction (FIFO)
-        lots_res = db.table("stock_lots") \
-            .select("*") \
-            .eq("item_id", item_id) \
-            .eq("warehouse_id", origin_wh_id) \
-            .filter("qty_base", "gt", 0) \
-            .order("received_at", desc=False) \
-            .execute()
-            
-        remaining = qty_actual
-        for lot in (lots_res.data or []):
-            if remaining <= 0: break
-            lot_qty = float(lot["qty_base"])
-            consume_qty = min(remaining, lot_qty)
-            cost_of_lot = float(lot["unit_cost_base"])
-            
-            new_lot_qty = lot_qty - consume_qty
-            db.table("stock_lots").update({
-                "qty_base": new_lot_qty,
-                "is_exhausted": new_lot_qty <= 0
-            }).eq("id", lot["id"]).execute()
-            
-            db.table("stock_movements").insert({
-                "org_id": org_id,
-                "movement_type": "production_out",
-                "warehouse_id": origin_wh_id,
-                "item_id": item_id,
-                "lot_id": lot["id"],
-                "qty_base": -consume_qty,
-                "unit_cost_base": cost_of_lot,
-                "total_cost": -consume_qty * cost_of_lot,
-                "reference_id": str(order_id),
-                "reference_type": "production_order",
-                "notes": f"Consumo de OP {order['order_number']}",
-                "created_by": current_user.id
-            }).execute()
-            
-            remaining -= consume_qty
-            
-        # Update overall stock table for ingredient
-        stock_res = db.table("stock").select("id, qty_base").eq("warehouse_id", origin_wh_id).eq("item_id", item_id).execute()
-        if stock_res.data:
-            new_total_qty = max(0, float(stock_res.data[0]["qty_base"]) - qty_actual)
-            db.table("stock").update({"qty_base": new_total_qty}).eq("id", stock_res.data[0]["id"]).execute()
-            
-    # 3. Add Finished Product to Stock
-    target_wh_id = order.get("target_warehouse_id") or origin_wh_id
-    produced_item_id = str(order["item_id"])
-    qty_produced = float(req.qty_produced_base)
-    
-    # Get standard cost (last purchase cost)
-    unit_cost_produced = 0.0
-    item_meta = db.table("items").select("last_purchase_cost").eq("id", produced_item_id).execute()
-    if item_meta.data:
-        unit_cost_produced = float(item_meta.data[0]["last_purchase_cost"] or 0)
+        actual_consumptions = req.consumptions
+        if not actual_consumptions:
+            planned_cons = db.table("production_order_consumptions").select("item_id, qty_planned_base").eq("order_id", str(order_id)).execute()
+            actual_consumptions = [{"item_id": p["item_id"], "qty_actual_base": p["qty_planned_base"]} for p in (planned_cons.data or [])]
         
-    new_lot_number = f"LOT-{order['order_number'].replace('OP-', '')}"
-    
-    lot_res = db.table("stock_lots").insert({
-        "warehouse_id": target_wh_id,
-        "item_id": produced_item_id,
-        "lot_number": new_lot_number,
-        "qty_base": qty_produced,
-        "unit_cost_base": unit_cost_produced,
-        "received_at": datetime.now(CARACAS_TZ).isoformat()
-    }).execute()
-    
-    produced_lot_id = lot_res.data[0]["id"] if lot_res.data else None
-    
-    db.table("production_lots").insert({
-        "order_id": str(order_id),
-        "item_id": produced_item_id,
-        "warehouse_id": target_wh_id,
-        "lot_number": new_lot_number,
-        "qty_base": qty_produced,
-        "unit_cost_base": unit_cost_produced,
-        "production_date": datetime.now(CARACAS_TZ).date().isoformat()
-    }).execute()
-    
-    db.table("stock_movements").insert({
-        "org_id": org_id,
-        "movement_type": "production_in",
-        "warehouse_id": target_wh_id,
-        "item_id": produced_item_id,
-        "lot_id": produced_lot_id,
-        "qty_base": qty_produced,
-        "unit_cost_base": unit_cost_produced,
-        "total_cost": qty_produced * unit_cost_produced,
-        "reference_id": str(order_id),
-        "reference_type": "production_order",
-        "notes": f"Producción OP {order['order_number']}",
-        "created_by": current_user.id
-    }).execute()
-    
-    stock_dest_res = db.table("stock").select("id, qty_base").eq("warehouse_id", target_wh_id).eq("item_id", produced_item_id).execute()
-    if stock_dest_res.data:
-        db.table("stock").update({"qty_base": float(stock_dest_res.data[0]["qty_base"]) + qty_produced}).eq("id", stock_dest_res.data[0]["id"]).execute()
-    else:
-        db.table("stock").insert({
+        for cons in actual_consumptions:
+            item_id = str(cons["item_id"] if isinstance(cons, dict) else cons.item_id)
+            qty_actual = float(cons["qty_actual_base"] if isinstance(cons, dict) else cons.qty_actual_base)
+            
+            db.table("production_order_consumptions").update({
+                "qty_actual_base": qty_actual
+            }).eq("order_id", str(order_id)).eq("item_id", item_id).execute()
+            
+            lots_res = db.table("stock_lots") \
+                .select("*") \
+                .eq("item_id", item_id) \
+                .eq("warehouse_id", origin_wh_id) \
+                .filter("qty_base", "gt", 0) \
+                .order("received_at", desc=False) \
+                .execute()
+                
+            remaining = qty_actual
+            for lot in (lots_res.data or []):
+                if remaining <= 0: break
+                lot_qty = float(lot["qty_base"])
+                consume_qty = min(remaining, lot_qty)
+                cost_of_lot = float(lot["unit_cost_base"])
+                
+                new_lot_qty = lot_qty - consume_qty
+                db.table("stock_lots").update({
+                    "qty_base": new_lot_qty,
+                    "is_exhausted": new_lot_qty <= 0
+                }).eq("id", lot["id"]).execute()
+                
+                db.table("stock_movements").insert({
+                    "org_id": org_id,
+                    "movement_type": "production_out",
+                    "warehouse_id": origin_wh_id,
+                    "item_id": item_id,
+                    "lot_id": lot["id"],
+                    "qty_base": -consume_qty,
+                    "unit_cost_base": cost_of_lot,
+                    "total_cost": -consume_qty * cost_of_lot,
+                    "reference_id": str(order_id),
+                    "reference_type": "production_order",
+                    "notes": f"Consumo de OP {order['order_number']}",
+                    "created_by": current_user.id
+                }).execute()
+                
+                remaining -= consume_qty
+                
+            stock_res = db.table("stock").select("id, qty_base").eq("warehouse_id", origin_wh_id).eq("item_id", item_id).execute()
+            if stock_res.data:
+                new_total_qty = max(0, float(stock_res.data[0]["qty_base"]) - qty_actual)
+                db.table("stock").update({"qty_base": new_total_qty}).eq("id", stock_res.data[0]["id"]).execute()
+                
+        # 3. Add Finished Product to Stock
+        target_wh_id = order.get("target_warehouse_id") or origin_wh_id
+        produced_item_id = str(order["item_id"])
+        qty_produced = float(req.qty_produced_base)
+        
+        unit_cost_produced = 0.0
+        item_meta = db.table("items").select("last_purchase_cost").eq("id", produced_item_id).execute()
+        if item_meta.data:
+            unit_cost_produced = float(item_meta.data[0]["last_purchase_cost"] or 0)
+            
+        new_lot_number = f"LOT-{order['order_number'].replace('OP-', '')}"
+        
+        lot_res = db.table("stock_lots").insert({
             "warehouse_id": target_wh_id,
             "item_id": produced_item_id,
-            "qty_base": qty_produced
+            "lot_number": new_lot_number,
+            "qty_base": qty_produced,
+            "unit_cost_base": unit_cost_produced,
+            "received_at": datetime.now(CARACAS_TZ).isoformat()
         }).execute()
+        
+        produced_lot_id = lot_res.data[0]["id"] if lot_res.data else None
+        
+        db.table("production_lots").insert({
+            "order_id": str(order_id),
+            "item_id": produced_item_id,
+            "warehouse_id": target_wh_id,
+            "lot_number": new_lot_number,
+            "qty_base": qty_produced,
+            "unit_cost_base": unit_cost_produced,
+            "production_date": datetime.now(CARACAS_TZ).date().isoformat()
+        }).execute()
+        
+        db.table("stock_movements").insert({
+            "org_id": org_id,
+            "movement_type": "production_in",
+            "warehouse_id": target_wh_id,
+            "item_id": produced_item_id,
+            "lot_id": produced_lot_id,
+            "qty_base": qty_produced,
+            "unit_cost_base": unit_cost_produced,
+            "total_cost": qty_produced * unit_cost_produced,
+            "reference_id": str(order_id),
+            "reference_type": "production_order",
+            "notes": f"Producción OP {order['order_number']}",
+            "created_by": current_user.id
+        }).execute()
+        
+        stock_dest_res = db.table("stock").select("id, qty_base").eq("warehouse_id", target_wh_id).eq("item_id", produced_item_id).execute()
+        if stock_dest_res.data:
+            db.table("stock").update({"qty_base": float(stock_dest_res.data[0]["qty_base"]) + qty_produced}).eq("id", stock_dest_res.data[0]["id"]).execute()
+        else:
+            db.table("stock").insert({
+                "warehouse_id": target_wh_id,
+                "item_id": produced_item_id,
+                "qty_base": qty_produced
+            }).execute()
 
-    return {"status": "success", "variance_pct": float(variance_pct)}
+        return {"status": "success", "variance_pct": float(variance_pct)}
+
+    except Exception as e:
+        # --- ROLLBACK COMPENSATING ACTIONS ---
+        print(f"Error processing order {order_id}. Initiating rollback. Details: {str(e)}")
+        
+        try:
+            # 1. Revert order status
+            db.table("production_orders").update({
+                "status": "in_progress", 
+                "qty_produced_base": None,
+                "yield_variance_pct": None,
+                "yield_alert_triggered": False,
+                "completed_at": None,
+                "assigned_to": None
+            }).eq("id", str(order_id)).execute()
+            
+            # 2. Delete any generated stock_movements for this order
+            db.table("stock_movements").delete().eq("reference_id", str(order_id)).eq("reference_type", "production_order").execute()
+            
+            # 3. Delete generated lots
+            new_lot_number = f"LOT-{order['order_number'].replace('OP-', '')}"
+            db.table("production_lots").delete().eq("order_id", str(order_id)).execute()
+            db.table("stock_lots").delete().eq("lot_number", new_lot_number).execute()
+            
+        except Exception as rollback_err:
+            print(f"CRITICAL: Rollback failed for order {order_id}. Details: {str(rollback_err)}")
+            
+        raise HTTPException(status_code=500, detail=f"Error interno al procesar la orden. Cambios revertidos. Detalle: {str(e)}")
