@@ -44,36 +44,36 @@ export const LabelsPrintLayout = forwardRef<HTMLDivElement, LabelsPrintLayoutPro
                 `}
             </style>
             <div ref={ref} className="print:block p-4 bg-white text-black w-full">
-                {/* CSS Grid for stickers. 2 columns is a good starting point for Letter size stickers */}
-                <div className="grid grid-cols-2 gap-4">
+                {/* CSS Grid for stickers. 2 columns x 5 rows approx for Letter size stickers */}
+                <div className="grid grid-cols-2 gap-x-6 gap-y-4">
                     {labels.map((weight, idx) => (
-                        <div key={idx} className="border border-black rounded-lg p-4 flex flex-col justify-between h-[65mm] break-inside-avoid">
-                            <div className="text-center border-b border-black pb-2">
-                                <h1 className="text-xl font-black uppercase truncate">{itemName}</h1>
-                                <p className="text-sm font-bold mt-1">
+                        <div key={idx} className="border border-black rounded-lg p-3 flex flex-col justify-between h-[48mm] break-inside-avoid">
+                            <div className="text-center border-b border-black pb-1.5">
+                                <h1 className="text-lg font-black uppercase truncate leading-tight">{itemName}</h1>
+                                <p className="text-xs font-black mt-0.5 tracking-wider">
                                     CONTENIDO: {weight} {uomName}
                                 </p>
                             </div>
                             
-                            <div className="flex justify-between items-end mt-2">
-                                <div className="space-y-1 text-[10px]">
+                            <div className="flex justify-between items-center mt-2">
+                                <div className="space-y-0.5 text-[9px] leading-tight">
                                     <div>
-                                        <span className="font-bold">LOTE:</span>
-                                        <span className="ml-1 font-mono font-bold text-xs">{lotNumber}</span>
+                                        <span className="font-bold uppercase opacity-70">Lote:</span>
+                                        <span className="ml-1 font-mono font-black text-xs">{lotNumber}</span>
                                     </div>
                                     <div>
-                                        <span className="font-bold">ELABORACIÓN:</span>
-                                        <span className="ml-1">{format(prodDate, 'dd/MM/yyyy')}</span>
+                                        <span className="font-bold uppercase opacity-70">Elaboración:</span>
+                                        <span className="ml-1 font-bold">{format(prodDate, 'dd/MM/yyyy')}</span>
                                     </div>
                                     {expDate && (
                                         <div>
-                                            <span className="font-bold">VENCIMIENTO:</span>
-                                            <span className="ml-1">{format(expDate, 'dd/MM/yyyy')}</span>
+                                            <span className="font-bold uppercase opacity-70">Vencimiento:</span>
+                                            <span className="ml-1 font-bold">{format(expDate, 'dd/MM/yyyy')}</span>
                                         </div>
                                     )}
                                 </div>
-                                <div className="p-1 border border-black bg-white">
-                                    <QRCodeSVG value={lotNumber} size={60} />
+                                <div className="p-1 border border-black bg-white flex-shrink-0">
+                                    <QRCodeSVG value={lotNumber} size={54} />
                                 </div>
                             </div>
                         </div>
