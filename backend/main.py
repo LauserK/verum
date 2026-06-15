@@ -4865,10 +4865,32 @@ async def complete_production_order(
                 
                 remaining -= consume_qty
                 
+            # Handle deficit (Negative Stock Support)
+            if remaining > 0:
+                db.table("stock_movements").insert({
+                    "org_id": org_id,
+                    "movement_type": "production_out",
+                    "warehouse_id": origin_wh_id,
+                    "item_id": item_id,
+                    "qty_base": -remaining,
+                    "unit_cost_base": 0.0,
+                    "total_cost": 0.0,
+                    "reference_id": str(order_id),
+                    "reference_type": "production_order",
+                    "notes": f"Consumo de OP {order['order_number']} (DÉFICIT)",
+                    "created_by": current_user.id
+                }).execute()
+                
             stock_res = db.table("stock").select("id, qty_base").eq("warehouse_id", origin_wh_id).eq("item_id", item_id).execute()
             if stock_res.data:
-                new_total_qty = max(0, float(stock_res.data[0]["qty_base"]) - qty_actual)
+                new_total_qty = float(stock_res.data[0]["qty_base"]) - qty_actual
                 db.table("stock").update({"qty_base": new_total_qty}).eq("id", stock_res.data[0]["id"]).execute()
+            else:
+                db.table("stock").insert({
+                    "warehouse_id": origin_wh_id,
+                    "item_id": item_id,
+                    "qty_base": -qty_actual
+                }).execute()
                 
         # 3. Add Finished Product to Stock
         target_wh_id = order.get("target_warehouse_id") or origin_wh_id
