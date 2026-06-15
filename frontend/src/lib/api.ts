@@ -778,6 +778,9 @@ export const adminApi = {
     getProductionOrderDetail: (id: string): Promise<ProductionOrderDetailResponse> =>
         fetchWithAuth(`/production/orders/${id}`),
 
+    markLotPrinted: (lotId: string): Promise<any> =>
+        fetchWithAuth(`/production/lots/${lotId}/printed`, { method: 'PATCH' }),
+
     updateOrderStatus: (id: string, status: string): Promise<any> =>
         fetchWithAuth(`/production/orders/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
 
@@ -888,7 +891,8 @@ export interface ProductionOrderResponse {
         name: string, 
         uom_base: { name: string },
         yield_alert_enabled?: boolean,
-        yield_alert_threshold_pct?: number
+        yield_alert_threshold_pct?: number,
+        shelf_life_days?: number
     }
     warehouses?: { name: string }
     uom_presentations?: { name: string, conversion_factor: number }
@@ -912,6 +916,7 @@ export interface ProductionOrderDetailResponse extends ProductionOrderResponse {
         items: { name: string, uom_base: { name: string } }
     }>
     produced_lots: Array<{
+        id: string
         lot_number: string
         qty_base: number
     }>

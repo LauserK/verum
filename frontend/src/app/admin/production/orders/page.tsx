@@ -2,11 +2,12 @@
 
 import React, { useState, useEffect } from 'react'
 import { useTranslations } from '@/components/I18nProvider'
-import { ClipboardList, ChevronLeft, Plus, Loader2, Search, Filter, ArrowUpDown, X, Clock, User, Package, History, AlertTriangle, CheckCircle2 } from 'lucide-react'
+import { ClipboardList, ChevronLeft, Plus, Loader2, Search, Filter, ArrowUpDown, X, Clock, User, Package, History, AlertTriangle, CheckCircle2, Printer } from 'lucide-react'
 import Link from 'next/link'
 import { adminApi, ProductionOrderResponse, ProductionOrderDetailResponse } from '@/lib/api'
 import { format, differenceInMinutes } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { LabelConfigModal } from '@/components/production/LabelConfigModal'
 
 export default function ProductionOrdersPage() {
     const { t } = useTranslations('production')
@@ -18,6 +19,9 @@ export default function ProductionOrdersPage() {
     const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null)
     const [detailData, setDetailData] = useState<ProductionOrderDetailResponse | null>(null)
     const [loadingDetail, setLoadingDetail] = useState(false)
+
+    // Label Print State
+    const [showPrintConfig, setShowPrintConfig] = useState(false)
 
     useEffect(() => {
         loadOrders()
@@ -97,12 +101,23 @@ export default function ProductionOrdersPage() {
                                             )}
                                         </div>
                                     </div>
-                                    <button 
-                                        onClick={() => setSelectedOrderId(null)}
-                                        className="p-3 bg-surface hover:bg-surface-raised border border-border text-text-secondary hover:text-text-primary rounded-2xl transition-all shadow-sm"
-                                    >
-                                        <X className="w-5 h-5" />
-                                    </button>
+                                    <div className="flex items-center gap-3">
+                                        {detailData.status === 'completed' && detailData.produced_lots.length > 0 && (
+                                            <button 
+                                                onClick={() => setShowPrintConfig(true)}
+                                                className="flex items-center gap-2 px-4 py-2.5 bg-primary/10 text-primary hover:bg-primary/20 rounded-2xl font-bold text-sm transition-all border border-primary/20"
+                                            >
+                                                <Printer className="w-4 h-4" />
+                                                Imprimir Etiquetas
+                                            </button>
+                                        )}
+                                        <button 
+                                            onClick={() => setSelectedOrderId(null)}
+                                            className="p-3 bg-surface hover:bg-surface-raised border border-border text-text-secondary hover:text-text-primary rounded-2xl transition-all shadow-sm"
+                                        >
+                                            <X className="w-5 h-5" />
+                                        </button>
+                                    </div>
                                 </div>
 
                                 {/* Modal Body */}
@@ -357,6 +372,21 @@ export default function ProductionOrdersPage() {
                     </div>
                 )}
             </div>
+
+            {/* Label Print Modal */}
+            {showPrintConfig && detailData && detailData.produced_lots.length > 0 && (
+                <LabelConfigModal 
+                    isOpen={true}
+                    onClose={() => setShowPrintConfig(false)}
+                    producedLotId={detailData.produced_lots[0].id}
+                    lotNumber={detailData.produced_lots[0].lot_number}
+                    itemName={detailData.items?.name || 'Producto'}
+                    productionDate={detailData.completed_at || detailData.created_at || new Date().toISOString()}
+                    shelfLifeDays={detailData.items?.shelf_life_days}
+                    uomName={detailData.items?.uom_base?.name || ''}
+                    totalProduced={detailData.qty_produced_base || 0}
+                />
+            )}
         </div>
     )
 }

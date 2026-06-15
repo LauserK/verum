@@ -4979,3 +4979,12 @@ async def complete_production_order(
             print(f"CRITICAL: Rollback failed for order {order_id}. Details: {str(rollback_err)}")
             
         raise HTTPException(status_code=500, detail=f"Error interno al procesar la orden. Cambios revertidos. Detalle: {str(e)}")
+
+@app.patch("/production/lots/{lot_id}/printed", tags=["Production"])
+async def mark_lot_printed(
+    lot_id: str,
+    db=Depends(get_db),
+    _=Depends(require_permission("production.execute"))
+):
+    res = db.table("production_lots").update({"label_printed": True}).eq("id", lot_id).execute()
+    return {"ok": True}

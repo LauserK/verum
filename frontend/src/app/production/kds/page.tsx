@@ -5,6 +5,7 @@ import { adminApi, getProfile, Warehouse, Profile } from '@/lib/api'
 import { useVenue } from '@/components/VenueContext'
 import { Loader2, ChefHat, Clock, MapPin, LayoutGrid, Package, X, AlertTriangle, Home, ChevronDown } from 'lucide-react'
 import Link from 'next/link'
+import { LabelConfigModal } from '@/components/production/LabelConfigModal'
 
 export default function KDSPage() {
     const { availableVenues } = useVenue()
@@ -30,6 +31,9 @@ export default function KDSPage() {
     const [loadingCompletionData, setLoadingCompletionData] = useState(false)
     const [actualConsumptions, setActualConsumptions] = useState<any[]>([])
     const [now, setNow] = useState(new Date())
+
+    // Label Printing State
+    const [printLotData, setPrintLotData] = useState<any>(null)
 
     useEffect(() => {
         const timer = setInterval(() => setNow(new Date()), 60000)
@@ -172,6 +176,21 @@ export default function KDSPage() {
                     qty_actual_base: Number(c.qty_actual_base)
                 }))
             })
+
+            // Fetch detail to get the generated lot info for printing
+            const detail = await adminApi.getProductionOrderDetail(completingOrder.id);
+            if (detail.produced_lots && detail.produced_lots.length > 0) {
+                setPrintLotData({
+                    producedLotId: detail.produced_lots[0].id,
+                    lotNumber: detail.produced_lots[0].lot_number,
+                    itemName: detail.items?.name || 'Producto',
+                    productionDate: detail.completed_at || new Date().toISOString(),
+                    shelfLifeDays: detail.items?.shelf_life_days,
+                    uomName: detail.items?.uom_base?.name || '',
+                    totalProduced: detail.qty_produced_base || qtyBase
+                });
+            }
+
             setCompletingOrder(null)
             setSelectedOrder(null)
             await loadKDSData()
@@ -194,6 +213,15 @@ export default function KDSPage() {
 
     return (
         <div className="fixed inset-0 bg-bg text-text-primary flex flex-col p-4 md:p-6 z-[100] overflow-hidden">
+            {/* Label Printing Modal */}
+            {printLotData && (
+                <LabelConfigModal 
+                    isOpen={true}
+                    onClose={() => setPrintLotData(null)}
+                    {...printLotData}
+                />
+            )}
+
             {/* KDS Header */}
             <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-6 border-b border-border mb-6">
                 <div className="flex items-center gap-3">
