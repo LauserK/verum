@@ -42,7 +42,8 @@ from schemas import (
     StockMovementResponse,
     TransferCreate, TransferConfirm, TransferResponse,
     RecipeCreate, RecipeResponse, CalculateProductionNeedsRequest, ProductionNeedsResponse,
-    ProductionOrderCreate, ProductionOrderResponse, ProductionOrderDetailResponse, OrderStatusUpdate, OrderCompleteRequest
+    ProductionOrderCreate, ProductionOrderResponse, ProductionOrderDetailResponse, OrderStatusUpdate, OrderCompleteRequest,
+    CateringRequestCreate, CateringRequestResponse
 )
 
 CARACAS_TZ = pytz.timezone("America/Caracas")
@@ -4988,3 +4989,91 @@ async def mark_lot_printed(
 ):
     res = db.table("production_lots").update({"label_printed": True}).eq("id", lot_id).execute()
     return {"ok": True}
+
+# ── Catering & MRP Endpoints (M22) ──────────────────────────────────
+
+@app.post("/production/catering", response_model=CateringRequestResponse, tags=["Production"])
+async def create_catering_request(
+    req: CateringRequestCreate,
+    org_id: str = Depends(get_active_org_id),
+    db=Depends(get_db),
+    _=Depends(require_permission("production.manage_catering"))
+):
+    # 1. Create the header
+    header_data = {
+        "org_id": org_id,
+        "name": req.name,
+        "event_date": req.event_date,
+        "notes": req.notes,
+        "status": "planning"
+    }
+    res = db.table("catering_requests").insert(header_data).execute()
+    if not res.data:
+        raise HTTPException(status_code=400, detail="Error creating catering request")
+    
+    header = res.data[0]
+    req_id = header["id"]
+    
+    # 2. Create the lines
+    lines_data = []
+    for line in req.lines:
+        lines_data.append({
+            "request_id": req_id,
+            "item_id": str(line.item_id),
+            "qty_base": float(line.qty_base),
+            "presentation_id": str(line.presentation_id) if line.presentation_id else None,
+            "qty_presentation": float(line.qty_presentation) if line.qty_presentation else None
+        })
+    
+    if lines_data:
+        db.table("catering_request_lines").insert(lines_data).execute()
+        
+    return header
+
+@app.get("/production/catering", response_model=List[CateringRequestResponse], tags=["Production"])
+async def list_catering_requests(
+    org_id: str = Depends(get_active_org_id),
+    db=Depends(get_db),
+    _=Depends(require_permission("production.view"))
+):
+    res = db.table("catering_requests") \
+        .select("*") \
+        .eq("org_id", org_id) \
+        .order("created_at", desc=True) \
+        .execute()
+    return res.data or []
+
+@app.get("/production/catering/{req_id}", tags=["Production"])
+async def get_catering_request(
+    req_id: UUID,
+    org_id: str = Depends(get_active_org_id),
+    db=Depends(get_db),
+    _=Depends(require_permission("production.view"))
+):
+    # Header
+    res = db.table("catering_requests") \
+        .select("*") \
+        .eq("id", str(req_id)) \
+        .eq("org_id", org_id) \
+        .execute()
+        
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Catering request not found")
+    
+    header = res.data[0]
+    
+    # Lines with item names and base unit names
+    lines_res = db.table("catering_request_lines") \
+        .select("*, items(name, uom_base(name))") \
+        .eq("request_id", str(req_id)) \
+        .execute()
+    
+    lines = lines_res.data or []
+    for l in lines:
+        item_data = l.get("items") or {}
+        l["item_name"] = item_data.get("name")
+        l["uom_name"] = item_data.get("uom_base", {}).get("name")
+    
+    header["lines"] = lines
+    return header
+
