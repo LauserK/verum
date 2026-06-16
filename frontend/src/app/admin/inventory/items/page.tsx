@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { adminApi, InventoryItem, UOMBase, ItemCategory } from '@/lib/api';
-import { Plus, Archive, X, Save, Loader2, Search, Filter, Tag, Pencil, Trash2, DollarSign } from 'lucide-react';
+import { Plus, Archive, X, Save, Loader2, Search, Filter, Tag, Pencil, Trash2, DollarSign, FileUp } from 'lucide-react';
 import Link from 'next/link';
 import { useTranslations } from '@/components/I18nProvider';
 import ConfirmationModal from '@/components/ConfirmationModal';
@@ -127,6 +127,13 @@ export default function ItemsPage() {
           <p className="text-sm text-text-secondary mt-1">{t('subtitle')}</p>
         </div>
         <div className="flex gap-2">
+            <Link 
+                href="/admin/inventory/import-utility"
+                className="flex items-center gap-2 border border-border text-text-primary px-4 h-10 rounded-xl text-sm font-medium hover:bg-surface-raised transition-colors"
+            >
+                <FileUp className="w-4 h-4" />
+                Importar Excel
+            </Link>
             <Link 
                 href="/admin/inventory/items/categories"
                 className="flex items-center gap-2 border border-border text-text-primary px-4 h-10 rounded-xl text-sm font-medium hover:bg-surface-raised transition-colors"
