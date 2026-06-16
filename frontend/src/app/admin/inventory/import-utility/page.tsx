@@ -21,6 +21,8 @@ interface ParsedRow {
   categoryId: string | null;
   name: string;
   price: number;
+  type: string;
+  base_uom_id: string;
   status: 'pending' | 'success' | 'error';
   error?: string;
 }
@@ -33,9 +35,7 @@ export default function ImportUtilityPage() {
   const [workbook, setWorkbook] = useState<XLSX.WorkBook | null>(null);
   const [sheetNames, setSheetNames] = useState<string[]>([]);
   const [selectedSheet, setSelectedSheet] = useState<string>('');
-  const [startRow, setStartRow] = useState<number>(2); // Default to line 2 (skip header)
-  const [globalType, setGlobalType] = useState<string>('raw_material');
-  const [globalUom, setGlobalUom] = useState<string>('');
+  const [startRow, setStartRow] = useState<number>(2); 
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
 
@@ -78,8 +78,6 @@ export default function ImportUtilityPage() {
     const ws = workbook.Sheets[selectedSheet];
     const json = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
 
-    // Map columns: A(0)->code, B(1)->category, C(2)->name, K(10)->price
-    // User provides 1-based line number. We convert to 0-based index.
     const rows = json.slice(startRow - 1).map((row) => {
       const catName = String(row[1] || '').trim();
       const matchedCat = categories.find(c => c.name.toLowerCase() === catName.toLowerCase());
@@ -91,23 +89,27 @@ export default function ImportUtilityPage() {
         categoryId: matchedCat?.id || null,
         name: String(row[2] || '').trim(),
         price: Number(row[10]) || 0,
+        type: 'raw_material', 
+        base_uom_id: uoms[0]?.id || '',
         status: 'pending' as const,
       };
-    }).filter(r => r.name); // Filter empty names
+    }).filter(r => r.name); 
 
     setData(rows);
-  }, [workbook, selectedSheet, startRow, categories]);
+  }, [workbook, selectedSheet, startRow, categories, uoms]);
 
   async function handleImport() {
-    if (!globalUom) {
-      alert('Seleccione una Unidad Base global primero');
+    const pending = data.filter(r => r.status !== 'success');
+    const missingUom = pending.some(r => !r.base_uom_id);
+    
+    if (missingUom) {
+      alert('Asegúrese de que todos los artículos tengan una Unidad Base asignada');
       return;
     }
     
     setImporting(true);
     setProgress({ current: 0, total: data.length });
 
-    // We use a separate state copy to update UI during loop
     const currentData = [...data];
 
     for (let i = 0; i < currentData.length; i++) {
@@ -118,9 +120,9 @@ export default function ImportUtilityPage() {
         await adminApi.createInventoryItem({
           name: row.name,
           code: row.code || null,
-          type: globalType as any,
+          type: row.type as any,
           category_id: row.categoryId || null,
-          base_uom_id: globalUom,
+          base_uom_id: row.base_uom_id,
           last_purchase_cost: row.price || null
         });
         
@@ -138,7 +140,7 @@ export default function ImportUtilityPage() {
   if (loading) return <div className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-primary" /></div>;
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto p-6 animate-in fade-in duration-500">
+    <div className="space-y-6 max-w-6xl mx-auto p-6 animate-in fade-in duration-500 pb-20">
       <div className="flex items-center gap-4 mb-8">
         <Link href="/admin/inventory/items" className="p-2 hover:bg-surface-raised rounded-xl transition-colors">
           <ArrowLeft className="w-5 h-5 text-text-secondary" />
@@ -149,8 +151,8 @@ export default function ImportUtilityPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-surface p-6 rounded-3xl border border-border shadow-sm">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="bg-surface p-6 rounded-3xl border border-border shadow-sm md:col-span-1">
           <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-3">Paso 1: Archivo y Hoja</label>
           <div className="space-y-4">
             <div className="relative group">
@@ -167,7 +169,7 @@ export default function ImportUtilityPage() {
             </div>
 
             {workbook && (
-              <div className="grid grid-cols-2 gap-3 animate-in fade-in duration-300">
+              <div className="grid grid-cols-1 gap-3 animate-in fade-in duration-300">
                 <div className="space-y-1">
                   <label className="text-[9px] font-bold text-text-secondary uppercase">Hoja</label>
                   <select 
@@ -195,35 +197,18 @@ export default function ImportUtilityPage() {
           </div>
         </div>
 
-        <div className="bg-surface p-6 rounded-3xl border border-border shadow-sm md:col-span-2">
-          <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-3">Paso 2: Configuración Global</label>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        <div className="bg-surface p-6 rounded-3xl border border-border shadow-sm md:col-span-3">
+          <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-3">Paso 2: Configuración Individual</label>
+          <div className="bg-primary/5 border border-primary/20 rounded-2xl p-6 h-full flex items-center">
             <div className="space-y-2">
-              <label className="text-[10px] font-bold text-text-secondary uppercase tracking-wider ml-1">Tipo de Artículo</label>
-              <select 
-                value={globalType}
-                onChange={e => setGlobalType(e.target.value)}
-                className="w-full bg-surface-raised border border-border rounded-xl px-4 h-12 text-sm text-text-primary focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all cursor-pointer appearance-none shadow-sm"
-              >
-                <option value="raw_material">Materia Prima</option>
-                <option value="semi_finished">Semielaborado</option>
-                <option value="finished">Producto Terminado</option>
-                <option value="supply">Insumo</option>
-                <option value="packaging">Empaque</option>
-              </select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-[10px] font-bold text-text-secondary uppercase tracking-wider ml-1">Unidad Base (Global)</label>
-              <select 
-                value={globalUom}
-                onChange={e => setGlobalUom(e.target.value)}
-                className="w-full bg-surface-raised border border-border rounded-xl px-4 h-12 text-sm text-text-primary focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all cursor-pointer appearance-none shadow-sm"
-              >
-                <option value="">Seleccionar UOM...</option>
-                {uoms.map(u => (
-                  <option key={u.id} value={u.id}>{u.name} ({u.code})</option>
-                ))}
-              </select>
+                <p className="text-sm text-text-primary leading-relaxed font-medium">
+                Configure cada artículo directamente en la tabla inferior. 
+                </p>
+                <ul className="text-xs text-text-secondary space-y-1 list-disc ml-4">
+                    <li>Puede corregir la <strong>categoría</strong> si no se detectó automáticamente.</li>
+                    <li>El tipo predeterminado es <strong>Materia Prima</strong>, cámbielo si es un producto terminado.</li>
+                    <li>Asegúrese de asignar la <strong>Unidad Base</strong> correcta para cada insumo.</li>
+                </ul>
             </div>
           </div>
         </div>
@@ -242,14 +227,16 @@ export default function ImportUtilityPage() {
           
           <div className="bg-surface rounded-3xl border border-border overflow-hidden shadow-xl">
             <div className="overflow-x-auto max-h-[60vh]">
-              <table className="w-full text-left border-collapse">
+              <table className="w-full text-left border-collapse min-w-[1000px]">
                 <thead className="sticky top-0 z-20 bg-surface-raised">
                   <tr className="border-b border-border">
                     <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest w-16">Status</th>
-                    <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest">Código (A)</th>
-                    <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest">Nombre (C)</th>
-                    <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest">Categoría (B)</th>
-                    <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest">Costo (K)</th>
+                    <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest">Código</th>
+                    <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest">Nombre</th>
+                    <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest">Categoría</th>
+                    <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest">Tipo</th>
+                    <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest">UOM</th>
+                    <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest">Costo</th>
                     <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest w-12"></th>
                   </tr>
                 </thead>
@@ -282,7 +269,7 @@ export default function ImportUtilityPage() {
                             setData(newData);
                           }}
                           placeholder="Sin código"
-                          className="w-full bg-transparent border border-transparent focus:border-primary focus:bg-surface rounded-xl px-3 h-10 text-sm text-text-primary outline-none transition-all font-mono"
+                          className="w-24 bg-transparent border border-transparent focus:border-primary focus:bg-surface rounded-xl px-2 h-10 text-xs text-text-primary outline-none transition-all font-mono"
                         />
                       </td>
                       <td className="p-2">
@@ -293,28 +280,57 @@ export default function ImportUtilityPage() {
                             newData[idx].name = e.target.value;
                             setData(newData);
                           }}
-                          className="w-full bg-transparent border border-transparent focus:border-primary focus:bg-surface rounded-xl px-3 h-10 text-sm font-bold text-text-primary outline-none transition-all"
+                          className="w-full bg-transparent border border-transparent focus:border-primary focus:bg-surface rounded-xl px-2 h-10 text-xs font-bold text-text-primary outline-none transition-all"
                         />
                       </td>
                       <td className="p-2">
-                        <div className="relative">
-                          <select 
-                            value={row.categoryId || ''}
-                            onChange={e => {
-                              const newData = [...data];
-                              newData[idx].categoryId = e.target.value;
-                              setData(newData);
-                            }}
-                            className="w-full bg-transparent border border-transparent focus:border-primary focus:bg-surface rounded-xl px-3 h-10 text-sm text-text-secondary outline-none transition-all cursor-pointer appearance-none"
-                          >
-                            <option value="">(Sin categoría)</option>
-                            {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                          </select>
-                        </div>
+                        <select 
+                          value={row.categoryId || ''}
+                          onChange={e => {
+                            const newData = [...data];
+                            newData[idx].categoryId = e.target.value;
+                            setData(newData);
+                          }}
+                          className="w-full bg-transparent border border-transparent focus:border-primary focus:bg-surface rounded-xl px-2 h-10 text-[10px] text-text-secondary outline-none transition-all cursor-pointer appearance-none"
+                        >
+                          <option value="">(Sin categoría)</option>
+                          {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                      </td>
+                      <td className="p-2">
+                        <select 
+                          value={row.type}
+                          onChange={e => {
+                            const newData = [...data];
+                            newData[idx].type = e.target.value;
+                            setData(newData);
+                          }}
+                          className="w-full bg-transparent border border-transparent focus:border-primary focus:bg-surface rounded-xl px-2 h-10 text-[10px] text-text-secondary outline-none transition-all cursor-pointer appearance-none"
+                        >
+                          <option value="raw_material">Materia Prima</option>
+                          <option value="semi_finished">Semielaborado</option>
+                          <option value="finished">Terminado</option>
+                          <option value="supply">Insumo</option>
+                          <option value="packaging">Empaque</option>
+                        </select>
+                      </td>
+                      <td className="p-2">
+                        <select 
+                          value={row.base_uom_id}
+                          onChange={e => {
+                            const newData = [...data];
+                            newData[idx].base_uom_id = e.target.value;
+                            setData(newData);
+                          }}
+                          className="w-full bg-transparent border border-transparent focus:border-primary focus:bg-surface rounded-xl px-2 h-10 text-[10px] text-text-secondary outline-none transition-all cursor-pointer appearance-none"
+                        >
+                          <option value="">Seleccionar...</option>
+                          {uoms.map(u => <option key={u.id} value={u.id}>{u.code}</option>)}
+                        </select>
                       </td>
                       <td className="p-2">
                         <div className="relative">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-disabled text-xs">$</span>
+                          <span className="absolute left-1 top-1/2 -translate-y-1/2 text-text-disabled text-[10px]">$</span>
                           <input 
                             type="number"
                             value={row.price}
@@ -323,7 +339,7 @@ export default function ImportUtilityPage() {
                               newData[idx].price = Number(e.target.value);
                               setData(newData);
                             }}
-                            className="w-28 bg-transparent border border-transparent focus:border-primary focus:bg-surface rounded-xl pl-6 pr-3 h-10 text-sm text-text-primary outline-none transition-all"
+                            className="w-20 bg-transparent border border-transparent focus:border-primary focus:bg-surface rounded-xl pl-4 pr-1 h-10 text-xs text-text-primary outline-none transition-all"
                           />
                         </div>
                       </td>
