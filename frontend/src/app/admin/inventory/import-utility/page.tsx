@@ -81,19 +81,39 @@ export default function ImportUtilityPage() {
     const ws = workbook.Sheets[selectedSheet];
     const json = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
 
+    // Map columns: A(0)->code, B(1)->category, C(2)->name, K(10)->price
     const rows = json.slice(startRow - 1).map((row) => {
-      const catName = String(row[1] || '').trim();
-      const matchedCat = categories.find(c => c.name.toLowerCase() === catName.toLowerCase());
+      const rawCatName = String(row[1] || '').trim();
+      
+      // 1. Improved Category Matching (Case insensitive & Singular/Plural for Subrecetas)
+      let matchedCat = categories.find(c => c.name.toLowerCase() === rawCatName.toLowerCase());
+      
+      // Heuristic: If it says "SUBRECETA" but we have "SUBRECETAS" in the DB (or vice-versa)
+      if (!matchedCat && rawCatName.toUpperCase().includes('SUBRECETA')) {
+          matchedCat = categories.find(c => c.name.toUpperCase().includes('SUBRECETA'));
+      }
+
+      // 2. Logic for Defaults based on category name in Excel
+      let defaultType = 'raw_material';
+      if (rawCatName.toUpperCase().includes('SUBRECETA')) {
+          defaultType = 'semi_finished';
+      }
+
+      let defaultUomId = uoms[0]?.id || '';
+      if (rawCatName.toUpperCase().includes('BEBIDA')) {
+          const unitUom = uoms.find(u => u.code.toLowerCase() === 'unit' || u.name.toLowerCase().includes('unidad'));
+          if (unitUom) defaultUomId = unitUom.id;
+      }
       
       return {
         id: Math.random().toString(36).substr(2, 9),
         code: String(row[0] || '').trim(),
-        categoryName: catName,
+        categoryName: rawCatName,
         categoryId: matchedCat?.id || null,
         name: String(row[2] || '').trim(),
         price: Number(row[10]) || 0,
-        type: 'raw_material', 
-        base_uom_id: uoms[0]?.id || '',
+        type: defaultType, 
+        base_uom_id: defaultUomId,
         status: 'pending' as const,
       };
     }).filter(r => r.name); 
@@ -223,8 +243,9 @@ export default function ImportUtilityPage() {
                 </p>
                 <ul className="text-xs text-text-secondary space-y-1 list-disc ml-4">
                     <li>Si el <strong>Código</strong> coincide con uno existente, solo se actualizará el precio.</li>
-                    <li>Puede corregir la <strong>categoría</strong> si no se detectó automáticamente.</li>
-                    <li>El tipo predeterminado es <strong>Materia Prima</strong>, cámbielo si es necesario.</li>
+                    <li>Puede corregir la <strong>categoría</strong> si no se detectó automáticamente (ej. Subrecetas).</li>
+                    <li>Los artículos de <strong>Subrecetas</strong> se marcan como Semielaborados por defecto.</li>
+                    <li>Las <strong>Bebidas</strong> se asignan automáticamente a Unidades (unit).</li>
                 </ul>
             </div>
           </div>
