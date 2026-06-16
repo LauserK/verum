@@ -43,7 +43,7 @@ from schemas import (
     TransferCreate, TransferConfirm, TransferResponse,
     RecipeCreate, RecipeResponse, CalculateProductionNeedsRequest, ProductionNeedsResponse,
     ProductionOrderCreate, ProductionOrderResponse, ProductionOrderDetailResponse, OrderStatusUpdate, OrderCompleteRequest,
-    CateringRequestCreate, CateringRequestResponse
+    CateringRequestCreate, CateringRequestResponse, MRPResultResponse, MRPPlanRequest
 )
 
 CARACAS_TZ = pytz.timezone("America/Caracas")
@@ -5076,4 +5076,117 @@ async def get_catering_request(
     
     header["lines"] = lines
     return header
+
+@app.post("/production/catering/{req_id}/plan", response_model=MRPResultResponse, tags=["Production"])
+async def generate_mrp_plan(
+    req_id: UUID,
+    body: MRPPlanRequest,
+    user=Depends(require_permission("production.manage_catering")),
+    org_id: str = Depends(get_active_org_id),
+    db=Depends(get_db)
+):
+    # 1. Fetch Catering Request Lines
+    lines_res = db.table("catering_request_lines").select("*").eq("request_id", str(req_id)).execute()
+    if not lines_res.data:
+        return {"production_plan": [], "purchase_list": []}
+    
+    # 2. Fetch ALL recipes and ingredients for the organization to avoid N+1
+    recipes_res = db.table("recipes").select("*").eq("org_id", org_id).eq("is_active", True).execute()
+    all_recipes = recipes_res.data or []
+    recipe_ids = [r["id"] for r in all_recipes]
+    
+    all_ingredients = []
+    if recipe_ids:
+        ingredients_res = db.table("recipe_ingredients").select("*").in_("recipe_id", recipe_ids).execute()
+        all_ingredients = ingredients_res.data or []
+    
+    # Organize recipes by item_id
+    recipe_map = {r["item_id"]: r for r in all_recipes}
+    ingredients_by_recipe = {}
+    for ing in all_ingredients:
+        rid = ing["recipe_id"]
+        if rid not in ingredients_by_recipe:
+            ingredients_by_recipe[rid] = []
+        ingredients_by_recipe[rid].append(ing)
+
+    # 3. Recursive Explosion
+    production_needed = {} # item_id -> {qty, recipe_id}
+    raw_needed = {} # item_id -> qty
+
+    def explode(item_id: str, qty: Decimal):
+        recipe = recipe_map.get(item_id)
+        if recipe:
+            # Item needs to be produced
+            rid = recipe["id"]
+            if item_id not in production_needed:
+                production_needed[item_id] = {"qty": Decimal("0"), "recipe_id": rid}
+            production_needed[item_id]["qty"] += qty
+            
+            # Explode ingredients
+            ingredients = ingredients_by_recipe.get(rid, [])
+            yield_qty = Decimal(str(recipe["yield_qty_base"]))
+            for ing in ingredients:
+                ing_item_id = ing["item_id"]
+                ing_qty = Decimal(str(ing["qty_base"]))
+                # Prevent division by zero
+                if yield_qty > 0:
+                    scaled_qty = (qty / yield_qty) * ing_qty
+                    explode(ing_item_id, scaled_qty)
+        else:
+            # Raw material
+            if item_id not in raw_needed:
+                raw_needed[item_id] = Decimal("0")
+            raw_needed[item_id] += qty
+
+    for line in lines_res.data:
+        explode(line["item_id"], Decimal(str(line["qty_base"])))
+
+    # 4. Fetch Items Info (Names, UOMs)
+    all_needed_ids = list(production_needed.keys()) + list(raw_needed.keys())
+    item_info = {}
+    if all_needed_ids:
+        items_res = db.table("items").select("id, name, base_uoms:base_uom_id(code)").in_("id", all_needed_ids).execute()
+        item_info = {i["id"]: i for i in (items_res.data or [])}
+
+    # 5. Fetch Stock for Raw Materials
+    stock_map = {}
+    raw_ids = list(raw_needed.keys())
+    if raw_ids:
+        stock_res = db.table("stock_levels_view") \
+            .select("item_id, total_qty") \
+            .eq("warehouse_id", str(body.warehouse_id)) \
+            .in_("item_id", raw_ids) \
+            .execute()
+        stock_map = {s["item_id"]: Decimal(str(s["total_qty"])) for s in (stock_res.data or [])}
+
+    # 6. Build Result
+    prod_plan = []
+    for iid, data in production_needed.items():
+        info = item_info.get(iid, {})
+        prod_plan.append({
+            "item_id": iid,
+            "item_name": info.get("name", "Unknown"),
+            "uom_name": info.get("base_uoms", {}).get("code", "") if info.get("base_uoms") else "",
+            "qty_to_produce": float(data["qty"]),
+            "recipe_id": data["recipe_id"]
+        })
+
+    purchase_list = []
+    for iid, qty_needed in raw_needed.items():
+        info = item_info.get(iid, {})
+        qty_available = stock_map.get(iid, Decimal("0"))
+        qty_deficit = max(Decimal("0"), qty_needed - qty_available)
+        purchase_list.append({
+            "item_id": iid,
+            "item_name": info.get("name", "Unknown"),
+            "uom_name": info.get("base_uoms", {}).get("code", "") if info.get("base_uoms") else "",
+            "qty_needed": float(qty_needed),
+            "qty_available": float(qty_available),
+            "qty_deficit": float(qty_deficit)
+        })
+
+    return {
+        "production_plan": prod_plan,
+        "purchase_list": purchase_list
+    }
 
