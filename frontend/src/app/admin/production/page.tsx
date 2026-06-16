@@ -71,6 +71,20 @@ export default function ProductionDashboard() {
                         <ArrowRight className="w-5 h-5 text-text-secondary group-hover:translate-x-1 transition-transform" />
                     </div>
                 </Link>
+
+                {/* Catering & MRP */}
+                <Link href="/admin/production/catering" className="bg-surface border border-border rounded-[40px] p-8 shadow-sm hover:border-border-strong transition-all group flex flex-col justify-between">
+                    <div>
+                        <div className="w-14 h-14 rounded-3xl bg-surface-raised border border-border flex items-center justify-center text-text-secondary group-hover:scale-110 transition-transform mb-6">
+                            <ChefHat className="w-7 h-7" />
+                        </div>
+                        <h2 className="text-2xl font-bold text-text-primary tracking-tight">Catering & MRP</h2>
+                        <p className="text-sm text-text-secondary mt-2 leading-relaxed">Planificación de eventos especiales y explosión de materiales (MRP).</p>
+                    </div>
+                    <div className="flex items-center justify-end mt-8">
+                        <ArrowRight className="w-5 h-5 text-text-secondary group-hover:translate-x-1 transition-transform" />
+                    </div>
+                </Link>
             </div>
         </div>
     )
