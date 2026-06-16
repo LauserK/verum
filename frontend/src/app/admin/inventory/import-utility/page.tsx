@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { adminApi, ItemCategory, UOMBase } from '@/lib/api';
+import { adminApi, ItemCategory, UOMBase, InventoryItem } from '@/lib/api';
 import { 
   FileUp, 
   Save, 
@@ -30,6 +30,7 @@ interface ParsedRow {
 export default function ImportUtilityPage() {
   const [categories, setCategories] = useState<ItemCategory[]>([]);
   const [uoms, setUoms] = useState<UOMBase[]>([]);
+  const [existingItems, setExistingItems] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<ParsedRow[]>([]);
   const [workbook, setWorkbook] = useState<XLSX.WorkBook | null>(null);
@@ -42,12 +43,14 @@ export default function ImportUtilityPage() {
   useEffect(() => {
     async function loadData() {
       try {
-        const [cats, uomList] = await Promise.all([
+        const [cats, uomList, items] = await Promise.all([
           adminApi.getItemCategories(),
-          adminApi.getUOMBase()
+          adminApi.getUOMBase(),
+          adminApi.getInventoryItems()
         ]);
         setCategories(cats);
         setUoms(uomList);
+        setExistingItems(items);
       } catch (err) {
         console.error('Error loading data:', err);
       } finally {
@@ -117,16 +120,26 @@ export default function ImportUtilityPage() {
       if (row.status === 'success') continue;
 
       try {
-        await adminApi.createInventoryItem({
-          name: row.name,
-          code: row.code || null,
-          type: row.type as any,
-          category_id: row.categoryId || null,
-          base_uom_id: row.base_uom_id,
-          last_purchase_cost: row.price || null
-        });
-        
-        currentData[i].status = 'success';
+        const existing = row.code ? existingItems.find(item => item.code === row.code) : null;
+
+        if (existing) {
+          // Update only price
+          await adminApi.updateInventoryItem(existing.id, {
+            last_purchase_cost: row.price || null
+          });
+          currentData[i].status = 'success';
+        } else {
+          // Create new
+          await adminApi.createInventoryItem({
+            name: row.name,
+            code: row.code || null,
+            type: row.type as any,
+            category_id: row.categoryId || null,
+            base_uom_id: row.base_uom_id,
+            last_purchase_cost: row.price || null
+          });
+          currentData[i].status = 'success';
+        }
       } catch (err: any) {
         currentData[i].status = 'error';
         currentData[i].error = err.message;
@@ -135,6 +148,10 @@ export default function ImportUtilityPage() {
       setProgress(p => ({ ...p, current: i + 1 }));
     }
     setImporting(false);
+    
+    // Refresh existing items list after import
+    const updatedItems = await adminApi.getInventoryItems();
+    setExistingItems(updatedItems);
   }
 
   if (loading) return <div className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-primary" /></div>;
@@ -205,9 +222,9 @@ export default function ImportUtilityPage() {
                 Configure cada artículo directamente en la tabla inferior. 
                 </p>
                 <ul className="text-xs text-text-secondary space-y-1 list-disc ml-4">
+                    <li>Si el <strong>Código</strong> coincide con uno existente, solo se actualizará el precio.</li>
                     <li>Puede corregir la <strong>categoría</strong> si no se detectó automáticamente.</li>
-                    <li>El tipo predeterminado es <strong>Materia Prima</strong>, cámbielo si es un producto terminado.</li>
-                    <li>Asegúrese de asignar la <strong>Unidad Base</strong> correcta para cada insumo.</li>
+                    <li>El tipo predeterminado es <strong>Materia Prima</strong>, cámbielo si es necesario.</li>
                 </ul>
             </div>
           </div>
@@ -241,118 +258,127 @@ export default function ImportUtilityPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {data.map((row, idx) => (
-                    <tr key={row.id} className="hover:bg-surface-raised/40 transition-colors group">
-                      <td className="p-4 text-center">
-                        {row.status === 'pending' && (
-                          <div className="w-2.5 h-2.5 rounded-full bg-text-disabled mx-auto animate-pulse" />
-                        )}
-                        {row.status === 'success' && (
-                          <CheckCircle2 className="w-5 h-5 text-success mx-auto" />
-                        )}
-                        {row.status === 'error' && (
-                          <div className="relative group/error inline-block">
-                            <AlertCircle className="w-5 h-5 text-error mx-auto cursor-help" />
-                            <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover/error:block w-48 p-2 bg-error text-white text-[10px] rounded-lg shadow-xl z-30">
-                              {row.error}
-                              <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-error" />
+                  {data.map((row, idx) => {
+                    const isUpdate = row.code && existingItems.some(item => item.code === row.code);
+                    return (
+                      <tr key={row.id} className={`hover:bg-surface-raised/40 transition-colors group ${isUpdate ? 'bg-primary/5' : ''}`}>
+                        <td className="p-4 text-center">
+                          {row.status === 'pending' && (
+                            <div className={`w-2.5 h-2.5 rounded-full mx-auto animate-pulse ${isUpdate ? 'bg-primary' : 'bg-text-disabled'}`} />
+                          )}
+                          {row.status === 'success' && (
+                            <CheckCircle2 className="w-5 h-5 text-success mx-auto" />
+                          )}
+                          {row.status === 'error' && (
+                            <div className="relative group/error inline-block">
+                              <AlertCircle className="w-5 h-5 text-error mx-auto cursor-help" />
+                              <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover/error:block w-48 p-2 bg-error text-white text-[10px] rounded-lg shadow-xl z-30">
+                                {row.error}
+                                <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-error" />
+                              </div>
                             </div>
+                          )}
+                        </td>
+                        <td className="p-2">
+                          <div className="flex flex-col gap-1">
+                            <input 
+                              value={row.code}
+                              onChange={e => {
+                                const newData = [...data];
+                                newData[idx].code = e.target.value;
+                                setData(newData);
+                              }}
+                              placeholder="Sin código"
+                              className="w-24 bg-transparent border border-transparent focus:border-primary focus:bg-surface rounded-xl px-2 h-10 text-xs text-text-primary outline-none transition-all font-mono"
+                            />
+                            {isUpdate && <span className="text-[8px] font-black text-primary uppercase ml-2 tracking-tighter">Actualizar</span>}
                           </div>
-                        )}
-                      </td>
-                      <td className="p-2">
-                        <input 
-                          value={row.code}
-                          onChange={e => {
-                            const newData = [...data];
-                            newData[idx].code = e.target.value;
-                            setData(newData);
-                          }}
-                          placeholder="Sin código"
-                          className="w-24 bg-transparent border border-transparent focus:border-primary focus:bg-surface rounded-xl px-2 h-10 text-xs text-text-primary outline-none transition-all font-mono"
-                        />
-                      </td>
-                      <td className="p-2">
-                        <input 
-                          value={row.name}
-                          onChange={e => {
-                            const newData = [...data];
-                            newData[idx].name = e.target.value;
-                            setData(newData);
-                          }}
-                          className="w-full bg-transparent border border-transparent focus:border-primary focus:bg-surface rounded-xl px-2 h-10 text-xs font-bold text-text-primary outline-none transition-all"
-                        />
-                      </td>
-                      <td className="p-2">
-                        <select 
-                          value={row.categoryId || ''}
-                          onChange={e => {
-                            const newData = [...data];
-                            newData[idx].categoryId = e.target.value;
-                            setData(newData);
-                          }}
-                          className="w-full bg-transparent border border-transparent focus:border-primary focus:bg-surface rounded-xl px-2 h-10 text-[10px] text-text-secondary outline-none transition-all cursor-pointer appearance-none"
-                        >
-                          <option value="">(Sin categoría)</option>
-                          {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                        </select>
-                      </td>
-                      <td className="p-2">
-                        <select 
-                          value={row.type}
-                          onChange={e => {
-                            const newData = [...data];
-                            newData[idx].type = e.target.value;
-                            setData(newData);
-                          }}
-                          className="w-full bg-transparent border border-transparent focus:border-primary focus:bg-surface rounded-xl px-2 h-10 text-[10px] text-text-secondary outline-none transition-all cursor-pointer appearance-none"
-                        >
-                          <option value="raw_material">Materia Prima</option>
-                          <option value="semi_finished">Semielaborado</option>
-                          <option value="finished">Terminado</option>
-                          <option value="supply">Insumo</option>
-                          <option value="packaging">Empaque</option>
-                        </select>
-                      </td>
-                      <td className="p-2">
-                        <select 
-                          value={row.base_uom_id}
-                          onChange={e => {
-                            const newData = [...data];
-                            newData[idx].base_uom_id = e.target.value;
-                            setData(newData);
-                          }}
-                          className="w-full bg-transparent border border-transparent focus:border-primary focus:bg-surface rounded-xl px-2 h-10 text-[10px] text-text-secondary outline-none transition-all cursor-pointer appearance-none"
-                        >
-                          <option value="">Seleccionar...</option>
-                          {uoms.map(u => <option key={u.id} value={u.id}>{u.code}</option>)}
-                        </select>
-                      </td>
-                      <td className="p-2">
-                        <div className="relative">
-                          <span className="absolute left-1 top-1/2 -translate-y-1/2 text-text-disabled text-[10px]">$</span>
+                        </td>
+                        <td className="p-2">
                           <input 
-                            type="number"
-                            value={row.price}
+                            value={row.name}
                             onChange={e => {
                               const newData = [...data];
-                              newData[idx].price = Number(e.target.value);
+                              newData[idx].name = e.target.value;
                               setData(newData);
                             }}
-                            className="w-20 bg-transparent border border-transparent focus:border-primary focus:bg-surface rounded-xl pl-4 pr-1 h-10 text-xs text-text-primary outline-none transition-all"
+                            className="w-full bg-transparent border border-transparent focus:border-primary focus:bg-surface rounded-xl px-2 h-10 text-xs font-bold text-text-primary outline-none transition-all"
                           />
-                        </div>
-                      </td>
-                      <td className="p-2 text-center">
-                        <button 
-                          onClick={() => setData(data.filter(r => r.id !== row.id))} 
-                          className="p-2 text-text-disabled hover:text-error hover:bg-error/5 rounded-lg transition-all opacity-0 group-hover:opacity-100"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="p-2">
+                          <select 
+                            value={row.categoryId || ''}
+                            onChange={e => {
+                              const newData = [...data];
+                              newData[idx].categoryId = e.target.value;
+                              setData(newData);
+                            }}
+                            disabled={!!isUpdate}
+                            className="w-full bg-transparent border border-transparent focus:border-primary focus:bg-surface rounded-xl px-2 h-10 text-[10px] text-text-secondary outline-none transition-all cursor-pointer appearance-none disabled:opacity-30"
+                          >
+                            <option value="">(Sin categoría)</option>
+                            {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                          </select>
+                        </td>
+                        <td className="p-2">
+                          <select 
+                            value={row.type}
+                            onChange={e => {
+                              const newData = [...data];
+                              newData[idx].type = e.target.value;
+                              setData(newData);
+                            }}
+                            disabled={!!isUpdate}
+                            className="w-full bg-transparent border border-transparent focus:border-primary focus:bg-surface rounded-xl px-2 h-10 text-[10px] text-text-secondary outline-none transition-all cursor-pointer appearance-none disabled:opacity-30"
+                          >
+                            <option value="raw_material">Materia Prima</option>
+                            <option value="semi_finished">Semielaborado</option>
+                            <option value="finished">Terminado</option>
+                            <option value="supply">Insumo</option>
+                            <option value="packaging">Empaque</option>
+                          </select>
+                        </td>
+                        <td className="p-2">
+                          <select 
+                            value={row.base_uom_id}
+                            onChange={e => {
+                              const newData = [...data];
+                              newData[idx].base_uom_id = e.target.value;
+                              setData(newData);
+                            }}
+                            disabled={!!isUpdate}
+                            className="w-full bg-transparent border border-transparent focus:border-primary focus:bg-surface rounded-xl px-2 h-10 text-[10px] text-text-secondary outline-none transition-all cursor-pointer appearance-none disabled:opacity-30"
+                          >
+                            <option value="">Seleccionar...</option>
+                            {uoms.map(u => <option key={u.id} value={u.id}>{u.code}</option>)}
+                          </select>
+                        </td>
+                        <td className="p-2">
+                          <div className="relative">
+                            <span className="absolute left-1 top-1/2 -translate-y-1/2 text-text-disabled text-[10px]">$</span>
+                            <input 
+                              type="number"
+                              value={row.price}
+                              onChange={e => {
+                                const newData = [...data];
+                                newData[idx].price = Number(e.target.value);
+                                setData(newData);
+                              }}
+                              className="w-20 bg-transparent border border-transparent focus:border-primary focus:bg-surface rounded-xl pl-4 pr-1 h-10 text-xs text-text-primary outline-none transition-all font-bold"
+                            />
+                          </div>
+                        </td>
+                        <td className="p-2 text-center">
+                          <button 
+                            onClick={() => setData(data.filter(r => r.id !== row.id))} 
+                            className="p-2 text-text-disabled hover:text-error hover:bg-error/5 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -373,12 +399,12 @@ export default function ImportUtilityPage() {
                 {importing ? (
                   <>
                     <Loader2 className="w-5 h-5 animate-spin" />
-                    Importando ({progress.current}/{progress.total})
+                    Procesando ({progress.current}/{progress.total})
                   </>
                 ) : (
                   <>
                     <Save className="w-5 h-5" />
-                    Importar Todo
+                    Ejecutar Carga / Actualización
                   </>
                 )}
               </button>
