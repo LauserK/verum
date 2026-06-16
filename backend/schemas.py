@@ -675,3 +675,51 @@ class ProductionOrderDetailResponse(ProductionOrderResponse):
     target_warehouse: Optional[Dict] = None
     consumptions: List[Dict] = []
     produced_lots: List[Dict] = []
+
+# ── Catering & MRP (M22) ─────────────────────────────────
+
+class CateringRequestLineBase(BaseModel):
+    item_id: UUID
+    qty_base: Decimal
+    presentation_id: Optional[UUID] = None
+    qty_presentation: Optional[Decimal] = None
+
+class CateringRequestCreate(BaseModel):
+    name: str
+    event_date: Optional[str] = None
+    notes: Optional[str] = None
+    lines: List[CateringRequestLineBase]
+
+class CateringRequestResponse(BaseModel):
+    id: UUID
+    name: str
+    event_date: Optional[str] = None
+    status: str
+    created_at: datetime
+
+class MRPPlanRequest(BaseModel):
+    warehouse_id: UUID
+
+class MRPProductionPlan(BaseModel):
+    item_id: str
+    item_name: str
+    uom_name: str
+    qty_to_produce: float
+    recipe_id: str
+
+class MRPPurchaseList(BaseModel):
+    item_id: str
+    item_name: str
+    uom_name: str
+    qty_needed: float
+    qty_available: float
+    qty_deficit: float
+    
+class MRPResultResponse(BaseModel):
+    production_plan: List[MRPProductionPlan]
+    purchase_list: List[MRPPurchaseList]
+
+class GenerateOrdersRequest(BaseModel):
+    warehouse_id: UUID
+    target_warehouse_id: UUID
+    scheduled_date: str

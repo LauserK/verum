@@ -214,10 +214,10 @@ def test_mrp_explosion(client, mock_supabase, authenticated_user_mock):
         # Sal: 1kg available (Need 0.1kg -> OK)
         mock_stock = MagicMock()
         mock_stock.data = [
-            {"item_id": harina_id, "total_qty": 2.0},
-            {"item_id": agua_id, "total_qty": 10.0},
-            {"item_id": tomate_id, "total_qty": 1.0},
-            {"item_id": sal_id, "total_qty": 1.0}
+            {"item_id": harina_id, "qty_base": 2.0, "qty_reserved": 0.0},
+            {"item_id": agua_id, "qty_base": 10.0, "qty_reserved": 0.0},
+            {"item_id": tomate_id, "qty_base": 1.0, "qty_reserved": 0.0},
+            {"item_id": sal_id, "qty_base": 1.0, "qty_reserved": 0.0}
         ]
 
         def table_side_effect(name):
@@ -225,13 +225,35 @@ def test_mrp_explosion(client, mock_supabase, authenticated_user_mock):
             if name == "catering_request_lines":
                 m.select.return_value.eq.return_value.execute.return_value = mock_req_lines
             elif name == "recipes":
-                m.select.return_value.eq.return_value.eq.return_value.execute.return_value = mock_recipes
+                m.select.return_value.eq.return_value.eq.return_value.execute.return_value = mock_recipes       
             elif name == "recipe_ingredients":
                 m.select.return_value.in_.return_value.execute.return_value = mock_ingredients
             elif name == "items":
                 m.select.return_value.in_.return_value.execute.return_value = mock_items
-            elif name == "stock_levels_view":
-                m.select.return_value.eq.return_value.in_.return_value.execute.return_value = mock_stock
+            elif name == "stock":
+                # Robust mock for the chain .select().eq().eq().execute()
+                stock_query_mock = MagicMock()
+
+                # We'll store the current filter state in the mock
+                stock_query_mock._filters = {}
+
+                def eq_handler(col, val):
+                    stock_query_mock._filters[col] = val
+                    return stock_query_mock
+
+                def execute_handler():
+                    item_id = stock_query_mock._filters.get("item_id")
+                    res = MagicMock()
+                    if item_id:
+                        res.data = [s for s in mock_stock.data if s["item_id"] == item_id]
+                    else:
+                        res.data = mock_stock.data
+                    return res
+
+                stock_query_mock.eq.side_effect = eq_handler
+                stock_query_mock.execute.side_effect = execute_handler
+
+                m.select.return_value = stock_query_mock
             return m
 
         mock_supabase.table.side_effect = table_side_effect
@@ -254,8 +276,8 @@ def test_mrp_explosion(client, mock_supabase, authenticated_user_mock):
     assert production_items["Masa"] == 10.0
     assert production_items["Salsa"] == 10.0
 
-    # Purchase List (Raw Materials): Harina, Agua, Tomate, Sal
-    assert len(data["purchase_list"]) == 4
+    # Purchase List (Raw Materials with Deficit): Harina, Tomate
+    assert len(data["purchase_list"]) == 2
     purchase_items = {p["item_name"]: p for p in data["purchase_list"]}
     
     assert purchase_items["Harina"]["qty_needed"] == 5.0
@@ -263,6 +285,90 @@ def test_mrp_explosion(client, mock_supabase, authenticated_user_mock):
     
     assert purchase_items["Tomate"]["qty_needed"] == 3.0
     assert purchase_items["Tomate"]["qty_deficit"] == 2.0
+
+def test_generate_mrp_orders(client, mock_supabase, authenticated_user_mock):
+    org_id = str(uuid.uuid4())
+    req_id = str(uuid.uuid4())
+    warehouse_id = str(uuid.uuid4())
+    target_warehouse_id = str(uuid.uuid4())
     
-    assert purchase_items["Agua"]["qty_deficit"] == 0.0
-    assert purchase_items["Sal"]["qty_deficit"] == 0.0
+    # Item IDs
+    pizza_id = str(uuid.uuid4())
+    masa_id = str(uuid.uuid4())
+
+    app.dependency_overrides[get_current_user] = lambda: authenticated_user_mock
+    app.dependency_overrides[main.get_active_org_id] = lambda: org_id
+    
+    with patch("main.resolve_permission", return_value=True), \
+         patch("main.check_restriction", return_value=False):
+        
+        # 1. Mock _calculate_mrp_data via its internal Supabase calls
+        # Mock Catering Request Lines (1 Pizza)
+        mock_req_lines = MagicMock()
+        mock_req_lines.data = [{"item_id": pizza_id, "qty_base": 1.0}]
+        
+        # Mock Recipes
+        # Pizza -> 1 Masa
+        mock_recipes = MagicMock()
+        mock_recipes.data = [
+            {"id": "r1", "item_id": pizza_id, "yield_qty_base": 1.0},
+            {"id": "r2", "item_id": masa_id, "yield_qty_base": 1.0}
+        ]
+        
+        mock_ingredients = MagicMock()
+        mock_ingredients.data = [
+            {"recipe_id": "r1", "item_id": masa_id, "qty_base": 1.0}
+        ]
+
+        # Mock items info
+        mock_items = MagicMock()
+        mock_items.data = [
+            {"id": pizza_id, "name": "Pizza", "base_uoms": {"code": "un"}},
+            {"id": masa_id, "name": "Masa", "base_uoms": {"code": "kg"}}
+        ]
+        
+        # Mock production orders count (for order number)
+        mock_count = MagicMock()
+        mock_count.count = 5
+
+        # Mock Insert Response
+        mock_insert_res = MagicMock()
+        mock_insert_res.data = [{"id": "new_order_id"}]
+
+        def table_side_effect(name):
+            m = MagicMock()
+            if name == "catering_request_lines":
+                m.select.return_value.eq.return_value.execute.return_value = mock_req_lines
+            elif name == "recipes":
+                m.select.return_value.eq.return_value.eq.return_value.execute.return_value = mock_recipes
+            elif name == "recipe_ingredients":
+                m.select.return_value.in_.return_value.execute.return_value = mock_ingredients
+            elif name == "items":
+                m.select.return_value.in_.return_value.execute.return_value = mock_items
+            elif name == "stock_levels_view":
+                m.select.return_value.eq.return_value.in_.return_value.execute.return_value = MagicMock(data=[])
+            elif name == "production_orders":
+                # For count
+                m.select.return_value.gte.return_value.execute.return_value = mock_count
+                # For insert
+                m.insert.return_value.execute.return_value = mock_insert_res
+            elif name == "catering_requests":
+                m.update.return_value.eq.return_value.execute.return_value = MagicMock(data=[])
+            return m
+
+        mock_supabase.table.side_effect = table_side_effect
+        
+        response = client.post(
+            f"/production/catering/{req_id}/generate-orders",
+            json={
+                "warehouse_id": warehouse_id,
+                "target_warehouse_id": target_warehouse_id,
+                "scheduled_date": "2026-06-20"
+            },
+            headers={"X-Org-ID": org_id}
+        )
+
+    app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["generated_count"] == 2 # Pizza and Masa

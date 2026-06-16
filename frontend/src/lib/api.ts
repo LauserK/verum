@@ -786,6 +786,28 @@ export const adminApi = {
 
     completeProductionOrder: (id: string, data: OrderCompleteRequest): Promise<any> =>
         fetchWithAuth(`/production/orders/${id}/complete`, { method: 'POST', body: JSON.stringify(data) }),
+
+    // Catering & MRP
+    getCateringRequests: (): Promise<CateringRequest[]> =>
+        fetchWithAuth('/production/catering'),
+
+    getCateringRequest: (id: string): Promise<CateringRequest> =>
+        fetchWithAuth(`/production/catering/${id}`),
+
+    createCateringRequest: (data: any): Promise<CateringRequest> =>
+        fetchWithAuth('/production/catering', { method: 'POST', body: JSON.stringify(data) }),
+
+    generateMRPPlan: (reqId: string, warehouseId: string): Promise<MRPResultResponse> =>
+        fetchWithAuth(`/production/catering/${reqId}/plan`, {
+            method: 'POST',
+            body: JSON.stringify({ warehouse_id: warehouseId })
+        }),
+
+    generateMRPOrders: (reqId: string, data: { warehouse_id: string, target_warehouse_id: string, scheduled_date: string }): Promise<any> =>
+        fetchWithAuth(`/production/catering/${reqId}/generate-orders`, {
+            method: 'POST',
+            body: JSON.stringify(data)
+        }),
 }
 
 // ── Production Types (M20) ─────────────────────────
@@ -1127,4 +1149,46 @@ export interface IssueDocument {
         presentation_id: string | null
     }>
     created_at: string
+}
+
+// ── Catering & MRP (M22) ─────────────────────────────
+
+export interface CateringRequestLine {
+    item_id: string
+    qty_base: number
+    presentation_id?: string | null
+    qty_presentation?: number | null
+    items?: { name: string, uom_base: { name: string } }
+}
+
+export interface CateringRequest {
+    id: string
+    name: string
+    event_date: string | null
+    status: 'planning' | 'confirmed' | 'cancelled'
+    notes: string | null
+    created_at: string
+    lines?: CateringRequestLine[]
+}
+
+export interface MRPProductionPlan {
+    item_id: string
+    item_name: string
+    uom_name: string
+    qty_to_produce: number
+    recipe_id: string
+}
+
+export interface MRPPurchaseList {
+    item_id: string
+    item_name: string
+    uom_name: string
+    qty_needed: number
+    qty_available: number
+    qty_deficit: number
+}
+
+export interface MRPResultResponse {
+    production_plan: MRPProductionPlan[]
+    purchase_list: MRPPurchaseList[]
 }
