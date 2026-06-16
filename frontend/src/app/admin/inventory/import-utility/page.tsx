@@ -30,6 +30,10 @@ export default function ImportUtilityPage() {
   const [uoms, setUoms] = useState<UOMBase[]>([]);
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<ParsedRow[]>([]);
+  const [workbook, setWorkbook] = useState<XLSX.WorkBook | null>(null);
+  const [sheetNames, setSheetNames] = useState<string[]>([]);
+  const [selectedSheet, setSelectedSheet] = useState<string>('');
+  const [startRow, setStartRow] = useState<number>(2); // Default to line 2 (skip header)
   const [globalType, setGlobalType] = useState<string>('raw_material');
   const [globalUom, setGlobalUom] = useState<string>('');
   const [importing, setImporting] = useState(false);
@@ -61,31 +65,38 @@ export default function ImportUtilityPage() {
     reader.onload = (evt) => {
       const bstr = evt.target?.result;
       const wb = XLSX.read(bstr, { type: 'binary' });
-      const wsname = wb.SheetNames[0];
-      const ws = wb.Sheets[wsname];
-      const json = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
-
-      // Map columns: A(0)->code, B(1)->category, C(2)->name, K(10)->price
-      // Skip header row (index 0)
-      const rows = json.slice(1).map((row) => {
-        const catName = String(row[1] || '').trim();
-        const matchedCat = categories.find(c => c.name.toLowerCase() === catName.toLowerCase());
-        
-        return {
-          id: Math.random().toString(36).substr(2, 9),
-          code: String(row[0] || '').trim(),
-          categoryName: catName,
-          categoryId: matchedCat?.id || null,
-          name: String(row[2] || '').trim(),
-          price: Number(row[10]) || 0,
-          status: 'pending' as const,
-        };
-      }).filter(r => r.name); // Filter empty names
-
-      setData(rows);
+      setWorkbook(wb);
+      setSheetNames(wb.SheetNames);
+      setSelectedSheet(wb.SheetNames[0]);
     };
     reader.readAsBinaryString(file);
   };
+
+  useEffect(() => {
+    if (!workbook || !selectedSheet) return;
+
+    const ws = workbook.Sheets[selectedSheet];
+    const json = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+
+    // Map columns: A(0)->code, B(1)->category, C(2)->name, K(10)->price
+    // User provides 1-based line number. We convert to 0-based index.
+    const rows = json.slice(startRow - 1).map((row) => {
+      const catName = String(row[1] || '').trim();
+      const matchedCat = categories.find(c => c.name.toLowerCase() === catName.toLowerCase());
+      
+      return {
+        id: Math.random().toString(36).substr(2, 9),
+        code: String(row[0] || '').trim(),
+        categoryName: catName,
+        categoryId: matchedCat?.id || null,
+        name: String(row[2] || '').trim(),
+        price: Number(row[10]) || 0,
+        status: 'pending' as const,
+      };
+    }).filter(r => r.name); // Filter empty names
+
+    setData(rows);
+  }, [workbook, selectedSheet, startRow, categories]);
 
   async function handleImport() {
     if (!globalUom) {
@@ -140,23 +151,47 @@ export default function ImportUtilityPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <div className="bg-surface p-6 rounded-3xl border border-border shadow-sm">
-          <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-3">Paso 1: Seleccionar Archivo</label>
-          <div className="relative group">
-            <input 
-              type="file" 
-              accept=".xlsx, .xls" 
-              onChange={handleFileUpload}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-            />
-            <div className="border-2 border-dashed border-border rounded-2xl p-6 flex flex-col items-center justify-center gap-3 group-hover:border-primary group-hover:bg-primary/5 transition-all duration-300">
-              <div className="w-12 h-12 rounded-full bg-surface-raised flex items-center justify-center group-hover:scale-110 transition-transform">
+          <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-3">Paso 1: Archivo y Hoja</label>
+          <div className="space-y-4">
+            <div className="relative group">
+              <input 
+                type="file" 
+                accept=".xlsx, .xls" 
+                onChange={handleFileUpload}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+              />
+              <div className="border-2 border-dashed border-border rounded-2xl p-4 flex flex-col items-center justify-center gap-2 group-hover:border-primary group-hover:bg-primary/5 transition-all duration-300">
                 <FileUp className="w-6 h-6 text-primary" />
-              </div>
-              <div className="text-center">
-                <p className="text-sm text-text-primary font-bold">Subir Excel</p>
-                <p className="text-xs text-text-secondary mt-1">.xlsx o .xls</p>
+                <p className="text-xs text-text-primary font-bold">{workbook ? 'Archivo cargado' : 'Subir Excel'}</p>
               </div>
             </div>
+
+            {workbook && (
+              <div className="grid grid-cols-2 gap-3 animate-in fade-in duration-300">
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold text-text-secondary uppercase">Hoja</label>
+                  <select 
+                    value={selectedSheet}
+                    onChange={e => setSelectedSheet(e.target.value)}
+                    className="w-full bg-surface-raised border border-border rounded-lg px-2 h-9 text-xs text-text-primary outline-none"
+                  >
+                    {sheetNames.map(name => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold text-text-secondary uppercase">Desde Fila</label>
+                  <input 
+                    type="number"
+                    min="1"
+                    value={startRow}
+                    onChange={e => setStartRow(parseInt(e.target.value) || 1)}
+                    className="w-full bg-surface-raised border border-border rounded-lg px-3 h-9 text-xs text-text-primary outline-none"
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
