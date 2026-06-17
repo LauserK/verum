@@ -110,7 +110,7 @@ export default function RecipeEditor({ itemId, initialData, itemName }: RecipeEd
       try {
         const pres = await adminApi.getItemPresentations(item.id)
         setIngredientPresentations(prev => ({ ...prev, [item.id]: pres }))
-        const defaultPres = pres.find(p => p.is_default) || pres[0]
+        const defaultPres = pres.find(p => p.is_default)
         updateIngredient(index, {
           item_id: item.id,
           item_name: item.name,
@@ -122,7 +122,7 @@ export default function RecipeEditor({ itemId, initialData, itemName }: RecipeEd
       }
     } else {
       const pres = ingredientPresentations[item.id]
-      const defaultPres = pres.find(p => p.is_default) || pres[0]
+      const defaultPres = pres.find(p => p.is_default)
       updateIngredient(index, {
         item_id: item.id,
         item_name: item.name,
