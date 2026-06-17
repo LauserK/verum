@@ -757,6 +757,22 @@ export const adminApi = {
         fetchWithAuth(`/inventory/item-categories/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
 
     // M19: Recipes & Production
+    // M39: Physical Inventory Count API Client
+    getPhysicalInventories: (): Promise<any[]> => 
+        fetchWithAuth('/inventory/physical-inventories'),
+
+    getPhysicalInventoryDetail: (id: string): Promise<any> => 
+        fetchWithAuth(`/inventory/physical-inventories/${id}`),
+
+    createPhysicalInventory: (data: any): Promise<any> => 
+        fetchWithAuth('/inventory/physical-inventories', { method: 'POST', body: JSON.stringify(data) }),
+
+    updatePhysicalInventory: (id: string, data: any): Promise<any> => 
+        fetchWithAuth(`/inventory/physical-inventories/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+    processPhysicalInventory: (id: string): Promise<any> => 
+        fetchWithAuth(`/inventory/physical-inventories/${id}/process`, { method: 'POST' }),
+
     getRecipes: (): Promise<RecipeBriefResponse[]> => fetchWithAuth('/production/recipes'),
     getRecipe: (itemId: string): Promise<RecipeResponse> => fetchWithAuth(`/production/recipes/${itemId}`),
 
