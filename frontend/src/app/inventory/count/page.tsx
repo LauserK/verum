@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Plus, Trash2, Send, Loader2, ArrowLeft, Barcode, Check, X, AlertTriangle, ArrowRight, ChevronDown, MapPin } from 'lucide-react'
+import { Plus, Trash2, Send, Loader2, ArrowLeft, Barcode, Check, X, AlertTriangle, ArrowRight, ChevronDown, MapPin, QrCode } from 'lucide-react'
 import { adminApi } from '@/lib/api'
 import { useRouter } from 'next/navigation'
 import ConfirmationModal from '@/components/ConfirmationModal'
@@ -19,6 +19,10 @@ export default function MobileInventoryCount() {
   
   // Custom dropdown selector state
   const [showWarehouseDropdown, setShowWarehouseDropdown] = useState(false)
+
+  // Scanner state
+  const [openScanner, setOpenScanner] = useState(false)
+  const [scannerError, setScannerError] = useState<string | null>(null)
 
   // Draft & Auto-save state
   const [draftId, setDraftId] = useState<string | null>(null)
@@ -78,6 +82,61 @@ export default function MobileInventoryCount() {
       return () => clearTimeout(timer)
     }
   }, [saveStatus])
+
+  // Warehouse Scanner Logic
+  useEffect(() => {
+    let scannerInstance: any = null
+
+    async function startScanner() {
+      if (!openScanner) return
+
+      try {
+        const { Html5Qrcode } = await import('html5-qrcode')
+        const scanner = new Html5Qrcode('warehouse-qr-reader')
+        scannerInstance = scanner
+
+        await scanner.start(
+          { facingMode: 'environment' },
+          {
+            fps: 10,
+            qrbox: (width, height) => {
+              const size = Math.min(width, height) * 0.7
+              return { width: size, height: size }
+            }
+          },
+          (decodedText) => {
+            const trimmed = decodedText.trim()
+            const matchedWh = warehouses.find(wh => 
+              wh.id === trimmed || 
+              wh.name.toLowerCase() === trimmed.toLowerCase()
+            )
+
+            if (matchedWh) {
+              setSelectedWarehouseId(matchedWh.id)
+              setOpenScanner(false)
+              scanner.stop().catch(err => console.error('Error stopping scanner:', err))
+            } else {
+              setScannerError(`Código no corresponde a ningún almacén activo: "${trimmed}"`)
+            }
+          },
+          () => {
+            // Keep scanner error empty on standard non-matches during video frames
+          }
+        )
+      } catch (err) {
+        console.error('Failed to start scanner:', err)
+        setScannerError('No se pudo iniciar la cámara. Asegúrate de dar los permisos necesarios.')
+      }
+    }
+
+    startScanner()
+
+    return () => {
+      if (scannerInstance && scannerInstance.isScanning) {
+        scannerInstance.stop().catch((err: any) => console.error('Error stopping scanner on cleanup:', err))
+      }
+    }
+  }, [openScanner, warehouses])
 
   const loadInitialData = async () => {
     setLoading(true)
@@ -259,7 +318,7 @@ export default function MobileInventoryCount() {
         setDraftId(doc.id)
       }
 
-      await adminApi.processPhysicalInventory(currentDraftId)
+      await adminApi.processPhysicalInventory(currentDraftId!)
       showAlert('Inventario Procesado', 'El inventario físico ha sido procesado y el Kardex ha sido ajustado exitosamente.', () => {
         router.push('/admin/inventory/physical')
       })
@@ -290,6 +349,47 @@ export default function MobileInventoryCount() {
         onConfirm={modalState.onConfirm}
         onCancel={() => setModalState(prev => ({ ...prev, isOpen: false }))}
       />
+
+      {/* QR/Barcode Scanner Modal */}
+      {openScanner && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-surface border border-border w-full max-w-md rounded-2xl overflow-hidden shadow-2xl animate-scale-in">
+            {/* Modal Header */}
+            <div className="flex justify-between items-center px-4 py-3 border-b border-border bg-surface-raised">
+              <div className="flex items-center gap-2">
+                <QrCode className="w-5 h-5 text-primary animate-pulse" />
+                <h3 className="font-bold text-sm">Escanear Almacén</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOpenScanner(false)}
+                className="p-1 text-text-secondary hover:text-error hover:bg-error/10 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 flex flex-col items-center justify-center">
+              <div className="w-full aspect-square max-w-[280px] overflow-hidden rounded-2xl bg-black border border-border relative flex items-center justify-center">
+                <div id="warehouse-qr-reader" className="w-full h-full" />
+                <div className="absolute inset-0 border border-primary/40 pointer-events-none rounded-2xl animate-pulse"></div>
+              </div>
+
+              <p className="mt-4 text-xs text-text-secondary text-center max-w-[240px]">
+                Enfoque el código QR o de barras del almacén para seleccionarlo automáticamente.
+              </p>
+
+              {scannerError && (
+                <div className="mt-4 p-3 bg-error/10 border border-error/20 rounded-xl text-xs text-error font-medium flex items-center gap-2 animate-slide-down-fade">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{scannerError}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div>
         <div className="flex items-center justify-between mb-6">
@@ -322,59 +422,75 @@ export default function MobileInventoryCount() {
           )}
         </div>
 
-        {/* Almacén Selector (Custom KDS Styled Dropdown) */}
-        <div className="bg-surface p-4 rounded-xl border border-border mb-4 relative">
+        {/* Almacén Selector (Custom KDS Styled Dropdown & QR/Barcode Scanner Button) */}
+        <div className="bg-surface p-4 rounded-xl border border-border mb-4">
           <label className="block text-xs font-bold text-text-secondary uppercase mb-2">Almacén / Sede</label>
-          
-          <button
-            type="button"
-            onClick={() => setShowWarehouseDropdown(!showWarehouseDropdown)}
-            className={`
-              w-full flex items-center justify-between px-4 h-11 rounded-xl border transition-all duration-300 bg-bg text-sm outline-none text-text-primary font-medium
-              ${showWarehouseDropdown ? 'border-primary shadow-lg shadow-primary/10' : 'border-border hover:border-primary/50'}
-            `}
-          >
-            <div className="flex items-center gap-2">
-              <MapPin className={`w-4 h-4 ${showWarehouseDropdown ? 'text-primary animate-bounce' : 'text-primary/60'}`} />
-              <span>
-                {warehouses.find(wh => wh.id === selectedWarehouseId)?.name || 'Selecciona Almacén...'}
-              </span>
-            </div>
-            <ChevronDown className={`w-4 h-4 text-text-secondary transition-transform duration-300 ${showWarehouseDropdown ? 'rotate-180 text-primary' : ''}`} />
-          </button>
-
-          {showWarehouseDropdown && (
-            <>
-              <div 
-                className="fixed inset-0 z-[105]" 
-                onClick={() => setShowWarehouseDropdown(false)}
-              />
-              <div className="absolute top-full left-4 right-4 mt-2 bg-surface border border-border rounded-2xl shadow-2xl z-[110] overflow-hidden animate-slide-down-fade">
-                <div className="p-2 space-y-1 max-h-60 overflow-y-auto">
-                  {warehouses.map(wh => (
-                    <button
-                      key={wh.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedWarehouseId(wh.id)
-                        setShowWarehouseDropdown(false)
-                      }}
-                      className={`
-                        w-full text-left px-4 py-3 rounded-xl flex items-center justify-between transition-all
-                        ${selectedWarehouseId === wh.id ? 'bg-primary/10 text-primary font-bold' : 'text-text-secondary hover:bg-surface-raised hover:text-text-primary'}
-                      `}
-                    >
-                      <span className="text-sm">{wh.name}</span>
-                      {selectedWarehouseId === wh.id && <div className="w-1.5 h-1.5 rounded-full bg-primary" />}
-                    </button>
-                  ))}
-                  {warehouses.length === 0 && (
-                    <p className="p-4 text-center text-xs text-text-secondary">No hay almacenes disponibles</p>
-                  )}
+          <div className="flex items-center gap-2 relative">
+            <div className="relative flex-1">
+              <button
+                type="button"
+                onClick={() => setShowWarehouseDropdown(!showWarehouseDropdown)}
+                className={`
+                  w-full flex items-center justify-between px-4 h-11 rounded-xl border transition-all duration-300 bg-bg text-sm outline-none text-text-primary font-black tracking-tight
+                  ${showWarehouseDropdown ? 'border-primary bg-surface-raised shadow-lg shadow-primary/10' : 'border-border bg-bg hover:border-primary/50'}
+                `}
+              >
+                <div className="flex items-center gap-2">
+                  <MapPin className={`w-3.5 h-3.5 ${showWarehouseDropdown ? 'text-primary animate-bounce' : 'text-primary/60'}`} />
+                  <span>
+                    {warehouses.find(wh => wh.id === selectedWarehouseId)?.name || 'Selecciona Almacén...'}
+                  </span>
                 </div>
-              </div>
-            </>
-          )}
+                <ChevronDown className={`w-4 h-4 text-text-secondary transition-transform duration-300 ${showWarehouseDropdown ? 'rotate-180 text-primary' : ''}`} />
+              </button>
+
+              {showWarehouseDropdown && (
+                <>
+                  <div 
+                    className="fixed inset-0 z-[105]" 
+                    onClick={() => setShowWarehouseDropdown(false)}
+                  />
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-surface border border-border rounded-2xl shadow-2xl z-[110] overflow-hidden animate-slide-down-fade">
+                    <div className="p-2 space-y-1 max-h-60 overflow-y-auto">
+                      {warehouses.map(wh => (
+                        <button
+                          key={wh.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedWarehouseId(wh.id)
+                            setShowWarehouseDropdown(false)
+                          }}
+                          className={`
+                            w-full text-left px-4 py-3 rounded-xl flex items-center justify-between transition-all
+                            ${selectedWarehouseId === wh.id ? 'bg-primary/10 text-primary' : 'text-text-secondary hover:bg-surface-raised hover:text-text-primary'}
+                          `}
+                        >
+                          <span className="text-sm font-bold">{wh.name}</span>
+                          {selectedWarehouseId === wh.id && <div className="w-1.5 h-1.5 rounded-full bg-primary" />}
+                        </button>
+                      ))}
+                      {warehouses.length === 0 && (
+                        <p className="p-4 text-center text-xs text-text-secondary">No hay almacenes disponibles</p>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* QR/Barcode scanner button next to the selector */}
+            <button
+              type="button"
+              onClick={() => {
+                setScannerError(null)
+                setOpenScanner(true)
+              }}
+              className="h-11 w-11 bg-surface-raised hover:bg-bg border border-border hover:border-primary text-text-secondary hover:text-primary rounded-xl flex items-center justify-center transition-all shadow-sm shrink-0 cursor-pointer"
+              title="Escanear Código de Almacén"
+            >
+              <QrCode className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Loading Indicator for Draft Load */}
