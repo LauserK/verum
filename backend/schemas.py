@@ -732,3 +732,60 @@ class GenerateOrdersRequest(BaseModel):
     warehouse_id: UUID
     target_warehouse_id: UUID
     scheduled_date: str
+
+
+# M39: Physical Inventory Count Schemas
+class PhysicalInventoryLineCreate(BaseModel):
+    item_id: UUID
+    qty_counted_base: Decimal
+    presentation_id: Optional[UUID] = None
+    qty_presentation: Optional[Decimal] = None
+    notes: Optional[str] = None
+
+
+class PhysicalInventoryCreate(BaseModel):
+    warehouse_id: UUID
+    notes: Optional[str] = None
+    lines: List[PhysicalInventoryLineCreate]
+
+
+class PhysicalInventoryLineResponse(BaseModel):
+    id: UUID
+    item_id: UUID
+    item_name: Optional[str] = None
+    qty_expected_base: Decimal
+    qty_counted_base: Decimal
+    presentation_id: Optional[UUID] = None
+    presentation_name: Optional[str] = None
+    qty_presentation: Optional[Decimal] = None
+    notes: Optional[str] = None
+
+
+class PhysicalInventoryResponse(BaseModel):
+    id: UUID
+    org_id: UUID
+    warehouse_id: UUID
+    warehouse_name: Optional[str] = None
+    document_number: str
+    status: str
+    notes: Optional[str] = None
+    created_by: UUID
+    creator_name: Optional[str] = None
+    processed_by: Optional[UUID] = None
+    processor_name: Optional[str] = None
+    processed_at: Optional[datetime] = None
+    created_at: datetime
+    lines: List[PhysicalInventoryLineResponse]
+
+
+class PhysicalInventoryBriefResponse(BaseModel):
+    id: UUID
+    warehouse_id: UUID
+    warehouse_name: Optional[str] = None
+    document_number: str
+    status: str
+    notes: Optional[str] = None
+    creator_name: Optional[str] = None
+    processed_at: Optional[datetime] = None
+    created_at: datetime
+
