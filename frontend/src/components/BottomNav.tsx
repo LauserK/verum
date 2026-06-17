@@ -21,7 +21,7 @@ export default function BottomNav() {
         { label: t('history'), href: '/history', icon: History },
         { 
             label: t('inventory'), 
-            href: '/inventory/utensils', 
+            href: '/inventory', 
             icon: Box,
             showBadge: hasPendingInventory
         },
