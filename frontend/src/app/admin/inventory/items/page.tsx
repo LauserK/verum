@@ -1,11 +1,97 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, Fragment } from 'react';
 import { adminApi, InventoryItem, UOMBase, ItemCategory } from '@/lib/api';
-import { Plus, Archive, X, Save, Loader2, Search, Filter, Tag, Pencil, Trash2, DollarSign, FileUp } from 'lucide-react';
+import { 
+    Plus, 
+    Archive, 
+    X, 
+    Save, 
+    Loader2, 
+    Search, 
+    Filter, 
+    Tag, 
+    Pencil, 
+    Trash2, 
+    DollarSign, 
+    FileUp,
+    ChevronUp,
+    ChevronDown,
+    LayoutGrid,
+    Type,
+    Scale
+} from 'lucide-react';
 import Link from 'next/link';
 import { useTranslations } from '@/components/I18nProvider';
 import ConfirmationModal from '@/components/ConfirmationModal';
+
+function Row({ item, categories, uoms, t, openEdit, handleDelete }: { 
+    item: InventoryItem, 
+    categories: ItemCategory[], 
+    uoms: UOMBase[], 
+    t: any, 
+    openEdit: (item: InventoryItem) => void,
+    handleDelete: (id: string) => void
+}) {
+    return (
+        <tr key={item.id} className="hover:bg-surface-raised transition-colors group">
+            <td className="p-4">
+                <span className="font-mono text-xs text-text-secondary bg-surface-raised px-2 py-1 rounded border border-border">
+                    {item.code || '---'}
+                </span>
+            </td>
+            <td className="p-4">
+                <Link 
+                href={`/admin/inventory/items/${item.id}`}
+                className="font-bold text-text-primary text-sm hover:text-primary transition-colors"
+                >
+                {item.name}
+                </Link>
+            </td>
+            <td className="p-4">
+                <span className="text-sm text-text-secondary font-medium italic">
+                {categories.find(c => c.id === item.category_id)?.name || 'Sin categoría'}
+                </span>
+            </td>
+            <td className="p-4">
+            <span className="text-[10px] font-bold px-2 py-1 rounded-md bg-primary/5 text-primary uppercase tracking-wider border border-primary/10">
+                {t(`types.${item.type}`)}
+            </span>
+            </td>
+            <td className="p-4">
+                {item.last_purchase_cost ? (
+                    <div className="flex items-center gap-1 text-sm font-bold text-text-primary">
+                        <DollarSign className="w-3 h-3 text-text-secondary" />
+                        {Number(item.last_purchase_cost).toFixed(2)}
+                    </div>
+                ) : (
+                    <span className="text-xs text-text-disabled italic">Sin costo</span>
+                )}
+            </td>
+            <td className="p-4 text-sm text-text-secondary font-medium">
+            {uoms.find(u => u.id === item.base_uom_id)?.code || '---'}
+            </td>
+            <td className="p-4 text-right">
+            <div className="flex justify-end gap-2">
+                <button 
+                    onClick={() => openEdit(item)}
+                    className="p-2 text-text-secondary hover:text-primary transition-all"
+                    title="Editar artículo"
+                >
+                    <Pencil className="w-4 h-4" />
+                </button>
+                <button 
+                    onClick={() => handleDelete(item.id)}
+                    className="p-2 text-text-disabled hover:text-error transition-all"
+                    title="Eliminar artículo"
+                >
+                    <Trash2 className="w-4 h-4" />
+                </button>
+            </div>
+            </td>
+        </tr>
+    );
+}
 
 export default function ItemsPage() {
   const { t } = useTranslations('inventory.items');
@@ -17,6 +103,14 @@ export default function ItemsPage() {
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  // New Filter & Sort State
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterCategory, setFilterCategory] = useState('');
+  const [filterType, setFilterType] = useState('');
+  const [filterUom, setFilterUom] = useState('');
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' }>({ key: 'name', direction: 'asc' });
+  const [groupBy, setGroupBy] = useState<'none' | 'category_id' | 'type' | 'base_uom_id'>('none');
   
   const [formData, setFormData] = useState({ 
     name: '', 
@@ -54,6 +148,61 @@ export default function ItemsPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  // --- Processed Items Logic ---
+  const filteredItems = items.filter(item => {
+    const matchesSearch = 
+      item.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      (item.code?.toLowerCase() || '').includes(searchTerm.toLowerCase());
+    
+    const matchesCategory = !filterCategory || item.category_id === filterCategory;
+    const matchesType = !filterType || item.type === filterType;
+    const matchesUom = !filterUom || item.base_uom_id === filterUom;
+
+    return matchesSearch && matchesCategory && matchesType && matchesUom;
+  });
+
+  const sortedItems = [...filteredItems].sort((a, b) => {
+    let aValue: any = (a as any)[sortConfig.key];
+    let bValue: any = (b as any)[sortConfig.key];
+
+    // Special handling for nested names
+    if (sortConfig.key === 'category_name') {
+        aValue = categories.find(c => c.id === a.category_id)?.name || '';
+        bValue = categories.find(c => c.id === b.category_id)?.name || '';
+    } else if (sortConfig.key === 'uom_name') {
+        aValue = uoms.find(u => u.id === a.base_uom_id)?.code || '';
+        bValue = uoms.find(u => u.id === b.base_uom_id)?.code || '';
+    }
+
+    if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+    if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  const handleSort = (key: string) => {
+    setSortConfig(prev => ({
+      key,
+      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
+    }));
+  };
+
+  // Grouping logic
+  const groupedItems: Record<string, InventoryItem[]> = {};
+  if (groupBy !== 'none') {
+    sortedItems.forEach(item => {
+      let groupKey = (item as any)[groupBy] || 'unassigned';
+      if (!groupedItems[groupKey]) groupedItems[groupKey] = [];
+      groupedItems[groupKey].push(item);
+    });
+  }
+
+  function getGroupName(key: string) {
+    if (groupBy === 'category_id') return categories.find(c => c.id === key)?.name || 'Sin Categoría';
+    if (groupBy === 'type') return t(`types.${key}`);
+    if (groupBy === 'base_uom_id') return uoms.find(u => u.id === key)?.name || 'Sin Unidad';
+    return key;
   }
 
   function openCreate() {
@@ -117,10 +266,15 @@ export default function ItemsPage() {
       }
   }
 
+  const SortIndicator = ({ column }: { column: string }) => {
+    if (sortConfig.key !== column) return <div className="w-4 h-4 opacity-10"><ChevronUp className="w-3 h-3" /></div>;
+    return sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3 text-primary" /> : <ChevronDown className="w-3 h-3 text-primary" />;
+  };
+
   if (loading) return <div className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-primary" /></div>;
 
   return (
-    <div className="space-y-6 animate-in fade-in">
+    <div className="space-y-6 animate-in fade-in pb-20">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-text-primary">{t('title')}</h1>
@@ -151,84 +305,137 @@ export default function ItemsPage() {
         </div>
       </div>
 
+      {/* Filter & Group Bar */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+        <div className="lg:col-span-4 relative group">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary group-focus-within:text-primary transition-colors" />
+          <input 
+            type="text" 
+            placeholder="Buscar por nombre o código..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            className="w-full bg-surface border border-border rounded-xl pl-10 pr-4 h-11 text-sm outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all shadow-sm"
+          />
+        </div>
+        <div className="lg:col-span-2">
+            <select 
+                value={filterCategory}
+                onChange={e => setFilterCategory(e.target.value)}
+                className="w-full bg-surface border border-border rounded-xl px-3 h-11 text-xs outline-none focus:border-primary transition-all cursor-pointer appearance-none"
+            >
+                <option value="">Todas las Categorías</option>
+                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+        </div>
+        <div className="lg:col-span-2">
+            <select 
+                value={filterType}
+                onChange={e => setFilterType(e.target.value)}
+                className="w-full bg-surface border border-border rounded-xl px-3 h-11 text-xs outline-none focus:border-primary transition-all cursor-pointer appearance-none"
+            >
+                <option value="">Todos los Tipos</option>
+                <option value="raw_material">{t('types.raw_material')}</option>
+                <option value="semi_finished">{t('types.semi_finished')}</option>
+                <option value="finished">{t('types.finished')}</option>
+                <option value="supply">{t('types.supply')}</option>
+                <option value="packaging">{t('types.packaging')}</option>
+            </select>
+        </div>
+        <div className="lg:col-span-2">
+            <select 
+                value={groupBy}
+                onChange={e => setGroupBy(e.target.value as any)}
+                className="w-full bg-primary/5 border border-primary/20 text-primary font-bold rounded-xl px-3 h-11 text-xs outline-none focus:border-primary transition-all cursor-pointer appearance-none"
+            >
+                <option value="none">Sin Agrupamiento</option>
+                <option value="category_id">Agrupar por Categoría</option>
+                <option value="type">Agrupar por Tipo</option>
+                <option value="base_uom_id">Agrupar por UOM</option>
+            </select>
+        </div>
+        <div className="lg:col-span-2 flex items-center justify-center">
+            <button 
+                onClick={() => {
+                    setSearchTerm('');
+                    setFilterCategory('');
+                    setFilterType('');
+                    setFilterUom('');
+                    setGroupBy('none');
+                }}
+                className="text-[10px] font-black uppercase text-text-secondary hover:text-error transition-colors flex items-center gap-1"
+            >
+                <X className="w-3 h-3" /> Limpiar Filtros
+            </button>
+        </div>
+      </div>
+
       <div className="bg-surface rounded-2xl border border-border overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-surface-raised border-b border-border">
-                <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest">{t('table.code')}</th>
-                <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest">{t('table.name')}</th>
-                <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest">Categoría</th>
-                <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest">{t('table.type')}</th>
-                <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest">Último Costo</th>
-                <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest">{t('table.uom')}</th>
+                <th className="p-4 cursor-pointer hover:bg-primary/5 transition-colors" onClick={() => handleSort('code')}>
+                  <div className="flex items-center gap-2 text-xs font-black text-text-secondary uppercase tracking-widest">
+                    {t('table.code')} <SortIndicator column="code" />
+                  </div>
+                </th>
+                <th className="p-4 cursor-pointer hover:bg-primary/5 transition-colors" onClick={() => handleSort('name')}>
+                  <div className="flex items-center gap-2 text-xs font-black text-text-secondary uppercase tracking-widest">
+                    {t('table.name')} <SortIndicator column="name" />
+                  </div>
+                </th>
+                <th className="p-4 cursor-pointer hover:bg-primary/5 transition-colors" onClick={() => handleSort('category_name')}>
+                  <div className="flex items-center gap-2 text-xs font-black text-text-secondary uppercase tracking-widest">
+                    Categoría <SortIndicator column="category_name" />
+                  </div>
+                </th>
+                <th className="p-4 cursor-pointer hover:bg-primary/5 transition-colors" onClick={() => handleSort('type')}>
+                  <div className="flex items-center gap-2 text-xs font-black text-text-secondary uppercase tracking-widest">
+                    {t('table.type')} <SortIndicator column="type" />
+                  </div>
+                </th>
+                <th className="p-4 cursor-pointer hover:bg-primary/5 transition-colors" onClick={() => handleSort('last_purchase_cost')}>
+                  <div className="flex items-center gap-2 text-xs font-black text-text-secondary uppercase tracking-widest">
+                    Costo <SortIndicator column="last_purchase_cost" />
+                  </div>
+                </th>
+                <th className="p-4 cursor-pointer hover:bg-primary/5 transition-colors" onClick={() => handleSort('uom_name')}>
+                  <div className="flex items-center gap-2 text-xs font-black text-text-secondary uppercase tracking-widest">
+                    {t('table.uom')} <SortIndicator column="uom_name" />
+                  </div>
+                </th>
                 <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest text-right">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {items.map(item => (
-                <tr key={item.id} className="hover:bg-surface-raised transition-colors group">
-                  <td className="p-4">
-                      <span className="font-mono text-xs text-text-secondary bg-surface-raised px-2 py-1 rounded border border-border">
-                          {item.code || '---'}
-                      </span>
-                  </td>
-                  <td className="p-4">
-                      <Link 
-                        href={`/admin/inventory/items/${item.id}`}
-                        className="font-bold text-text-primary text-sm hover:text-primary transition-colors"
-                      >
-                        {item.name}
-                      </Link>
-                  </td>
-                  <td className="p-4">
-                      <span className="text-sm text-text-secondary font-medium italic">
-                        {categories.find(c => c.id === item.category_id)?.name || 'Sin categoría'}
-                      </span>
-                  </td>
-                  <td className="p-4">
-                    <span className="text-[10px] font-bold px-2 py-1 rounded-md bg-primary/5 text-primary uppercase tracking-wider border border-primary/10">
-                      {t(`types.${item.type}`)}
-                    </span>
-                  </td>
-                  <td className="p-4">
-                      {item.last_purchase_cost ? (
-                          <div className="flex items-center gap-1 text-sm font-bold text-text-primary">
-                              <DollarSign className="w-3 h-3 text-text-secondary" />
-                              {item.last_purchase_cost.toFixed(2)}
-                          </div>
-                      ) : (
-                          <span className="text-xs text-text-disabled italic">Sin costo</span>
-                      )}
-                  </td>
-                  <td className="p-4 text-sm text-text-secondary font-medium">
-                    {uoms.find(u => u.id === item.base_uom_id)?.code || '---'}
-                  </td>
-                  <td className="p-4 text-right">
-                    <div className="flex justify-end gap-2">
-                        <button 
-                            onClick={() => openEdit(item)}
-                            className="p-2 text-text-secondary hover:text-primary transition-all"
-                            title="Editar artículo"
-                        >
-                            <Pencil className="w-4 h-4" />
-                        </button>
-                        <button 
-                            onClick={() => handleDelete(item.id)}
-                            className="p-2 text-text-disabled hover:text-error transition-all"
-                            title="Eliminar artículo"
-                        >
-                            <Trash2 className="w-4 h-4" />
-                        </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {items.length === 0 && (
+              {groupBy === 'none' ? (
+                  sortedItems.map(item => <Row key={item.id} item={item} categories={categories} uoms={uoms} t={t} openEdit={openEdit} handleDelete={handleDelete} />)
+              ) : (
+                  Object.entries(groupedItems).map(([key, groupItems]) => (
+                      <React.Fragment key={key}>
+                        <tr className="bg-surface-raised/60">
+                            <td colSpan={7} className="p-3">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                                    <span className="text-xs font-black uppercase text-primary tracking-tighter">
+                                        {getGroupName(key)}
+                                    </span>
+                                    <span className="text-[10px] font-bold text-text-secondary bg-surface rounded-full px-2 py-0.5 border border-border">
+                                        {groupItems.length} items
+                                    </span>
+                                </div>
+                            </td>
+                        </tr>
+                        {groupItems.map(item => <Row key={item.id} item={item} categories={categories} uoms={uoms} t={t} openEdit={openEdit} handleDelete={handleDelete} />)}
+                      </React.Fragment>
+                  ))
+              )}
+              
+              {sortedItems.length === 0 && (
                 <tr>
                   <td colSpan={7} className="p-12 text-center">
                       <Archive className="w-10 h-10 text-text-disabled mx-auto mb-3" />
-                      <p className="text-text-secondary font-medium">{t('empty')}</p>
+                      <p className="text-text-secondary font-medium">{searchTerm ? 'No se encontraron resultados' : t('empty')}</p>
                   </td>
                 </tr>
               )}
