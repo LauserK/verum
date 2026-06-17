@@ -43,7 +43,8 @@ from schemas import (
     TransferCreate, TransferConfirm, TransferResponse,
     RecipeCreate, RecipeResponse, RecipeBriefResponse, CalculateProductionNeedsRequest, ProductionNeedsResponse,
     ProductionOrderCreate, ProductionOrderResponse, ProductionOrderDetailResponse, OrderStatusUpdate, OrderCompleteRequest,
-    CateringRequestCreate, CateringRequestResponse, MRPResultResponse, MRPPlanRequest, GenerateOrdersRequest
+    CateringRequestCreate, CateringRequestResponse, MRPResultResponse, MRPPlanRequest, GenerateOrdersRequest,
+    PhysicalInventoryCreate, PhysicalInventoryResponse, PhysicalInventoryBriefResponse
 )
 
 CARACAS_TZ = pytz.timezone("America/Caracas")
@@ -5338,4 +5339,335 @@ async def generate_mrp_orders(
     db.table("catering_requests").update({"status": "confirmed"}).eq("id", str(req_id)).execute()
 
     return {"ok": True, "generated_count": len(generated_order_ids)}
+
+
+# ── Inventory: Physical Counts (M39) ───────────────────
+
+@app.post("/inventory/physical-inventories", response_model=PhysicalInventoryResponse, tags=["Inventory"])
+async def create_physical_inventory(
+    doc: PhysicalInventoryCreate, 
+    org_id: str = Depends(get_active_org_id), 
+    user=Depends(get_current_user), 
+    db=Depends(get_db), 
+    _=Depends(require_permission("inventory.count"))
+):
+    # 1. Generate document number: INV-2026-XXXX
+    res_count = db.table("physical_inventories").select("id", count="exact").execute()
+    count = res_count.count or 0
+    document_number = f"INV-2026-{count + 1:04d}"
+
+    # 2. Insert header
+    header_data = {
+        "org_id": org_id,
+        "warehouse_id": str(doc.warehouse_id),
+        "document_number": document_number,
+        "status": "draft",
+        "notes": doc.notes,
+        "created_by": user.id
+    }
+    header_res = db.table("physical_inventories").insert(header_data).execute()
+    if not header_res.data:
+        raise HTTPException(status_code=400, detail="Error creating physical inventory header")
+    doc_id = header_res.data[0]["id"]
+
+    # 3. Process lines and record expected quantities at draft creation time
+    for line in doc.lines:
+        # Get expected stock
+        stock_res = db.table("stock") \
+            .select("qty_base") \
+            .eq("warehouse_id", str(doc.warehouse_id)) \
+            .eq("item_id", str(line.item_id)) \
+            .execute()
+        expected = float(stock_res.data[0]["qty_base"]) if stock_res.data else 0.0
+
+        line_data = {
+            "physical_inventory_id": doc_id,
+            "item_id": str(line.item_id),
+            "qty_expected_base": expected,
+            "qty_counted_base": float(line.qty_counted_base),
+            "presentation_id": str(line.presentation_id) if line.presentation_id else None,
+            "qty_presentation": float(line.qty_presentation) if line.qty_presentation is not None else None,
+            "notes": line.notes
+        }
+        db.table("physical_inventory_lines").insert(line_data).execute()
+
+    return await get_physical_inventory_detail(doc_id, db)
+
+
+@app.get("/inventory/physical-inventories", response_model=List[PhysicalInventoryBriefResponse], tags=["Inventory"])
+async def list_physical_inventories(
+    org_id: str = Depends(get_active_org_id), 
+    db=Depends(get_db), 
+    _=Depends(require_permission("inventory.view"))
+):
+    res = db.table("physical_inventories") \
+        .select("*, warehouses(name), profiles:created_by(full_name)") \
+        .eq("org_id", org_id) \
+        .order("created_at", desc=True) \
+        .execute()
+    
+    results = []
+    for r in (res.data or []):
+        results.append({
+            "id": r["id"],
+            "warehouse_id": r["warehouse_id"],
+            "warehouse_name": r["warehouses"]["name"] if r.get("warehouses") else "Desconocido",
+            "document_number": r["document_number"],
+            "status": r["status"],
+            "notes": r["notes"],
+            "creator_name": r["profiles"]["full_name"] if r.get("profiles") else "Sistema",
+            "processed_at": r["processed_at"],
+            "created_at": r["created_at"]
+        })
+    return results
+
+
+@app.get("/inventory/physical-inventories/{id}", response_model=PhysicalInventoryResponse, tags=["Inventory"])
+async def get_physical_inventory_detail(
+    id: UUID, 
+    db=Depends(get_db), 
+    _=Depends(require_permission("inventory.view"))
+):
+    # Fetch header
+    res = db.table("physical_inventories") \
+        .select("*, warehouses(name), creator:created_by(full_name), processor:processed_by(full_name)") \
+        .eq("id", str(id)) \
+        .execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Physical inventory count not found")
+    
+    h = res.data[0]
+
+    # Fetch lines
+    lines_res = db.table("physical_inventory_lines") \
+        .select("*, items(name), uom_presentations(name)") \
+        .eq("physical_inventory_id", str(id)) \
+        .execute()
+    
+    lines = []
+    for l in (lines_res.data or []):
+        lines.append({
+            "id": l["id"],
+            "item_id": l["item_id"],
+            "item_name": l["items"]["name"] if l.get("items") else "Desconocido",
+            "qty_expected_base": l["qty_expected_base"],
+            "qty_counted_base": l["qty_counted_base"],
+            "presentation_id": l["presentation_id"],
+            "presentation_name": l["uom_presentations"]["name"] if l.get("uom_presentations") else None,
+            "qty_presentation": l["qty_presentation"],
+            "notes": l["notes"]
+        })
+
+    return {
+        "id": h["id"],
+        "org_id": h["org_id"],
+        "warehouse_id": h["warehouse_id"],
+        "warehouse_name": h["warehouses"]["name"] if h.get("warehouses") else "Desconocido",
+        "document_number": h["document_number"],
+        "status": h["status"],
+        "notes": h["notes"],
+        "created_by": h["created_by"],
+        "creator_name": h["creator"]["full_name"] if h.get("creator") else "Desconocido",
+        "processed_by": h["processed_by"],
+        "processor_name": h["processor"]["full_name"] if h.get("processor") else None,
+        "processed_at": h["processed_at"],
+        "created_at": h["created_at"],
+        "lines": lines
+    }
+
+
+@app.put("/inventory/physical-inventories/{id}", response_model=PhysicalInventoryResponse, tags=["Inventory"])
+async def update_physical_inventory(
+    id: UUID, 
+    doc: PhysicalInventoryCreate, 
+    db=Depends(get_db), 
+    _=Depends(require_permission("inventory.count"))
+):
+    # Verify status is draft
+    check_res = db.table("physical_inventories").select("status").eq("id", str(id)).execute()
+    if not check_res.data:
+        raise HTTPException(status_code=404, detail="Physical inventory count not found")
+    if check_res.data[0]["status"] != "draft":
+        raise HTTPException(status_code=400, detail="Cannot update a processed inventory count")
+
+    # Update header notes
+    db.table("physical_inventories").update({"notes": doc.notes}).eq("id", str(id)).execute()
+
+    # Clear and insert new lines
+    db.table("physical_inventory_lines").delete().eq("physical_inventory_id", str(id)).execute()
+
+    for line in doc.lines:
+        stock_res = db.table("stock") \
+            .select("qty_base") \
+            .eq("warehouse_id", str(doc.warehouse_id)) \
+            .eq("item_id", str(line.item_id)) \
+            .execute()
+        expected = float(stock_res.data[0]["qty_base"]) if stock_res.data else 0.0
+
+        line_data = {
+            "physical_inventory_id": str(id),
+            "item_id": str(line.item_id),
+            "qty_expected_base": expected,
+            "qty_counted_base": float(line.qty_counted_base),
+            "presentation_id": str(line.presentation_id) if line.presentation_id else None,
+            "qty_presentation": float(line.qty_presentation) if line.qty_presentation is not None else None,
+            "notes": line.notes
+        }
+        db.table("physical_inventory_lines").insert(line_data).execute()
+
+    return await get_physical_inventory_detail(id, db)
+
+
+@app.post("/inventory/physical-inventories/{id}/process", response_model=PhysicalInventoryResponse, tags=["Inventory"])
+async def process_physical_inventory(
+    id: UUID, 
+    org_id: str = Depends(get_active_org_id), 
+    user=Depends(get_current_user), 
+    db=Depends(get_db), 
+    _=Depends(require_permission("inventory.audit_count"))
+):
+    # Fetch header
+    h_res = db.table("physical_inventories").select("*").eq("id", str(id)).execute()
+    if not h_res.data:
+        raise HTTPException(status_code=404, detail="Physical inventory count not found")
+    
+    h = h_res.data[0]
+    if h["status"] != "draft":
+        raise HTTPException(status_code=400, detail="Inventory count has already been processed")
+
+    warehouse_id = h["warehouse_id"]
+
+    # Fetch lines
+    lines_res = db.table("physical_inventory_lines").select("*").eq("physical_inventory_id", str(id)).execute()
+    lines = lines_res.data or []
+
+    # Process each counted line applying stock adjustments
+    for line in lines:
+        item_id = line["item_id"]
+        qty_counted = float(line["qty_counted_base"])
+        
+        # 1. Fetch current stock from system
+        stock_res = db.table("stock") \
+            .select("id, qty_base") \
+            .eq("warehouse_id", warehouse_id) \
+            .eq("item_id", item_id) \
+            .execute()
+        
+        qty_expected = float(stock_res.data[0]["qty_base"]) if stock_res.data else 0.0
+        
+        # Update expected value in the document line database to snapshot the state at execution
+        db.table("physical_inventory_lines") \
+            .update({"qty_expected_base": qty_expected}) \
+            .eq("id", line["id"]) \
+            .execute()
+            
+        difference = qty_counted - qty_expected
+        
+        if difference > 0:
+            # Positive Adjustment: Add stock lot & Adjustment In movement
+            # Try to get the item's last purchase cost
+            item_cost_res = db.table("items").select("last_purchase_cost").eq("id", item_id).execute()
+            cost = float(item_cost_res.data[0]["last_purchase_cost"]) if (item_cost_res.data and item_cost_res.data[0]["last_purchase_cost"]) else 0.0
+
+            # Insert lot
+            lot_data = {
+                "warehouse_id": warehouse_id,
+                "item_id": item_id,
+                "lot_number": f"AJUSTE-{h['document_number']}",
+                "qty_base": difference,
+                "unit_cost_base": cost,
+                "is_exhausted": False
+            }
+            lot_res = db.table("stock_lots").insert(lot_data).execute()
+            lot_id = lot_res.data[0]["id"] if lot_res.data else None
+
+            # Log movement
+            movement_data = {
+                "org_id": org_id,
+                "movement_type": "adjustment_in",
+                "warehouse_id": warehouse_id,
+                "item_id": item_id,
+                "lot_id": lot_id,
+                "qty_base": difference,
+                "unit_cost_base": cost,
+                "total_cost": difference * cost,
+                "reference_id": str(id),
+                "reference_type": "physical_inventory",
+                "notes": f"Ajuste por diferencia de inventario {h['document_number']}",
+                "created_by": user.id
+            }
+            db.table("stock_movements").insert(movement_data).execute()
+
+            # Update stock
+            if stock_res.data:
+                new_qty = qty_expected + difference
+                db.table("stock").update({"qty_base": new_qty}).eq("id", stock_res.data[0]["id"]).execute()
+            else:
+                db.table("stock").insert({
+                    "warehouse_id": warehouse_id,
+                    "item_id": item_id,
+                    "qty_base": difference,
+                    "qty_reserved": 0.0
+                }).execute()
+
+        elif difference < 0:
+            # Negative Adjustment: Consume FIFO lots & Adjustment Out movement
+            to_consume = abs(difference)
+            
+            # Fetch oldest non-exhausted lots for FIFO
+            lots_res = db.table("stock_lots") \
+                .select("*") \
+                .eq("item_id", item_id) \
+                .eq("warehouse_id", warehouse_id) \
+                .filter("qty_base", "gt", 0) \
+                .order("received_at", desc=False) \
+                .execute()
+                
+            remaining = to_consume
+            for lot in (lots_res.data or []):
+                if remaining <= 0:
+                    break
+                
+                lot_qty = float(lot["qty_base"])
+                consume_qty = min(remaining, lot_qty)
+                
+                new_lot_qty = lot_qty - consume_qty
+                db.table("stock_lots").update({
+                    "qty_base": new_lot_qty,
+                    "is_exhausted": new_lot_qty <= 0
+                }).eq("id", lot["id"]).execute()
+                
+                # Log movement
+                movement_data = {
+                    "org_id": org_id,
+                    "movement_type": "adjustment_out",
+                    "warehouse_id": warehouse_id,
+                    "item_id": item_id,
+                    "lot_id": lot["id"],
+                    "qty_base": -consume_qty,
+                    "unit_cost_base": float(lot["unit_cost_base"]),
+                    "total_cost": -consume_qty * float(lot["unit_cost_base"]),
+                    "reference_id": str(id),
+                    "reference_type": "physical_inventory",
+                    "notes": f"Consumo por ajuste físico {h['document_number']}",
+                    "created_by": user.id
+                }
+                db.table("stock_movements").insert(movement_data).execute()
+                
+                remaining -= consume_qty
+
+            # Update overall stock
+            if stock_res.data:
+                new_qty = max(0, float(stock_res.data[0]["qty_base"]) - to_consume)
+                db.table("stock").update({"qty_base": new_qty}).eq("id", stock_res.data[0]["id"]).execute()
+
+    # 4. Set processed status
+    db.table("physical_inventories").update({
+        "status": "processed",
+        "processed_by": user.id,
+        "processed_at": datetime.now(timezone.utc).isoformat()
+    }).eq("id", str(id)).execute()
+
+    return await get_physical_inventory_detail(id, db)
+
 
