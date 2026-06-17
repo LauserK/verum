@@ -84,24 +84,27 @@ export default function ImportUtilityPage() {
     // Map columns: A(0)->code, B(1)->category, C(2)->name, K(10)->price
     const rows = json.slice(startRow - 1).map((row) => {
       const rawCatName = String(row[1] || '').trim();
+      const upperCat = rawCatName.toUpperCase();
       
       // 1. Improved Category Matching (Case insensitive & Singular/Plural for Subrecetas)
       let matchedCat = categories.find(c => c.name.toLowerCase() === rawCatName.toLowerCase());
       
-      // Heuristic: If it says "SUBRECETA" but we have "SUBRECETAS" in the DB (or vice-versa)
-      if (!matchedCat && rawCatName.toUpperCase().includes('SUBRECETA')) {
+      if (!matchedCat && upperCat.includes('SUBRECETA')) {
           matchedCat = categories.find(c => c.name.toUpperCase().includes('SUBRECETA'));
       }
 
       // 2. Logic for Defaults based on category name in Excel
       let defaultType = 'raw_material';
-      if (rawCatName.toUpperCase().includes('SUBRECETA')) {
-          defaultType = 'semi_finished';
-      }
-
       let defaultUomId = uoms[0]?.id || '';
-      if (rawCatName.toUpperCase().includes('BEBIDA')) {
-          const unitUom = uoms.find(u => u.code.toLowerCase() === 'unit' || u.name.toLowerCase().includes('unidad'));
+      const unitUom = uoms.find(u => u.code.toLowerCase() === 'unit' || u.name.toLowerCase().includes('unidad'));
+
+      if (upperCat.includes('SUBRECETA')) {
+          defaultType = 'semi_finished';
+      } else if (upperCat.includes('BEBIDA')) {
+          defaultType = 'finished';
+          if (unitUom) defaultUomId = unitUom.id;
+      } else if (upperCat.includes('EMPAQUE') || upperCat.includes('CONSUMIBLE')) {
+          defaultType = 'supply';
           if (unitUom) defaultUomId = unitUom.id;
       }
       
@@ -243,9 +246,9 @@ export default function ImportUtilityPage() {
                 </p>
                 <ul className="text-xs text-text-secondary space-y-1 list-disc ml-4">
                     <li>Si el <strong>Código</strong> coincide con uno existente, solo se actualizará el precio.</li>
-                    <li>Puede corregir la <strong>categoría</strong> si no se detectó automáticamente (ej. Subrecetas).</li>
-                    <li>Los artículos de <strong>Subrecetas</strong> se marcan como Semielaborados por defecto.</li>
-                    <li>Las <strong>Bebidas</strong> se asignan automáticamente a Unidades (unit).</li>
+                    <li><strong>Subrecetas:</strong> Se marcan como Semielaborados por defecto.</li>
+                    <li><strong>Bebidas:</strong> Se marcan como Terminados y se miden por Unidades.</li>
+                    <li><strong>Empaque/Consumibles:</strong> Se marcan como Insumos y se miden por Unidades.</li>
                 </ul>
             </div>
           </div>
