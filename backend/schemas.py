@@ -607,6 +607,15 @@ class RecipeResponse(BaseModel):
     is_active: bool
     created_at: datetime
 
+class RecipeBriefResponse(BaseModel):
+    id: UUID
+    item_id: UUID
+    item_name: str
+    item_code: Optional[str] = None
+    item_type: str
+    yield_qty_base: Decimal
+    created_at: datetime
+
 class CalculateProductionNeedsRequest(BaseModel):
     item_id: UUID
     target_qty: Decimal

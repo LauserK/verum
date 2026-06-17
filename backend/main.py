@@ -4530,6 +4530,27 @@ async def get_transfer_detail(transfer_id: UUID, db=Depends(get_db), _=Depends(r
 
 # ── Production: Recipes Endpoints (M19) ───────────────────
 
+@app.get("/production/recipes", response_model=List[RecipeBriefResponse], tags=["Production"])
+async def list_recipes(org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("production.view"))):
+    res = db.table("recipes") \
+        .select("*, items(name, code, type)") \
+        .eq("org_id", org_id) \
+        .eq("is_active", True) \
+        .execute()
+        
+    results = []
+    for r in (res.data or []):
+        results.append({
+            "id": r["id"],
+            "item_id": r["item_id"],
+            "item_name": r["items"]["name"],
+            "item_code": r["items"]["code"],
+            "item_type": r["items"]["type"],
+            "yield_qty_base": r["yield_qty_base"],
+            "created_at": r["created_at"]
+        })
+    return results
+
 @app.post("/production/recipes", response_model=RecipeResponse, tags=["Production"])
 async def create_recipe(recipe: RecipeCreate, org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("production.manage_recipes"))):
     # 1. Calculate yield in base units

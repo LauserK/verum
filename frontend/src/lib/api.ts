@@ -757,8 +757,9 @@ export const adminApi = {
         fetchWithAuth(`/inventory/item-categories/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
 
     // M19: Recipes & Production
-    getRecipe: (itemId: string): Promise<RecipeResponse> =>
-        fetchWithAuth(`/production/recipes/${itemId}`),
+    getRecipes: (): Promise<RecipeBriefResponse[]> => fetchWithAuth('/production/recipes'),
+    getRecipe: (itemId: string): Promise<RecipeResponse> => fetchWithAuth(`/production/recipes/${itemId}`),
+
 
     saveRecipe: (data: RecipeCreate): Promise<RecipeResponse> =>
         fetchWithAuth('/production/recipes', { method: 'POST', body: JSON.stringify(data) }),
@@ -822,6 +823,16 @@ export interface OrderCompleteRequest {
 }
 
 // ── Recipe Types (M19) ─────────────────────────────
+
+export interface RecipeBriefResponse {
+    id: string
+    item_id: string
+    item_name: string
+    item_code: string | null
+    item_type: string
+    yield_qty_base: number
+    created_at: string
+}
 
 export interface RecipeIngredient {
     item_id: string
