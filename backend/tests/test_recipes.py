@@ -54,20 +54,37 @@ def test_create_recipe(client, mock_supabase, authenticated_user_mock):
         }]
         
         # We need a more flexible mock for the chain
-        mock_table = MagicMock()
-        mock_supabase.table.return_value = mock_table
-        
-        # Mock for create_recipe
-        mock_table.upsert.return_value.execute.return_value = mock_recipe_res
-        mock_table.delete.return_value.eq.return_value.execute.return_value = MagicMock(data=[])
-        mock_table.insert.return_value.execute.return_value = MagicMock(data=[])
-        
-        # Mock for get_recipe_by_item_id (called at the end of create_recipe)
-        mock_table.select.return_value.eq.return_value.execute.side_effect = [
-            mock_recipe_res, # recipes
-            MagicMock(data=[]), # ingredients
-            MagicMock(data=[])  # steps
-        ]
+        mock_uom_pres_table = MagicMock()
+        mock_uom_pres_table.select.return_value.eq.return_value.execute.return_value = MagicMock(data=[{
+            "conversion_factor": 1.0
+        }])
+
+        mock_recipes_table = MagicMock()
+        mock_recipes_table.upsert.return_value.execute.return_value = mock_recipe_res
+        mock_recipes_table.select.return_value.eq.return_value.execute.return_value = mock_recipe_res
+
+        mock_recipe_ing_table = MagicMock()
+        mock_recipe_ing_table.delete.return_value.eq.return_value.execute.return_value = MagicMock(data=[])
+        mock_recipe_ing_table.insert.return_value.execute.return_value = MagicMock(data=[])
+        mock_recipe_ing_table.select.return_value.eq.return_value.order.return_value.execute.return_value = MagicMock(data=[])
+
+        mock_recipe_steps_table = MagicMock()
+        mock_recipe_steps_table.delete.return_value.eq.return_value.execute.return_value = MagicMock(data=[])
+        mock_recipe_steps_table.insert.return_value.execute.return_value = MagicMock(data=[])
+        mock_recipe_steps_table.select.return_value.eq.return_value.order.return_value.execute.return_value = MagicMock(data=[])
+
+        def get_mock_table(table_name):
+            if table_name == "uom_presentations":
+                return mock_uom_pres_table
+            elif table_name == "recipes":
+                return mock_recipes_table
+            elif table_name == "recipe_ingredients":
+                return mock_recipe_ing_table
+            elif table_name == "recipe_steps":
+                return mock_recipe_steps_table
+            return MagicMock()
+
+        mock_supabase.table.side_effect = get_mock_table
 
         response = client.post(
             "/production/recipes",
