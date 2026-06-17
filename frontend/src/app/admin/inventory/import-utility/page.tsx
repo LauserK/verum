@@ -9,7 +9,8 @@ import {
   X, 
   CheckCircle2, 
   AlertCircle,
-  ArrowLeft
+  ArrowLeft,
+  RefreshCw
 } from 'lucide-react';
 import Link from 'next/link';
 import * as XLSX from 'xlsx';
@@ -81,7 +82,6 @@ export default function ImportUtilityPage() {
     const ws = workbook.Sheets[selectedSheet];
     const json = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
 
-    // Map columns: A(0)->code, B(1)->category, C(2)->name, K(10)->price
     const rows = json.slice(startRow - 1).map((row) => {
       const rawCatName = String(row[1] || '').trim();
       const upperCat = rawCatName.toUpperCase();
@@ -91,6 +91,12 @@ export default function ImportUtilityPage() {
       
       if (!matchedCat && upperCat.includes('SUBRECETA')) {
           matchedCat = categories.find(c => c.name.toUpperCase().includes('SUBRECETA'));
+      }
+      if (!matchedCat && upperCat.includes('BEBIDA')) {
+          matchedCat = categories.find(c => c.name.toUpperCase().includes('BEBIDA'));
+      }
+      if (!matchedCat && (upperCat.includes('EMPAQUE') || upperCat.includes('CONSUMIBLE'))) {
+          matchedCat = categories.find(c => c.name.toUpperCase().includes('EMPAQUE') || c.name.toUpperCase().includes('CONSUMIBLE'));
       }
 
       // 2. Logic for Defaults based on category name in Excel
@@ -124,13 +130,15 @@ export default function ImportUtilityPage() {
     setData(rows);
   }, [workbook, selectedSheet, startRow, categories, uoms]);
 
-  async function handleImport() {
+  async function handleImport(mode: 'all' | 'categories_only') {
     const pending = data.filter(r => r.status !== 'success');
-    const missingUom = pending.some(r => !r.base_uom_id);
     
-    if (missingUom) {
-      alert('Asegúrese de que todos los artículos tengan una Unidad Base asignada');
-      return;
+    if (mode === 'all') {
+        const missingUom = pending.some(r => !r.base_uom_id);
+        if (missingUom) {
+            alert('Asegúrese de que todos los artículos tengan una Unidad Base asignada');
+            return;
+        }
     }
     
     setImporting(true);
@@ -145,23 +153,36 @@ export default function ImportUtilityPage() {
       try {
         const existing = row.code ? existingItems.find(item => item.code === row.code) : null;
 
-        if (existing) {
-          // Update only price
-          await adminApi.updateInventoryItem(existing.id, {
-            last_purchase_cost: row.price || null
-          });
-          currentData[i].status = 'success';
+        if (mode === 'categories_only') {
+            if (existing) {
+                await adminApi.updateInventoryItem(existing.id, {
+                    category_id: row.categoryId || null
+                });
+                currentData[i].status = 'success';
+            } else {
+                currentData[i].status = 'error';
+                currentData[i].error = 'Artículo no encontrado para actualizar categoría';
+            }
         } else {
-          // Create new
-          await adminApi.createInventoryItem({
-            name: row.name,
-            code: row.code || null,
-            type: row.type as any,
-            category_id: row.categoryId || null,
-            base_uom_id: row.base_uom_id,
-            last_purchase_cost: row.price || null
-          });
-          currentData[i].status = 'success';
+            if (existing) {
+                // Update price and category
+                await adminApi.updateInventoryItem(existing.id, {
+                    last_purchase_cost: row.price || null,
+                    category_id: row.categoryId || null
+                });
+                currentData[i].status = 'success';
+            } else {
+                // Create new
+                await adminApi.createInventoryItem({
+                    name: row.name,
+                    code: row.code || null,
+                    type: row.type as any,
+                    category_id: row.categoryId || null,
+                    base_uom_id: row.base_uom_id,
+                    last_purchase_cost: row.price || null
+                });
+                currentData[i].status = 'success';
+            }
         }
       } catch (err: any) {
         currentData[i].status = 'error';
@@ -172,7 +193,6 @@ export default function ImportUtilityPage() {
     }
     setImporting(false);
     
-    // Refresh existing items list after import
     const updatedItems = await adminApi.getInventoryItems();
     setExistingItems(updatedItems);
   }
@@ -245,10 +265,10 @@ export default function ImportUtilityPage() {
                 Configure cada artículo directamente en la tabla inferior. 
                 </p>
                 <ul className="text-xs text-text-secondary space-y-1 list-disc ml-4">
-                    <li>Si el <strong>Código</strong> coincide con uno existente, solo se actualizará el precio.</li>
+                    <li><strong>Actualizar Categorías:</strong> Use el botón de la derecha para corregir categorías de productos existentes.</li>
                     <li><strong>Subrecetas:</strong> Se marcan como Semielaborados por defecto.</li>
-                    <li><strong>Bebidas:</strong> Se marcan como Terminados y se miden por Unidades.</li>
-                    <li><strong>Empaque/Consumibles:</strong> Se marcan como Insumos y se miden por Unidades.</li>
+                    <li><strong>Bebidas:</strong> Se marcan como Terminados y por Unidades.</li>
+                    <li><strong>Empaque/Consumibles:</strong> Se marcan como Insumos y por Unidades.</li>
                 </ul>
             </div>
           </div>
@@ -337,8 +357,7 @@ export default function ImportUtilityPage() {
                               newData[idx].categoryId = e.target.value;
                               setData(newData);
                             }}
-                            disabled={!!isUpdate}
-                            className="w-full bg-transparent border border-transparent focus:border-primary focus:bg-surface rounded-xl px-2 h-10 text-[10px] text-text-secondary outline-none transition-all cursor-pointer appearance-none disabled:opacity-30"
+                            className="w-full bg-transparent border border-transparent focus:border-primary focus:bg-surface rounded-xl px-2 h-10 text-[10px] text-text-secondary outline-none transition-all cursor-pointer appearance-none"
                           >
                             <option value="">(Sin categoría)</option>
                             {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -352,7 +371,7 @@ export default function ImportUtilityPage() {
                               newData[idx].type = e.target.value;
                               setData(newData);
                             }}
-                            disabled={!!isUpdate}
+                            disabled={!!isUpdate && row.status === 'success'}
                             className="w-full bg-transparent border border-transparent focus:border-primary focus:bg-surface rounded-xl px-2 h-10 text-[10px] text-text-secondary outline-none transition-all cursor-pointer appearance-none disabled:opacity-30"
                           >
                             <option value="raw_material">Materia Prima</option>
@@ -370,7 +389,7 @@ export default function ImportUtilityPage() {
                               newData[idx].base_uom_id = e.target.value;
                               setData(newData);
                             }}
-                            disabled={!!isUpdate}
+                            disabled={!!isUpdate && row.status === 'success'}
                             className="w-full bg-transparent border border-transparent focus:border-primary focus:bg-surface rounded-xl px-2 h-10 text-[10px] text-text-secondary outline-none transition-all cursor-pointer appearance-none disabled:opacity-30"
                           >
                             <option value="">Seleccionar...</option>
@@ -415,23 +434,38 @@ export default function ImportUtilityPage() {
                 </p>
               </div>
               
-              <button 
-                onClick={handleImport}
-                disabled={importing || data.length === 0}
-                className="w-full sm:w-auto bg-primary text-text-inverse px-10 h-14 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-primary-hover transition-all disabled:opacity-50 shadow-xl shadow-primary/20 active:scale-95"
-              >
-                {importing ? (
-                  <>
+              <div className="flex gap-3">
+                <button 
+                    onClick={() => handleImport('categories_only')}
+                    disabled={importing || data.length === 0}
+                    className="bg-surface border border-border text-text-primary px-6 h-14 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-surface-raised transition-all disabled:opacity-50 active:scale-95 shadow-sm"
+                >
+                    {importing ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
-                    Procesando ({progress.current}/{progress.total})
-                  </>
-                ) : (
-                  <>
-                    <Save className="w-5 h-5" />
-                    Ejecutar Carga / Actualización
-                  </>
-                )}
-              </button>
+                    ) : (
+                    <RefreshCw className="w-5 h-5" />
+                    )}
+                    Solo Categorías
+                </button>
+
+                <button 
+                    onClick={() => handleImport('all')}
+                    disabled={importing || data.length === 0}
+                    className="w-full sm:w-auto bg-primary text-text-inverse px-10 h-14 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-primary-hover transition-all disabled:opacity-50 shadow-xl shadow-primary/20 active:scale-95"
+                >
+                    {importing ? (
+                    <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        Procesando ({progress.current}/{progress.total})
+                    </>
+                    ) : (
+                    <>
+                        <Save className="w-5 h-5" />
+                        Ejecutar Carga Completa
+                    </>
+                    )}
+                </button>
+              </div>
             </div>
           </div>
         </div>
