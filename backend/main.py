@@ -3776,6 +3776,33 @@ async def list_items(org_id: str = Depends(get_active_org_id), db=Depends(get_db
             
     return res.data or []
 
+@app.get("/inventory/lots/resolve/{lot_number}", tags=["Inventory"])
+async def resolve_lot_number(lot_number: str, org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
+    res = db.table("stock_lots") \
+        .select("*, items(*, uom_base(name)), warehouses!inner(org_id)") \
+        .eq("lot_number", lot_number) \
+        .eq("warehouses.org_id", org_id) \
+        .execute()
+    
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Lote no encontrado")
+        
+    lot = res.data[0]
+    item = lot.get("items")
+    if not item:
+        raise HTTPException(status_code=404, detail="Artículo asociado al lote no encontrado")
+         
+    if item.get("uom_base"):
+        item["uom_name"] = item["uom_base"].get("name")
+        del item["uom_base"]
+        
+    return {
+        "item": item,
+        "lot_number": lot.get("lot_number"),
+        "expiry_date": lot.get("expiry_date"),
+        "unit_cost_base": lot.get("unit_cost_base")
+    }
+
 @app.patch("/inventory/items/{item_id}", response_model=ItemResponse, tags=["Inventory"])
 async def update_item(item_id: UUID, item: ItemUpdate, db=Depends(get_db), _=Depends(require_permission("inventory.manage_items"))):
     # Convert model to dict and handle UUID serialization

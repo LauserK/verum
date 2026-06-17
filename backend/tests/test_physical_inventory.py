@@ -95,3 +95,45 @@ def test_create_physical_inventory_draft(client, mock_supabase, authenticated_us
     assert res_data["status"] == "draft"
     assert len(res_data["lines"]) == 1
     assert float(res_data["lines"][0]["qty_counted_base"]) == 15.0
+
+def test_resolve_lot_number(client, mock_supabase, authenticated_user_mock):
+    lot_number = "LOT-12345"
+    org_id = str(uuid.uuid4())
+    item_id = str(uuid.uuid4())
+    
+    app.dependency_overrides[get_current_user] = lambda: authenticated_user_mock
+    app.dependency_overrides[main.get_active_org_id] = lambda: org_id
+    
+    with patch("main.resolve_permission", return_value=True):
+        mock_lots_table = MagicMock()
+        mock_lots_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(data=[
+            {
+                "id": str(uuid.uuid4()),
+                "lot_number": lot_number,
+                "item_id": item_id,
+                "expiry_date": None,
+                "unit_cost_base": 12.5,
+                "items": {
+                    "id": item_id,
+                    "name": "Test Lot Item",
+                    "code": "ITEM-LOT",
+                    "category_id": str(uuid.uuid4()),
+                    "uom_base": {"name": "Kg"}
+                },
+                "warehouses": {
+                    "org_id": org_id
+                }
+            }
+        ])
+        
+        mock_supabase.table.side_effect = lambda name: mock_lots_table if name == "stock_lots" else MagicMock()
+        
+        response = client.get(f"/inventory/lots/resolve/{lot_number}")
+        
+    app.dependency_overrides.clear()
+    
+    assert response.status_code == 200
+    res_data = response.json()
+    assert res_data["lot_number"] == lot_number
+    assert res_data["item"]["name"] == "Test Lot Item"
+    assert res_data["item"]["uom_name"] == "Kg"

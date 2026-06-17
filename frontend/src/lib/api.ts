@@ -798,6 +798,9 @@ export const adminApi = {
     markLotPrinted: (lotId: string): Promise<any> =>
         fetchWithAuth(`/production/lots/${lotId}/printed`, { method: 'PATCH' }),
 
+    resolveLotNumber: (lotNumber: string): Promise<any> =>
+        fetchWithAuth(`/inventory/lots/resolve/${encodeURIComponent(lotNumber)}`),
+
     updateOrderStatus: (id: string, status: string): Promise<any> =>
         fetchWithAuth(`/production/orders/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
 

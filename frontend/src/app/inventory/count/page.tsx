@@ -23,6 +23,8 @@ export default function MobileInventoryCount() {
   // Scanner state
   const [openScanner, setOpenScanner] = useState(false)
   const [scannerError, setScannerError] = useState<string | null>(null)
+  const [openItemScanner, setOpenItemScanner] = useState(false)
+  const [itemScannerError, setItemScannerError] = useState<string | null>(null)
 
   // Draft & Auto-save state
   const [draftId, setDraftId] = useState<string | null>(null)
@@ -137,6 +139,80 @@ export default function MobileInventoryCount() {
       }
     }
   }, [openScanner, warehouses])
+
+  // Item Scanner Logic (Checks Client-Side Items, then Queries Backend for Lot Matches)
+  useEffect(() => {
+    let scannerInstance: any = null
+
+    async function startScanner() {
+      if (!openItemScanner) return
+
+      try {
+        const { Html5Qrcode } = await import('html5-qrcode')
+        const scanner = new Html5Qrcode('item-qr-reader')
+        scannerInstance = scanner
+
+        await scanner.start(
+          { facingMode: 'environment' },
+          {
+            fps: 10,
+            qrbox: (width, height) => {
+              const size = Math.min(width, height) * 0.7
+              return { width: size, height: size }
+            }
+          },
+          async (decodedText) => {
+            const trimmed = decodedText.trim()
+            const queryLower = trimmed.toLowerCase()
+
+            // 1. Check local client-side match (ID, Code, Name)
+            const matchedItem = items.find(it => 
+              it.id === trimmed ||
+              (it.code && it.code.toLowerCase() === queryLower) ||
+              it.name.toLowerCase() === queryLower
+            )
+
+            if (matchedItem) {
+              selectItem(matchedItem)
+              setOpenItemScanner(false)
+              scanner.stop().catch(err => console.error('Error stopping scanner:', err))
+              return
+            }
+
+            // 2. Query backend to check if it matches a stock lot number
+            try {
+              const res = await adminApi.resolveLotNumber(trimmed)
+              if (res && res.item) {
+                selectItem(res.item)
+                setOpenItemScanner(false)
+                scanner.stop().catch(err => console.error('Error stopping scanner:', err))
+                return
+              }
+            } catch (err) {
+              console.error('Error resolving lot number from scanned text:', err)
+            }
+
+            // If we reach here, no match was found
+            setItemScannerError(`No se encontró artículo o lote con el código: "${trimmed}"`)
+          },
+          () => {
+            // Keep scanner error empty on standard non-matches during video frames
+          }
+        )
+      } catch (err) {
+        console.error('Failed to start item scanner:', err)
+        setItemScannerError('No se pudo iniciar la cámara. Asegúrate de dar los permisos necesarios.')
+      }
+    }
+
+    startScanner()
+
+    return () => {
+      if (scannerInstance && scannerInstance.isScanning) {
+        scannerInstance.stop().catch((err: any) => console.error('Error stopping item scanner on cleanup:', err))
+      }
+    }
+  }, [openItemScanner, items])
 
   const loadInitialData = async () => {
     setLoading(true)
@@ -391,6 +467,47 @@ export default function MobileInventoryCount() {
         </div>
       )}
 
+      {/* QR/Barcode Scanner Modal for Items */}
+      {openItemScanner && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-surface border border-border w-full max-w-md rounded-2xl overflow-hidden shadow-2xl animate-scale-in">
+            {/* Modal Header */}
+            <div className="flex justify-between items-center px-4 py-3 border-b border-border bg-surface-raised">
+              <div className="flex items-center gap-2">
+                <QrCode className="w-5 h-5 text-primary animate-pulse" />
+                <h3 className="font-bold text-sm">Escanear Artículo</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOpenItemScanner(false)}
+                className="p-1 text-text-secondary hover:text-error hover:bg-error/10 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 flex flex-col items-center justify-center">
+              <div className="w-full aspect-square max-w-[280px] overflow-hidden rounded-2xl bg-black border border-border relative flex items-center justify-center">
+                <div id="item-qr-reader" className="w-full h-full" />
+                <div className="absolute inset-0 border border-primary/40 pointer-events-none rounded-2xl animate-pulse"></div>
+              </div>
+
+              <p className="mt-4 text-xs text-text-secondary text-center max-w-[240px]">
+                Enfoque el código de barras, código QR del artículo o etiqueta de lote para seleccionarlo.
+              </p>
+
+              {itemScannerError && (
+                <div className="mt-4 p-3 bg-error/10 border border-error/20 rounded-xl text-xs text-error font-medium flex items-center gap-2 animate-slide-down-fade">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{itemScannerError}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div>
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
@@ -518,6 +635,17 @@ export default function MobileInventoryCount() {
                   className="w-full bg-bg border border-border rounded-xl pl-10 pr-3 h-11 text-sm outline-none focus:border-primary text-text-primary"
                 />
               </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setItemScannerError(null)
+                  setOpenItemScanner(true)
+                }}
+                className="h-11 w-11 bg-surface-raised hover:bg-bg border border-border hover:border-primary text-text-secondary hover:text-primary rounded-xl flex items-center justify-center transition-all shadow-sm shrink-0 cursor-pointer"
+                title="Escanear Artículo (QR/Barra)"
+              >
+                <QrCode className="w-5 h-5" />
+              </button>
               <button type="submit" className="bg-primary hover:bg-primary-hover text-text-inverse px-4 rounded-xl h-11 text-sm font-semibold">
                 Buscar
               </button>
