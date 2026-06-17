@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Plus, Trash2, Send, Loader2, ArrowLeft, Barcode, Check, X, AlertTriangle, ArrowRight } from 'lucide-react'
+import { Plus, Trash2, Send, Loader2, ArrowLeft, Barcode, Check, X, AlertTriangle, ArrowRight, ChevronDown, MapPin } from 'lucide-react'
 import { adminApi } from '@/lib/api'
 import { useRouter } from 'next/navigation'
 import ConfirmationModal from '@/components/ConfirmationModal'
@@ -17,6 +17,9 @@ export default function MobileInventoryCount() {
   const [selectedWarehouseId, setSelectedWarehouseId] = useState('')
   const [lines, setLines] = useState<any[]>([])
   
+  // Custom dropdown selector state
+  const [showWarehouseDropdown, setShowWarehouseDropdown] = useState(false)
+
   // Draft & Auto-save state
   const [draftId, setDraftId] = useState<string | null>(null)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
@@ -319,19 +322,59 @@ export default function MobileInventoryCount() {
           )}
         </div>
 
-        {/* Almacén Selector */}
-        <div className="bg-surface p-4 rounded-xl border border-border mb-4">
+        {/* Almacén Selector (Custom KDS Styled Dropdown) */}
+        <div className="bg-surface p-4 rounded-xl border border-border mb-4 relative">
           <label className="block text-xs font-bold text-text-secondary uppercase mb-2">Almacén / Sede</label>
-          <select 
-            value={selectedWarehouseId}
-            onChange={e => setSelectedWarehouseId(e.target.value)}
-            className="w-full bg-bg border border-border rounded-xl px-3 h-11 text-sm outline-none focus:border-primary text-text-primary"
+          
+          <button
+            type="button"
+            onClick={() => setShowWarehouseDropdown(!showWarehouseDropdown)}
+            className={`
+              w-full flex items-center justify-between px-4 h-11 rounded-xl border transition-all duration-300 bg-bg text-sm outline-none text-text-primary font-medium
+              ${showWarehouseDropdown ? 'border-primary shadow-lg shadow-primary/10' : 'border-border hover:border-primary/50'}
+            `}
           >
-            <option value="">Selecciona Almacén...</option>
-            {warehouses.map(wh => (
-              <option key={wh.id} value={wh.id}>{wh.name}</option>
-            ))}
-          </select>
+            <div className="flex items-center gap-2">
+              <MapPin className={`w-4 h-4 ${showWarehouseDropdown ? 'text-primary animate-bounce' : 'text-primary/60'}`} />
+              <span>
+                {warehouses.find(wh => wh.id === selectedWarehouseId)?.name || 'Selecciona Almacén...'}
+              </span>
+            </div>
+            <ChevronDown className={`w-4 h-4 text-text-secondary transition-transform duration-300 ${showWarehouseDropdown ? 'rotate-180 text-primary' : ''}`} />
+          </button>
+
+          {showWarehouseDropdown && (
+            <>
+              <div 
+                className="fixed inset-0 z-[105]" 
+                onClick={() => setShowWarehouseDropdown(false)}
+              />
+              <div className="absolute top-full left-4 right-4 mt-2 bg-surface border border-border rounded-2xl shadow-2xl z-[110] overflow-hidden animate-slide-down-fade">
+                <div className="p-2 space-y-1 max-h-60 overflow-y-auto">
+                  {warehouses.map(wh => (
+                    <button
+                      key={wh.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedWarehouseId(wh.id)
+                        setShowWarehouseDropdown(false)
+                      }}
+                      className={`
+                        w-full text-left px-4 py-3 rounded-xl flex items-center justify-between transition-all
+                        ${selectedWarehouseId === wh.id ? 'bg-primary/10 text-primary font-bold' : 'text-text-secondary hover:bg-surface-raised hover:text-text-primary'}
+                      `}
+                    >
+                      <span className="text-sm">{wh.name}</span>
+                      {selectedWarehouseId === wh.id && <div className="w-1.5 h-1.5 rounded-full bg-primary" />}
+                    </button>
+                  ))}
+                  {warehouses.length === 0 && (
+                    <p className="p-4 text-center text-xs text-text-secondary">No hay almacenes disponibles</p>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Loading Indicator for Draft Load */}
