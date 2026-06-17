@@ -5468,9 +5468,9 @@ async def get_physical_inventory_detail(
         "notes": h["notes"],
         "created_by": h["created_by"],
         "creator_name": h["creator"]["full_name"] if h.get("creator") else "Desconocido",
-        "processed_by": h["processed_by"],
+        "processed_by": h.get("processed_by"),
         "processor_name": h["processor"]["full_name"] if h.get("processor") else None,
-        "processed_at": h["processed_at"],
+        "processed_at": h.get("processed_at"),
         "created_at": h["created_at"],
         "lines": lines
     }
