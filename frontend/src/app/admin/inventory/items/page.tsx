@@ -137,6 +137,7 @@ export default function ItemsPage() {
   const [filterUom, setFilterUom] = useState('');
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' }>({ key: 'name', direction: 'asc' });
   const [groupBy, setGroupBy] = useState<'none' | 'category_id' | 'type' | 'base_uom_id'>('none');
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   
   const [formData, setFormData] = useState({ 
     name: '', 
@@ -212,6 +213,15 @@ export default function ItemsPage() {
       key,
       direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
     }));
+  };
+
+  const toggleGroup = (key: string) => {
+    setCollapsedGroups(prev => {
+        const next = new Set(prev);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        return next;
+    });
   };
 
   // Grouping logic
@@ -439,31 +449,40 @@ export default function ItemsPage() {
               {groupBy === 'none' ? (
                   sortedItems.map(item => <Row key={item.id} item={item} categories={categories} uoms={uoms} t={t} openEdit={openEdit} handleDelete={handleDelete} />)
               ) : (
-                  Object.entries(groupedItems).map(([key, groupItems]) => (
-                      <Fragment key={key}>
-                        <tr className="group/group-header">
-                            <td colSpan={7} className="p-0 border-b border-border">
-                                <div className="bg-surface-raised/80 backdrop-blur-sm flex items-center gap-3 px-4 py-3 sticky left-0">
-                                    <div className="w-1 h-5 bg-primary rounded-full" />
-                                    <div className="flex flex-col">
-                                        <span className="text-[10px] font-black uppercase text-text-secondary tracking-widest leading-none mb-1">
-                                            {groupBy === 'category_id' ? 'Categoría' : groupBy === 'type' ? 'Tipo' : 'Unidad'}
-                                        </span>
-                                        <div className="flex items-center gap-3">
-                                            <span className="text-sm font-bold text-text-primary">
-                                                {getGroupName(key)}
-                                            </span>
-                                            <span className="text-[10px] font-black text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
-                                                {groupItems.length} {groupItems.length === 1 ? 'ARTÍCULO' : 'ARTÍCULOS'}
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </td>
-                        </tr>
-                        {groupItems.map(item => <Row key={item.id} item={item} categories={categories} uoms={uoms} t={t} openEdit={openEdit} handleDelete={handleDelete} />)}
-                      </Fragment>
-                  ))
+                  Object.entries(groupedItems).map(([key, groupItems]) => {
+                      const isCollapsed = collapsedGroups.has(key);
+                      return (
+                        <Fragment key={key}>
+                          <tr className="group/group-header cursor-pointer select-none" onClick={() => toggleGroup(key)}>
+                              <td colSpan={7} className="p-0 border-b border-border">
+                                  <div className={`flex items-center justify-between px-4 py-3 sticky left-0 transition-colors ${isCollapsed ? 'bg-surface hover:bg-surface-raised/50' : 'bg-surface-raised/80 backdrop-blur-sm'}`}>
+                                      <div className="flex items-center gap-3">
+                                          <ChevronDown className={`w-4 h-4 text-primary transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`} />
+                                          <div className="w-1 h-5 bg-primary rounded-full" />
+                                          <div className="flex flex-col">
+                                              <span className="text-[10px] font-black uppercase text-text-secondary tracking-widest leading-none mb-1">
+                                                  {groupBy === 'category_id' ? 'Categoría' : groupBy === 'type' ? 'Tipo' : 'Unidad'}
+                                              </span>
+                                              <div className="flex items-center gap-3">
+                                                  <span className="text-sm font-bold text-text-primary">
+                                                      {getGroupName(key)}
+                                                  </span>
+                                                  <span className="text-[10px] font-black text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
+                                                      {groupItems.length} {groupItems.length === 1 ? 'ARTÍCULO' : 'ARTÍCULOS'}
+                                                  </span>
+                                              </div>
+                                          </div>
+                                      </div>
+                                      {isCollapsed && (
+                                          <span className="text-[10px] font-bold text-text-disabled uppercase tracking-tighter mr-2">Click para expandir</span>
+                                      )}
+                                  </div>
+                              </td>
+                          </tr>
+                          {!isCollapsed && groupItems.map(item => <Row key={item.id} item={item} categories={categories} uoms={uoms} t={t} openEdit={openEdit} handleDelete={handleDelete} />)}
+                        </Fragment>
+                      );
+                  })
               )}
               
               {sortedItems.length === 0 && (
