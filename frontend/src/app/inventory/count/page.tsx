@@ -9,6 +9,7 @@ export default function MobileInventoryCount() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [searching, setSearching] = useState(false)
   const [warehouses, setWarehouses] = useState<any[]>([])
   const [items, setItems] = useState<any[]>([])
   const [categories, setCategories] = useState<any[]>([])
@@ -60,28 +61,36 @@ export default function MobileInventoryCount() {
     e.preventDefault()
     if (!barcodeQuery.trim()) return
     
-    const query = barcodeQuery.trim().toLowerCase()
+    setSearching(true)
+    setSearchResults([]) // Clear old results during new search
+    setSelectedItem(null)
 
-    // Find all matching items by code, name or category
-    const matches = items.filter(it => {
-      const matchesCode = it.code && it.code.toLowerCase() === query
-      const matchesName = it.name.toLowerCase().includes(query)
-      
-      const category = categories.find(c => c.id === it.category_id)
-      const matchesCategory = category && category.name.toLowerCase().includes(query)
+    // Artificial search delay for smooth loading effect
+    setTimeout(() => {
+      const query = barcodeQuery.trim().toLowerCase()
 
-      return matchesCode || matchesName || matchesCategory
-    })
+      // Find all matching items by code, name or category
+      const matches = items.filter(it => {
+        const matchesCode = it.code && it.code.toLowerCase() === query
+        const matchesName = it.name.toLowerCase().includes(query)
+        
+        const category = categories.find(c => c.id === it.category_id)
+        const matchesCategory = category && category.name.toLowerCase().includes(query)
 
-    if (matches.length === 1 && matches[0].code?.toLowerCase() === query) {
-      selectItem(matches[0])
-    } else if (matches.length > 0) {
-      setSearchResults(matches)
-      setSelectedItem(null)
-    } else {
-      setSearchResults([])
-      alert('No se encontraron artículos')
-    }
+        return matchesCode || matchesName || matchesCategory
+      })
+
+      setSearching(false)
+
+      if (matches.length === 1 && matches[0].code?.toLowerCase() === query) {
+        selectItem(matches[0])
+      } else if (matches.length > 0) {
+        setSearchResults(matches)
+      } else {
+        setSearchResults([])
+        alert('No se encontraron artículos')
+      }
+    }, 400)
   }
 
   const addLine = () => {
@@ -211,9 +220,17 @@ export default function MobileInventoryCount() {
               </button>
             </form>
 
+            {/* Loading Indicator */}
+            {searching && (
+              <div className="mt-3 py-6 flex flex-col items-center justify-center gap-2 bg-bg border border-border rounded-xl animate-pulse">
+                <Loader2 className="w-6 h-6 animate-spin text-primary animate-duration-1000" />
+                <p className="text-[11px] font-medium text-text-secondary">Buscando artículos...</p>
+              </div>
+            )}
+
             {/* List of Search Results */}
-            {searchResults.length > 0 && (
-              <div className="mt-2 bg-bg border border-border rounded-xl max-h-60 overflow-y-auto divide-y divide-border shadow-sm">
+            {!searching && searchResults.length > 0 && (
+              <div className="mt-2 bg-bg border border-border rounded-xl max-h-60 overflow-y-auto divide-y divide-border shadow-sm animate-slide-down-fade">
                 {searchResults.map(item => {
                   const category = categories.find(c => c.id === item.category_id)
                   return (
@@ -240,7 +257,7 @@ export default function MobileInventoryCount() {
 
             {/* Active Item Selection Box */}
             {selectedItem && (
-              <div className="mt-4 p-3 bg-bg rounded-lg border border-border relative">
+              <div className="mt-4 p-3 bg-bg rounded-lg border border-border relative animate-slide-down-fade">
                 <button 
                   onClick={() => setSelectedItem(null)}
                   className="absolute top-2 right-2 p-1 text-text-secondary hover:text-error hover:bg-error/10 rounded-lg transition-colors"
