@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Plus, Trash2, Save, Send, Loader2, ArrowLeft, Barcode, Check, X } from 'lucide-react'
+import { Plus, Trash2, Send, Loader2, ArrowLeft, Barcode, Check, X, AlertTriangle, ArrowRight } from 'lucide-react'
 import { adminApi } from '@/lib/api'
 import { useRouter } from 'next/navigation'
 
@@ -16,6 +16,10 @@ export default function MobileInventoryCount() {
   const [selectedWarehouseId, setSelectedWarehouseId] = useState('')
   const [lines, setLines] = useState<any[]>([])
   
+  // Draft & Auto-save state
+  const [draftId, setDraftId] = useState<string | null>(null)
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+
   // Search & input form state
   const [barcodeQuery, setBarcodeQuery] = useState('')
   const [qtyInput, setQtyInput] = useState('')
@@ -27,6 +31,27 @@ export default function MobileInventoryCount() {
   useEffect(() => {
     loadInitialData()
   }, [])
+
+  // Load active draft when warehouse changes
+  useEffect(() => {
+    if (selectedWarehouseId) {
+      loadActiveDraft(selectedWarehouseId)
+    } else {
+      setLines([])
+      setDraftId(null)
+      setSaveStatus('idle')
+    }
+  }, [selectedWarehouseId])
+
+  // Clear "Guardado" status after 3s
+  useEffect(() => {
+    if (saveStatus === 'saved') {
+      const timer = setTimeout(() => {
+        setSaveStatus('idle')
+      }, 3000)
+      return () => clearTimeout(timer)
+    }
+  }, [saveStatus])
 
   const loadInitialData = async () => {
     setLoading(true)
@@ -41,6 +66,35 @@ export default function MobileInventoryCount() {
       setCategories(catList || [])
     } catch (err) {
       console.error('Error loading inventory count data:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const loadActiveDraft = async (warehouseId: string) => {
+    setLoading(true)
+    try {
+      const list = await adminApi.getPhysicalInventories()
+      const draft = list.find((c: any) => c.warehouse_id === warehouseId && c.status === 'draft')
+      if (draft) {
+        const detail = await adminApi.getPhysicalInventoryDetail(draft.id)
+        setDraftId(draft.id)
+        setLines(detail.lines.map((l: any) => ({
+          item_id: l.item_id,
+          item_name: l.item_name,
+          qty_counted_base: parseFloat(l.qty_counted_base),
+          presentation_id: l.presentation_id,
+          presentation_name: l.presentation_name || l.uom_name || 'Unidades',
+          qty_presentation: l.qty_presentation ? parseFloat(l.qty_presentation) : null
+        })))
+        setSaveStatus('saved')
+      } else {
+        setLines([])
+        setDraftId(null)
+        setSaveStatus('idle')
+      }
+    } catch (err) {
+      console.error('Error loading active draft:', err)
     } finally {
       setLoading(false)
     }
@@ -62,14 +116,12 @@ export default function MobileInventoryCount() {
     if (!barcodeQuery.trim()) return
     
     setSearching(true)
-    setSearchResults([]) // Clear old results during new search
+    setSearchResults([]) 
     setSelectedItem(null)
 
-    // Artificial search delay for smooth loading effect
     setTimeout(() => {
       const query = barcodeQuery.trim().toLowerCase()
 
-      // Find all matching items by code, name or category
       const matches = items.filter(it => {
         const matchesCode = it.code && it.code.toLowerCase() === query
         const matchesName = it.name.toLowerCase().includes(query)
@@ -93,6 +145,36 @@ export default function MobileInventoryCount() {
     }, 400)
   }
 
+  const saveChanges = async (currentLines: any[]) => {
+    if (!selectedWarehouseId) return
+    
+    setSaveStatus('saving')
+    try {
+      const data = {
+        warehouse_id: selectedWarehouseId,
+        notes: 'Conteo físico desde dispositivo móvil (Auto-guardado)',
+        lines: currentLines.map(l => ({
+          item_id: l.item_id,
+          qty_counted_base: l.qty_counted_base,
+          presentation_id: l.presentation_id,
+          qty_presentation: l.qty_presentation
+        }))
+      }
+
+      if (draftId) {
+        await adminApi.updatePhysicalInventory(draftId, data)
+        setSaveStatus('saved')
+      } else {
+        const doc = await adminApi.createPhysicalInventory(data)
+        setDraftId(doc.id)
+        setSaveStatus('saved')
+      }
+    } catch (err) {
+      console.error('Error auto-saving draft:', err)
+      setSaveStatus('error')
+    }
+  }
+
   const addLine = () => {
     if (!selectedItem || !qtyInput) return
     const qty = parseFloat(qtyInput)
@@ -102,23 +184,25 @@ export default function MobileInventoryCount() {
     const factor = selectedPres ? parseFloat(selectedPres.conversion_factor) : 1.0
     const qty_counted_base = qty * factor
 
-    // Add or update line
+    let updatedLines = []
     const existingIdx = lines.findIndex(l => l.item_id === selectedItem.id)
     if (existingIdx > -1) {
-      const updated = [...lines]
-      updated[existingIdx].qty_counted_base += qty_counted_base
-      updated[existingIdx].qty_presentation = (updated[existingIdx].qty_presentation || 0) + qty
-      setLines(updated)
+      updatedLines = [...lines]
+      updatedLines[existingIdx].qty_counted_base += qty_counted_base
+      updatedLines[existingIdx].qty_presentation = (updatedLines[existingIdx].qty_presentation || 0) + qty
     } else {
-      setLines([...lines, {
+      updatedLines = [...lines, {
         item_id: selectedItem.id,
         item_name: selectedItem.name,
         qty_counted_base,
         presentation_id: selectedPresId || null,
         presentation_name: selectedPres ? selectedPres.name : selectedItem.uom_name || 'Unidades',
         qty_presentation: qty
-      }])
+      }]
     }
+
+    setLines(updatedLines)
+    saveChanges(updatedLines)
 
     setSelectedItem(null)
     setQtyInput('')
@@ -126,46 +210,41 @@ export default function MobileInventoryCount() {
     setSelectedPresId('')
   }
 
-  const handleSave = async (submitToProcess = false) => {
-    if (!selectedWarehouseId) {
-      alert('Por favor selecciona un almacén')
-      return
-    }
-    if (lines.length === 0) {
-      alert('Agrega al menos un artículo para contar')
-      return
-    }
+  const handleProcess = async () => {
+    if (!selectedWarehouseId) return
+    if (lines.length === 0) return
 
     setSaving(true)
     try {
-      const data = {
-        warehouse_id: selectedWarehouseId,
-        notes: 'Conteo físico desde dispositivo móvil',
-        lines: lines.map(l => ({
-          item_id: l.item_id,
-          qty_counted_base: l.qty_counted_base,
-          presentation_id: l.presentation_id,
-          qty_presentation: l.qty_presentation
-        }))
+      let currentDraftId = draftId
+      if (!currentDraftId) {
+        const data = {
+          warehouse_id: selectedWarehouseId,
+          notes: 'Conteo físico desde dispositivo móvil',
+          lines: lines.map(l => ({
+            item_id: l.item_id,
+            qty_counted_base: l.qty_counted_base,
+            presentation_id: l.presentation_id,
+            qty_presentation: l.qty_presentation
+          }))
+        }
+        const doc = await adminApi.createPhysicalInventory(data)
+        currentDraftId = doc.id
+        setDraftId(doc.id)
       }
-      
-      const doc = await adminApi.createPhysicalInventory(data)
-      if (submitToProcess) {
-        await adminApi.processPhysicalInventory(doc.id)
-        alert('Inventario procesado y Kardex actualizado exitosamente.')
-      } else {
-        alert('Borrador de conteo guardado exitosamente.')
-      }
+
+      await adminApi.processPhysicalInventory(currentDraftId)
+      alert('Inventario procesado y Kardex ajustado exitosamente.')
       router.push('/admin/inventory/physical')
     } catch (err) {
       console.error(err)
-      alert('Error guardando el conteo de inventario')
+      alert('Error al procesar el inventario')
     } finally {
       setSaving(false)
     }
   }
 
-  if (loading) {
+  if (loading && !selectedWarehouseId) {
     return (
       <div className="flex h-screen items-center justify-center bg-bg">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -176,11 +255,34 @@ export default function MobileInventoryCount() {
   return (
     <div className="min-h-screen bg-bg text-text-primary px-4 py-6 flex flex-col justify-between">
       <div>
-        <div className="flex items-center gap-3 mb-6">
-          <button onClick={() => router.back()} className="p-2 hover:bg-surface rounded-lg">
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <h1 className="text-xl font-bold">Conteo de Inventario</h1>
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <button onClick={() => router.push('/admin/inventory/physical')} className="p-2 hover:bg-surface rounded-lg">
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <h1 className="text-xl font-bold">Conteo de Inventario</h1>
+          </div>
+
+          {/* Auto-save Status Indicator */}
+          {selectedWarehouseId && (
+            <div className="text-xs font-semibold px-2.5 py-1 rounded-lg transition-all duration-300">
+              {saveStatus === 'saving' && (
+                <span className="text-primary flex items-center gap-1.5 animate-pulse">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Guardando...
+                </span>
+              )}
+              {saveStatus === 'saved' && (
+                <span className="text-success flex items-center gap-1">
+                  <Check className="w-3.5 h-3.5" /> Guardado
+                </span>
+              )}
+              {saveStatus === 'error' && (
+                <span className="text-error flex items-center gap-1">
+                  <AlertTriangle className="w-3.5 h-3.5" /> Error de red
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Almacén Selector */}
@@ -198,8 +300,16 @@ export default function MobileInventoryCount() {
           </select>
         </div>
 
+        {/* Loading Indicator for Draft Load */}
+        {loading && selectedWarehouseId && (
+          <div className="flex py-12 items-center justify-center">
+            <Loader2 className="w-6 h-6 animate-spin text-primary" />
+            <p className="text-sm text-text-secondary ml-2">Cargando borrador activo...</p>
+          </div>
+        )}
+
         {/* Input Barcode / Search */}
-        {selectedWarehouseId && (
+        {!loading && selectedWarehouseId && (
           <div className="bg-surface p-4 rounded-xl border border-border mb-4">
             <form onSubmit={handleBarcodeSearch} className="flex gap-2">
               <div className="relative flex-1">
@@ -223,7 +333,7 @@ export default function MobileInventoryCount() {
             {/* Loading Indicator */}
             {searching && (
               <div className="mt-3 py-6 flex flex-col items-center justify-center gap-2 bg-bg border border-border rounded-xl animate-pulse">
-                <Loader2 className="w-6 h-6 animate-spin text-primary animate-duration-1000" />
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
                 <p className="text-[11px] font-medium text-text-secondary">Buscando artículos...</p>
               </div>
             )}
@@ -299,40 +409,45 @@ export default function MobileInventoryCount() {
         )}
 
         {/* Lines List */}
-        <div className="space-y-2 mb-20">
-          <h2 className="text-sm font-bold text-text-secondary uppercase tracking-wider mb-2">Artículos Contados ({lines.length})</h2>
-          {lines.map((l, idx) => (
-            <div key={l.item_id} className="bg-surface border border-border rounded-xl p-3 flex justify-between items-center shadow-sm">
-              <div>
-                <p className="text-sm font-semibold text-text-primary">{l.item_name}</p>
-                <p className="text-xs text-text-secondary">
-                  {l.qty_presentation} {l.presentation_name} ({l.qty_counted_base} base)
-                </p>
+        {!loading && selectedWarehouseId && (
+          <div className="space-y-2 mb-20">
+            <h2 className="text-sm font-bold text-text-secondary uppercase tracking-wider mb-2">Artículos Contados ({lines.length})</h2>
+            {lines.map((l, idx) => (
+              <div key={l.item_id} className="bg-surface border border-border rounded-xl p-3 flex justify-between items-center shadow-sm">
+                <div>
+                  <p className="text-sm font-semibold text-text-primary">{l.item_name}</p>
+                  <p className="text-xs text-text-secondary">
+                    {l.qty_presentation} {l.presentation_name} ({l.qty_counted_base} base)
+                  </p>
+                </div>
+                <button 
+                  onClick={() => {
+                    const updated = lines.filter((_, i) => i !== idx)
+                    setLines(updated)
+                    saveChanges(updated)
+                  }}
+                  className="p-2 text-error hover:bg-error/10 rounded-lg"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
-              <button 
-                onClick={() => setLines(lines.filter((_, i) => i !== idx))}
-                className="p-2 text-error hover:bg-error/10 rounded-lg"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Action Buttons */}
-      {selectedWarehouseId && lines.length > 0 && (
+      {!loading && selectedWarehouseId && lines.length > 0 && (
         <div className="fixed bottom-0 left-0 right-0 p-4 bg-surface border-t border-border flex gap-2">
           <button 
-            disabled={saving}
-            onClick={() => handleSave(false)}
+            onClick={() => router.push('/admin/inventory/physical')}
             className="flex-1 border border-border hover:bg-bg text-text-primary rounded-xl h-12 font-semibold text-sm flex items-center justify-center gap-2"
           >
-            <Save className="w-4 h-4" /> Guardar Borrador
+            <ArrowRight className="w-4 h-4" /> Salir (Guardado)
           </button>
           <button 
             disabled={saving}
-            onClick={() => handleSave(true)}
+            onClick={handleProcess}
             className="flex-1 bg-success hover:bg-success-light text-text-inverse rounded-xl h-12 font-semibold text-sm flex items-center justify-center gap-2"
           >
             <Send className="w-4 h-4" /> Procesar / Ajustar
