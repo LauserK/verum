@@ -3718,6 +3718,7 @@ async def create_item(item: ItemCreate, org_id: str = Depends(get_active_org_id)
         "code": item.code,
         "name": item.name,
         "type": item.type,
+        "category_id": str(item.category_id) if item.category_id else None,
         "base_uom_id": str(item.base_uom_id),
         "yield_alert_enabled": item.yield_alert_enabled,
         "yield_alert_threshold_pct": item.yield_alert_threshold_pct,
