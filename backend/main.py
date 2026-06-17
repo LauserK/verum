@@ -41,7 +41,7 @@ from schemas import (
     IssueDocumentCreate, IssueDocumentResponse,
     StockMovementResponse,
     TransferCreate, TransferConfirm, TransferResponse,
-    RecipeCreate, RecipeResponse, CalculateProductionNeedsRequest, ProductionNeedsResponse,
+    RecipeCreate, RecipeResponse, RecipeBriefResponse, CalculateProductionNeedsRequest, ProductionNeedsResponse,
     ProductionOrderCreate, ProductionOrderResponse, ProductionOrderDetailResponse, OrderStatusUpdate, OrderCompleteRequest,
     CateringRequestCreate, CateringRequestResponse, MRPResultResponse, MRPPlanRequest, GenerateOrdersRequest
 )
