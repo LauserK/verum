@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import { Plus, Trash2, Send, Loader2, ArrowLeft, Barcode, Check, X, AlertTriangle, ArrowRight } from 'lucide-react'
 import { adminApi } from '@/lib/api'
 import { useRouter } from 'next/navigation'
+import ConfirmationModal from '@/components/ConfirmationModal'
 
 export default function MobileInventoryCount() {
   const router = useRouter()
@@ -27,6 +28,28 @@ export default function MobileInventoryCount() {
   const [presentations, setPresentations] = useState<any[]>([])
   const [selectedPresId, setSelectedPresId] = useState('')
   const [searchResults, setSearchResults] = useState<any[]>([])
+
+  // Modal alert state
+  const [modalState, setModalState] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmLabel: 'Entendido',
+    onConfirm: () => {}
+  })
+
+  const showAlert = (title: string, message: string, onConfirm = () => {}) => {
+    setModalState({
+      isOpen: true,
+      title,
+      message,
+      confirmLabel: 'Entendido',
+      onConfirm: () => {
+        setModalState(prev => ({ ...prev, isOpen: false }))
+        onConfirm()
+      }
+    })
+  }
 
   useEffect(() => {
     loadInitialData()
@@ -140,7 +163,7 @@ export default function MobileInventoryCount() {
         setSearchResults(matches)
       } else {
         setSearchResults([])
-        alert('No se encontraron artículos')
+        showAlert('Artículo no encontrado', 'No se encontró ningún artículo con el término o código ingresado.')
       }
     }, 400)
   }
@@ -234,11 +257,12 @@ export default function MobileInventoryCount() {
       }
 
       await adminApi.processPhysicalInventory(currentDraftId)
-      alert('Inventario procesado y Kardex ajustado exitosamente.')
-      router.push('/admin/inventory/physical')
+      showAlert('Inventario Procesado', 'El inventario físico ha sido procesado y el Kardex ha sido ajustado exitosamente.', () => {
+        router.push('/admin/inventory/physical')
+      })
     } catch (err) {
       console.error(err)
-      alert('Error al procesar el inventario')
+      showAlert('Error', 'Ocurrió un error al intentar procesar el inventario físico.')
     } finally {
       setSaving(false)
     }
@@ -254,6 +278,16 @@ export default function MobileInventoryCount() {
 
   return (
     <div className="min-h-screen bg-bg text-text-primary px-4 py-6 flex flex-col justify-between">
+      <ConfirmationModal 
+        isOpen={modalState.isOpen}
+        title={modalState.title}
+        message={modalState.message}
+        confirmLabel={modalState.confirmLabel}
+        cancelLabel=""
+        onConfirm={modalState.onConfirm}
+        onCancel={() => setModalState(prev => ({ ...prev, isOpen: false }))}
+      />
+
       <div>
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">

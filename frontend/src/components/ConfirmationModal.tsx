@@ -44,12 +44,14 @@ export default function ConfirmationModal({
                         >
                             {confirmLabel}
                         </button>
-                        <button
-                            onClick={onCancel}
-                            className="w-full h-12 bg-surface-raised text-text-primary rounded-2xl font-bold text-sm hover:bg-border/20 transition-colors"
-                        >
-                            {cancelLabel}
-                        </button>
+                        {cancelLabel && (
+                            <button
+                                onClick={onCancel}
+                                className="w-full h-12 bg-surface-raised text-text-primary rounded-2xl font-bold text-sm hover:bg-border/20 transition-colors"
+                            >
+                                {cancelLabel}
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>
