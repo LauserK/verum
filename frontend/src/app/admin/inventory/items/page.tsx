@@ -412,22 +412,29 @@ export default function ItemsPage() {
                   sortedItems.map(item => <Row key={item.id} item={item} categories={categories} uoms={uoms} t={t} openEdit={openEdit} handleDelete={handleDelete} />)
               ) : (
                   Object.entries(groupedItems).map(([key, groupItems]) => (
-                      <React.Fragment key={key}>
-                        <tr className="bg-surface-raised/60">
-                            <td colSpan={7} className="p-3">
-                                <div className="flex items-center gap-2">
-                                    <div className="w-1.5 h-1.5 rounded-full bg-primary" />
-                                    <span className="text-xs font-black uppercase text-primary tracking-tighter">
-                                        {getGroupName(key)}
-                                    </span>
-                                    <span className="text-[10px] font-bold text-text-secondary bg-surface rounded-full px-2 py-0.5 border border-border">
-                                        {groupItems.length} items
-                                    </span>
+                      <Fragment key={key}>
+                        <tr className="group/group-header">
+                            <td colSpan={7} className="p-0 border-b border-border">
+                                <div className="bg-surface-raised/80 backdrop-blur-sm flex items-center gap-3 px-4 py-3 sticky left-0">
+                                    <div className="w-1 h-5 bg-primary rounded-full" />
+                                    <div className="flex flex-col">
+                                        <span className="text-[10px] font-black uppercase text-text-secondary tracking-widest leading-none mb-1">
+                                            {groupBy === 'category_id' ? 'Categoría' : groupBy === 'type' ? 'Tipo' : 'Unidad'}
+                                        </span>
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-sm font-bold text-text-primary">
+                                                {getGroupName(key)}
+                                            </span>
+                                            <span className="text-[10px] font-black text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
+                                                {groupItems.length} {groupItems.length === 1 ? 'ARTÍCULO' : 'ARTÍCULOS'}
+                                            </span>
+                                        </div>
+                                    </div>
                                 </div>
                             </td>
                         </tr>
                         {groupItems.map(item => <Row key={item.id} item={item} categories={categories} uoms={uoms} t={t} openEdit={openEdit} handleDelete={handleDelete} />)}
-                      </React.Fragment>
+                      </Fragment>
                   ))
               )}
               
