@@ -93,6 +93,32 @@ function Row({ item, categories, uoms, t, openEdit, handleDelete }: {
     );
 }
 
+function FilterSelect({ value, onChange, options, placeholder, icon: Icon, className = "" }: { 
+    value: string, 
+    onChange: (val: string) => void, 
+    options: { id: string, name: string }[],
+    placeholder: string,
+    icon?: any,
+    className?: string
+}) {
+    return (
+        <div className={`relative group ${className}`}>
+            {Icon && <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-secondary group-focus-within:text-primary transition-colors z-10" />}
+            <select 
+                value={value}
+                onChange={e => onChange(e.target.value)}
+                className={`w-full bg-surface-raised border border-border rounded-xl ${Icon ? 'pl-9' : 'px-4'} pr-10 h-11 text-xs text-text-primary outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all cursor-pointer appearance-none shadow-sm font-medium`}
+            >
+                <option value="">{placeholder}</option>
+                {options.map(opt => (
+                    <option key={opt.id} value={opt.id} className="bg-surface text-text-primary">{opt.name}</option>
+                ))}
+            </select>
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-disabled pointer-events-none group-hover:text-text-secondary transition-colors" />
+        </div>
+    );
+}
+
 export default function ItemsPage() {
   const { t } = useTranslations('inventory.items');
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -308,51 +334,53 @@ export default function ItemsPage() {
       {/* Filter & Group Bar */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
         <div className="lg:col-span-4 relative group">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary group-focus-within:text-primary transition-colors" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary group-focus-within:text-primary transition-colors z-10" />
           <input 
             type="text" 
             placeholder="Buscar por nombre o código..."
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
-            className="w-full bg-surface border border-border rounded-xl pl-10 pr-4 h-11 text-sm outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all shadow-sm"
+            className="w-full bg-surface-raised border border-border rounded-xl pl-10 pr-4 h-11 text-xs text-text-primary outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all shadow-sm font-medium"
           />
         </div>
-        <div className="lg:col-span-2">
-            <select 
-                value={filterCategory}
-                onChange={e => setFilterCategory(e.target.value)}
-                className="w-full bg-surface border border-border rounded-xl px-3 h-11 text-xs outline-none focus:border-primary transition-all cursor-pointer appearance-none"
-            >
-                <option value="">Todas las Categorías</option>
-                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-        </div>
-        <div className="lg:col-span-2">
-            <select 
-                value={filterType}
-                onChange={e => setFilterType(e.target.value)}
-                className="w-full bg-surface border border-border rounded-xl px-3 h-11 text-xs outline-none focus:border-primary transition-all cursor-pointer appearance-none"
-            >
-                <option value="">Todos los Tipos</option>
-                <option value="raw_material">{t('types.raw_material')}</option>
-                <option value="semi_finished">{t('types.semi_finished')}</option>
-                <option value="finished">{t('types.finished')}</option>
-                <option value="supply">{t('types.supply')}</option>
-                <option value="packaging">{t('types.packaging')}</option>
-            </select>
-        </div>
-        <div className="lg:col-span-2">
-            <select 
-                value={groupBy}
-                onChange={e => setGroupBy(e.target.value as any)}
-                className="w-full bg-primary/5 border border-primary/20 text-primary font-bold rounded-xl px-3 h-11 text-xs outline-none focus:border-primary transition-all cursor-pointer appearance-none"
-            >
-                <option value="none">Sin Agrupamiento</option>
-                <option value="category_id">Agrupar por Categoría</option>
-                <option value="type">Agrupar por Tipo</option>
-                <option value="base_uom_id">Agrupar por UOM</option>
-            </select>
-        </div>
+        
+        <FilterSelect 
+            value={filterCategory}
+            onChange={setFilterCategory}
+            options={categories.map(c => ({ id: c.id, name: c.name }))}
+            placeholder="Todas las Categorías"
+            icon={LayoutGrid}
+            className="lg:col-span-2"
+        />
+
+        <FilterSelect 
+            value={filterType}
+            onChange={setFilterType}
+            options={[
+                { id: 'raw_material', name: t('types.raw_material') },
+                { id: 'semi_finished', name: t('types.semi_finished') },
+                { id: 'finished', name: t('types.finished') },
+                { id: 'supply', name: t('types.supply') },
+                { id: 'packaging', name: t('types.packaging') }
+            ]}
+            placeholder="Todos los Tipos"
+            icon={Type}
+            className="lg:col-span-2"
+        />
+
+        <FilterSelect 
+            value={groupBy}
+            onChange={(val) => setGroupBy(val as any)}
+            options={[
+                { id: 'category_id', name: 'Agrupar por Categoría' },
+                { id: 'type', name: 'Agrupar por Tipo' },
+                { id: 'base_uom_id', name: 'Agrupar por UOM' }
+            ]}
+            placeholder="Sin Agrupamiento"
+            icon={Scale}
+            className="lg:col-span-2"
+        />
+
         <div className="lg:col-span-2 flex items-center justify-center">
             <button 
                 onClick={() => {
@@ -362,9 +390,9 @@ export default function ItemsPage() {
                     setFilterUom('');
                     setGroupBy('none');
                 }}
-                className="text-[10px] font-black uppercase text-text-secondary hover:text-error transition-colors flex items-center gap-1"
+                className="text-[10px] font-black uppercase text-text-secondary hover:text-error transition-colors flex items-center gap-1 group"
             >
-                <X className="w-3 h-3" /> Limpiar Filtros
+                <X className="w-3 h-3 group-hover:rotate-90 transition-transform" /> Limpiar Filtros
             </button>
         </div>
       </div>
@@ -483,47 +511,56 @@ export default function ItemsPage() {
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Categoría</label>
-                    <select 
-                      value={formData.category_id}
-                      onChange={e => setFormData({...formData, category_id: e.target.value})}
-                      className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all appearance-none cursor-pointer"
-                    >
-                      <option value="">Sin categoría</option>
-                      {categories.map(cat => (
-                        <option key={cat.id} value={cat.id}>{cat.name}</option>
-                      ))}
-                    </select>
+                  <div className="space-y-2">
+                    <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest ml-1">Categoría</label>
+                    <div className="relative group">
+                        <select 
+                        value={formData.category_id}
+                        onChange={e => setFormData({...formData, category_id: e.target.value})}
+                        className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all appearance-none cursor-pointer shadow-sm"
+                        >
+                        <option value="" className="bg-surface text-text-primary">Sin categoría</option>
+                        {categories.map(cat => (
+                            <option key={cat.id} value={cat.id} className="bg-surface text-text-primary">{cat.name}</option>
+                        ))}
+                        </select>
+                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-disabled pointer-events-none" />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">{t('typeLabel')}</label>
-                    <select 
-                      value={formData.type}
-                      onChange={e => setFormData({...formData, type: e.target.value})}
-                      className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all appearance-none cursor-pointer"
-                    >
-                      <option value="raw_material">{t('types.raw_material')}</option>
-                      <option value="semi_finished">{t('types.semi_finished')}</option>
-                      <option value="finished">{t('types.finished')}</option>
-                      <option value="supply">{t('types.supply')}</option>
-                      <option value="packaging">{t('types.packaging')}</option>
-                    </select>
+                  <div className="space-y-2">
+                    <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest ml-1">{t('typeLabel')}</label>
+                    <div className="relative group">
+                        <select 
+                        value={formData.type}
+                        onChange={e => setFormData({...formData, type: e.target.value})}
+                        className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all appearance-none cursor-pointer shadow-sm"
+                        >
+                        <option value="raw_material" className="bg-surface text-text-primary">{t('types.raw_material')}</option>
+                        <option value="semi_finished" className="bg-surface text-text-primary">{t('types.semi_finished')}</option>
+                        <option value="finished" className="bg-surface text-text-primary">{t('types.finished')}</option>
+                        <option value="supply" className="bg-surface text-text-primary">{t('types.supply')}</option>
+                        <option value="packaging" className="bg-surface text-text-primary">{t('types.packaging')}</option>
+                        </select>
+                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-disabled pointer-events-none" />
+                    </div>
                   </div>
               </div>
-              <div>
-                <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">{t('uomLabel')}</label>
-                <select 
-                  value={formData.base_uom_id}
-                  disabled={!!editingId}
-                  onChange={e => setFormData({...formData, base_uom_id: e.target.value})}
-                  className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all appearance-none cursor-pointer disabled:bg-surface-raised disabled:text-text-disabled"
-                >
-                  {uoms.map(u => (
-                    <option key={u.id} value={u.id}>{u.name} ({u.code})</option>
-                  ))}
-                </select>
-                {editingId && <p className="text-[10px] text-text-disabled mt-1">* La unidad base no se puede cambiar después de crear el artículo.</p>}
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest ml-1">{t('uomLabel')}</label>
+                <div className="relative group">
+                    <select 
+                    value={formData.base_uom_id}
+                    disabled={!!editingId}
+                    onChange={e => setFormData({...formData, base_uom_id: e.target.value})}
+                    className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all appearance-none cursor-pointer disabled:bg-surface-raised disabled:text-text-disabled shadow-sm"
+                    >
+                    {uoms.map(u => (
+                        <option key={u.id} value={u.id} className="bg-surface text-text-primary">{u.name} ({u.code})</option>
+                    ))}
+                    </select>
+                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-disabled pointer-events-none" />
+                </div>
+                {editingId && <p className="text-[10px] text-text-disabled mt-1 px-1">* La unidad base no se puede cambiar después de crear el artículo.</p>}
               </div>
             </div>
 
