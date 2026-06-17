@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Plus, Trash2, Save, Send, Loader2, ArrowLeft, Barcode, Check } from 'lucide-react'
+import { Plus, Trash2, Save, Send, Loader2, ArrowLeft, Barcode, Check, X } from 'lucide-react'
 import { adminApi } from '@/lib/api'
 import { useRouter } from 'next/navigation'
 
@@ -11,6 +11,7 @@ export default function MobileInventoryCount() {
   const [saving, setSaving] = useState(false)
   const [warehouses, setWarehouses] = useState<any[]>([])
   const [items, setItems] = useState<any[]>([])
+  const [categories, setCategories] = useState<any[]>([])
   const [selectedWarehouseId, setSelectedWarehouseId] = useState('')
   const [lines, setLines] = useState<any[]>([])
   
@@ -20,6 +21,7 @@ export default function MobileInventoryCount() {
   const [selectedItem, setSelectedItem] = useState<any>(null)
   const [presentations, setPresentations] = useState<any[]>([])
   const [selectedPresId, setSelectedPresId] = useState('')
+  const [searchResults, setSearchResults] = useState<any[]>([])
 
   useEffect(() => {
     loadInitialData()
@@ -28,12 +30,14 @@ export default function MobileInventoryCount() {
   const loadInitialData = async () => {
     setLoading(true)
     try {
-      const [whList, itemList] = await Promise.all([
+      const [whList, itemList, catList] = await Promise.all([
         adminApi.getInventoryWarehouses(),
-        adminApi.getInventoryItems()
+        adminApi.getInventoryItems(),
+        adminApi.getItemCategories()
       ])
       setWarehouses(whList || [])
       setItems(itemList || [])
+      setCategories(catList || [])
     } catch (err) {
       console.error('Error loading inventory count data:', err)
     } finally {
@@ -41,22 +45,42 @@ export default function MobileInventoryCount() {
     }
   }
 
+  const selectItem = (item: any) => {
+    setSelectedItem(item)
+    setBarcodeQuery('')
+    setSearchResults([])
+    // Load presentations
+    adminApi.getItemPresentations(item.id).then(pres => {
+      setPresentations(pres || [])
+      setSelectedPresId('')
+    })
+  }
+
   const handleBarcodeSearch = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!barcodeQuery) return
+    if (!barcodeQuery.trim()) return
     
-    // Find item by code/barcode
-    const item = items.find(it => it.code === barcodeQuery || it.name.toLowerCase().includes(barcodeQuery.toLowerCase()))
-    if (item) {
-      setSelectedItem(item)
-      setBarcodeQuery('')
-      // Load presentations
-      adminApi.getItemPresentations(item.id).then(pres => {
-        setPresentations(pres || [])
-        setSelectedPresId('')
-      })
+    const query = barcodeQuery.trim().toLowerCase()
+
+    // Find all matching items by code, name or category
+    const matches = items.filter(it => {
+      const matchesCode = it.code && it.code.toLowerCase() === query
+      const matchesName = it.name.toLowerCase().includes(query)
+      
+      const category = categories.find(c => c.id === it.category_id)
+      const matchesCategory = category && category.name.toLowerCase().includes(query)
+
+      return matchesCode || matchesName || matchesCategory
+    })
+
+    if (matches.length === 1 && matches[0].code?.toLowerCase() === query) {
+      selectItem(matches[0])
+    } else if (matches.length > 0) {
+      setSearchResults(matches)
+      setSelectedItem(null)
     } else {
-      alert('Artículo no encontrado')
+      setSearchResults([])
+      alert('No se encontraron artículos')
     }
   }
 
@@ -173,9 +197,12 @@ export default function MobileInventoryCount() {
                 <Barcode className="absolute left-3 top-3 w-5 h-5 text-text-secondary" />
                 <input 
                   type="text"
-                  placeholder="Escanea o escribe código..."
+                  placeholder="Buscar por código, nombre o categoría..."
                   value={barcodeQuery}
-                  onChange={e => setBarcodeQuery(e.target.value)}
+                  onChange={e => {
+                    setBarcodeQuery(e.target.value)
+                    if (!e.target.value) setSearchResults([])
+                  }}
                   className="w-full bg-bg border border-border rounded-xl pl-10 pr-3 h-11 text-sm outline-none focus:border-primary text-text-primary"
                 />
               </div>
@@ -184,10 +211,49 @@ export default function MobileInventoryCount() {
               </button>
             </form>
 
+            {/* List of Search Results */}
+            {searchResults.length > 0 && (
+              <div className="mt-2 bg-bg border border-border rounded-xl max-h-60 overflow-y-auto divide-y divide-border shadow-sm">
+                {searchResults.map(item => {
+                  const category = categories.find(c => c.id === item.category_id)
+                  return (
+                    <div 
+                      key={item.id}
+                      onClick={() => selectItem(item)}
+                      className="p-3 hover:bg-surface-raised cursor-pointer transition-colors flex justify-between items-center text-sm"
+                    >
+                      <div>
+                        <p className="font-semibold text-text-primary">{item.name}</p>
+                        <p className="text-xs text-text-secondary">
+                          {item.code ? `Código: ${item.code}` : 'Sin código'} 
+                          {category && ` • Cat: ${category.name}`}
+                        </p>
+                      </div>
+                      <span className="text-xs bg-surface border border-border text-text-secondary px-2.5 py-0.5 rounded-full">
+                        {item.uom_name || 'Base'}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Active Item Selection Box */}
             {selectedItem && (
-              <div className="mt-4 p-3 bg-bg rounded-lg border border-border">
-                <p className="text-sm font-bold">{selectedItem.name}</p>
-                <p className="text-xs text-text-secondary mb-3">Base: {selectedItem.uom_name || 'Unidades'}</p>
+              <div className="mt-4 p-3 bg-bg rounded-lg border border-border relative">
+                <button 
+                  onClick={() => setSelectedItem(null)}
+                  className="absolute top-2 right-2 p-1 text-text-secondary hover:text-error hover:bg-error/10 rounded-lg transition-colors"
+                  type="button"
+                  title="Quitar selección"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+                <p className="text-sm font-bold pr-8">{selectedItem.name}</p>
+                <p className="text-xs text-text-secondary mb-3">
+                  Base: {selectedItem.uom_name || 'Unidades'}
+                  {categories.find(c => c.id === selectedItem.category_id) && ` • Cat: ${categories.find(c => c.id === selectedItem.category_id).name}`}
+                </p>
                 <div className="flex gap-2">
                   <input 
                     type="number"
