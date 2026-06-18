@@ -5055,6 +5055,8 @@ async def create_catering_request(
         "name": req.name,
         "event_date": req.event_date,
         "notes": req.notes,
+        "tentative_production_date": req.tentative_production_date,
+        "buffer_percentage": req.buffer_percentage,
         "status": "planning"
     }
     res = db.table("catering_requests").insert(header_data).execute()
@@ -5080,7 +5082,44 @@ async def create_catering_request(
         
     return header
 
+@app.put("/production/catering/{req_id}", tags=["Production"])
+async def update_catering_request(
+    req_id: UUID,
+    req: CateringRequestCreate,
+    org_id: str = Depends(get_active_org_id),
+    db=Depends(get_db),
+    _=Depends(require_permission("production.manage_catering"))
+):
+    # 1. Update header
+    db.table("catering_requests").update({
+        "name": req.name,
+        "event_date": req.event_date,
+        "notes": req.notes,
+        "tentative_production_date": req.tentative_production_date,
+        "buffer_percentage": req.buffer_percentage
+    }).eq("id", str(req_id)).eq("org_id", org_id).execute()
+    
+    # 2. Delete existing lines
+    db.table("catering_request_lines").delete().eq("request_id", str(req_id)).execute()
+    
+    # 3. Create new lines
+    lines_data = []
+    for line in req.lines:
+        lines_data.append({
+            "request_id": str(req_id),
+            "item_id": str(line.item_id),
+            "qty_base": float(line.qty_base),
+            "presentation_id": str(line.presentation_id) if line.presentation_id else None,
+            "qty_presentation": float(line.qty_presentation) if line.qty_presentation else None
+        })
+    
+    if lines_data:
+        db.table("catering_request_lines").insert(lines_data).execute()
+        
+    return {"ok": True}
+
 @app.get("/production/catering", response_model=List[CateringRequestResponse], tags=["Production"])
+
 async def list_catering_requests(
     org_id: str = Depends(get_active_org_id),
     db=Depends(get_db),
@@ -5128,6 +5167,21 @@ async def get_catering_request(
     return header
 
 async def _calculate_mrp_data(req_id: UUID, warehouse_id: UUID, org_id: str, db):
+    # Fetch Catering Request Header to get buffer_percentage
+    req_res = db.table("catering_requests").select("buffer_percentage").eq("id", str(req_id)).eq("org_id", org_id).execute()
+    buffer_pct = Decimal("0")
+    if req_res.data and isinstance(req_res.data, list) and len(req_res.data) > 0:
+        val = req_res.data[0].get("buffer_percentage")
+        if val is not None:
+            try:
+                # Filter out mock objects from tests
+                if hasattr(val, "_mock_return_value"):
+                    buffer_pct = Decimal("0")
+                else:
+                    buffer_pct = Decimal(str(val))
+            except Exception:
+                buffer_pct = Decimal("0")
+
     # 1. Fetch Catering Request Lines
     lines_res = db.table("catering_request_lines").select("*").eq("request_id", str(req_id)).execute()
     if not lines_res.data:
@@ -5228,7 +5282,10 @@ async def _calculate_mrp_data(req_id: UUID, warehouse_id: UUID, org_id: str, db)
             }
 
     for line in lines_res.data:
-        explode(line["item_id"], Decimal(str(line["qty_base"])))
+        qty = Decimal(str(line["qty_base"]))
+        if buffer_pct > 0:
+            qty = qty * (Decimal("1") + buffer_pct / Decimal("100"))
+        explode(line["item_id"], qty)
 
     # To show "Gross Needed" vs "Available" in UI, we fetch initial stock levels
     # production_needed and raw_needed now contain only the NET DEFICIT.

@@ -817,6 +817,12 @@ export const adminApi = {
     createCateringRequest: (data: any): Promise<CateringRequest> =>
         fetchWithAuth('/production/catering', { method: 'POST', body: JSON.stringify(data) }),
 
+    updateCateringRequest: (id: string, data: any): Promise<any> =>
+        fetchWithAuth(`/production/catering/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(data)
+        }),
+
     generateMRPPlan: (reqId: string, warehouseId: string): Promise<MRPResultResponse> =>
         fetchWithAuth(`/production/catering/${reqId}/plan`, {
             method: 'POST',
@@ -1189,6 +1195,8 @@ export interface CateringRequestLine {
     presentation_id?: string | null
     qty_presentation?: number | null
     items?: { name: string, uom_base: { name: string } }
+    item_name?: string
+    uom_name?: string
 }
 
 export interface CateringRequest {
@@ -1197,6 +1205,8 @@ export interface CateringRequest {
     event_date: string | null
     status: 'planning' | 'confirmed' | 'cancelled'
     notes: string | null
+    tentative_production_date: string | null
+    buffer_percentage: number | null
     created_at: string
     lines?: CateringRequestLine[]
 }

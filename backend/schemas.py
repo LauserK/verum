@@ -697,13 +697,18 @@ class CateringRequestCreate(BaseModel):
     name: str
     event_date: Optional[str] = None
     notes: Optional[str] = None
+    tentative_production_date: Optional[str] = None
+    buffer_percentage: Optional[float] = 0.0
     lines: List[CateringRequestLineBase]
 
 class CateringRequestResponse(BaseModel):
     id: UUID
     name: str
     event_date: Optional[str] = None
+    notes: Optional[str] = None
     status: str
+    tentative_production_date: Optional[str] = None
+    buffer_percentage: Optional[float] = 0.0
     created_at: datetime
 
 class MRPPlanRequest(BaseModel):
