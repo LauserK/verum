@@ -50,8 +50,28 @@ def test_get_inventory_snapshot(authorized_client, mock_supabase):
             }
         }
     ]
-    
-    mock_supabase.table().select().eq().lte().execute.return_value = MagicMock(data=mock_movements)
+    def table_side_effect(name):
+        m = MagicMock()
+        if name == "items":
+            m.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(data=[
+                {"id": ITEM_ID, "name": "Harina", "code": "HAR-01", "uom_base": {"name": "kg"}}
+            ])
+            return m
+        elif name == "warehouses":
+            m.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(data=[
+                {"id": WAREHOUSE_ID, "name": "Almacén Central"}
+            ])
+            m.select.return_value.eq.return_value.execute.return_value = MagicMock(data=[
+                {"id": WAREHOUSE_ID, "name": "Almacén Central"}
+            ])
+            return m
+        elif name == "stock_movements":
+            m.select.return_value.eq.return_value.lte.return_value.execute.return_value = MagicMock(data=mock_movements)
+            m.select.return_value.eq.return_value.lte.return_value.eq.return_value.execute.return_value = MagicMock(data=mock_movements)
+            return m
+        return MagicMock()
+        
+    mock_supabase.table.side_effect = table_side_effect
     
     response = authorized_client.get(
         "/inventory/snapshot?date=2026-05-31",
@@ -99,8 +119,28 @@ def test_get_inventory_snapshot_zero_stock(authorized_client, mock_supabase):
             }
         }
     ]
-    
-    mock_supabase.table().select().eq().lte().execute.return_value = MagicMock(data=mock_movements)
+    def table_side_effect(name):
+        m = MagicMock()
+        if name == "items":
+            m.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(data=[
+                {"id": ITEM_ID, "name": "Harina", "code": "HAR-01", "uom_base": {"name": "kg"}}
+            ])
+            return m
+        elif name == "warehouses":
+            m.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(data=[
+                {"id": WAREHOUSE_ID, "name": "Almacén Central"}
+            ])
+            m.select.return_value.eq.return_value.execute.return_value = MagicMock(data=[
+                {"id": WAREHOUSE_ID, "name": "Almacén Central"}
+            ])
+            return m
+        elif name == "stock_movements":
+            m.select.return_value.eq.return_value.lte.return_value.execute.return_value = MagicMock(data=mock_movements)
+            m.select.return_value.eq.return_value.lte.return_value.eq.return_value.execute.return_value = MagicMock(data=mock_movements)
+            return m
+        return MagicMock()
+        
+    mock_supabase.table.side_effect = table_side_effect
     
     response = authorized_client.get(
         "/inventory/snapshot?date=2026-05-31",

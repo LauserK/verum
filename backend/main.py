@@ -4220,6 +4220,33 @@ async def get_inventory_snapshot(
 ):
     target_timestamp = f"{date}T23:59:59.999999-04:00"
     
+    # Initialize all active items and warehouses of this organization to 0.0 stock and valuation
+    items_res = db.table("items").select("id, name, code, uom_base(name)").eq("org_id", org_id).eq("is_active", True).execute()
+    active_items = items_res.data or []
+    
+    if warehouse_id:
+        wh_res = db.table("warehouses").select("id, name").eq("org_id", org_id).eq("id", str(warehouse_id)).execute()
+    else:
+        wh_res = db.table("warehouses").select("id, name").eq("org_id", org_id).eq("is_active", True).execute()
+    active_warehouses = wh_res.data or []
+    
+    grouped = {}
+    for wh in active_warehouses:
+        for item in active_items:
+            uom_base = item.get("uom_base") or {}
+            uom_name = uom_base.get("name") if isinstance(uom_base, dict) else ""
+            key = (item["id"], wh["id"])
+            grouped[key] = {
+                "item_id": item["id"],
+                "item_name": item.get("name") or "Unknown",
+                "item_code": item.get("code"),
+                "uom_name": uom_name,
+                "warehouse_id": wh["id"],
+                "warehouse_name": wh.get("name") or "Unknown",
+                "qty_on_hand": 0.0,
+                "valuation": 0.0
+            }
+
     query = db.table("stock_movements") \
         .select("item_id, warehouse_id, qty_base, total_cost, items(name, code, uom_base(name)), warehouses(name)") \
         .eq("org_id", org_id) \
@@ -4231,7 +4258,6 @@ async def get_inventory_snapshot(
     res = query.execute()
     movements = res.data or []
     
-    grouped = {}
     for mv in movements:
         item = mv.get("items") or {}
         wh = mv.get("warehouses") or {}
@@ -4267,6 +4293,7 @@ async def get_inventory_snapshot(
         "items": items_list,
         "total_valuation": round(total_val, 2)
     }
+
 
 @app.get("/inventory/valuation", response_model=StockValuationResponse, tags=["Inventory"])
 async def get_inventory_valuation(
