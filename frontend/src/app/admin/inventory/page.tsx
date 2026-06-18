@@ -74,6 +74,9 @@ export default function InventoryDashboardPage() {
         <Link href="/admin/inventory/kardex" className="px-4 py-2 bg-surface border border-border rounded-xl text-sm font-semibold hover:border-primary transition-colors flex items-center gap-2">
           <History className="w-4 h-4 text-primary" /> Kardex
         </Link>
+        <Link href="/admin/inventory/snapshot" className="px-4 py-2 bg-surface border border-border rounded-xl text-sm font-semibold hover:border-primary transition-colors flex items-center gap-2">
+          <Clock className="w-4 h-4 text-primary" /> Historial de Inventario
+        </Link>
       </div>
 
       {/* Block 1: Assets Status */}

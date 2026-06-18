@@ -794,3 +794,46 @@ class PhysicalInventoryBriefResponse(BaseModel):
     processed_at: Optional[datetime] = None
     created_at: datetime
 
+
+# M23: Stock Snapshot and Valuation Schemas
+class StockSnapshotItem(BaseModel):
+    item_id: UUID
+    item_name: str
+    item_code: Optional[str] = None
+    uom_name: Optional[str] = None
+    warehouse_id: UUID
+    warehouse_name: str
+    qty_on_hand: float
+    valuation: float
+
+class StockSnapshotResponse(BaseModel):
+    date: str
+    items: List[StockSnapshotItem]
+    total_valuation: float
+
+class StockValuationLotDetail(BaseModel):
+    lot_id: UUID
+    lot_number: Optional[str] = None
+    qty_base: float
+    unit_cost_base: float
+    valuation: float
+    production_date: Optional[str] = None
+    expiry_date: Optional[str] = None
+    received_at: str
+
+class StockValuationItem(BaseModel):
+    item_id: UUID
+    item_name: str
+    item_code: Optional[str] = None
+    uom_name: Optional[str] = None
+    warehouse_id: UUID
+    warehouse_name: str
+    qty_on_hand: float
+    valuation: float
+    lots_detail: List[StockValuationLotDetail]
+
+class StockValuationResponse(BaseModel):
+    items: List[StockValuationItem]
+    total_valuation: float
+
+

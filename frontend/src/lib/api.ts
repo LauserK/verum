@@ -664,13 +664,28 @@ export const adminApi = {
     getUOMBase: (): Promise<UOMBase[]> =>
         fetchWithAuth('/inventory/uom-base'),
 
-    // M17: Movements & Kardex
-    getKardex: (filters?: { item_id?: string; warehouse_id?: string }): Promise<StockMovement[]> => {
+    getKardex: (filters?: { item_id?: string; warehouse_id?: string; start_date?: string; end_date?: string; movement_type?: string }): Promise<StockMovement[]> => {
         const params = new URLSearchParams()
         if (filters?.item_id) params.set('item_id', filters.item_id)
         if (filters?.warehouse_id) params.set('warehouse_id', filters.warehouse_id)
+        if (filters?.start_date) params.set('start_date', filters.start_date)
+        if (filters?.end_date) params.set('end_date', filters.end_date)
+        if (filters?.movement_type) params.set('movement_type', filters.movement_type)
         const qs = params.toString()
         return fetchWithAuth(`/inventory/kardex${qs ? `?${qs}` : ''}`)
+    },
+
+    getInventorySnapshot: (date: string, warehouse_id?: string): Promise<StockSnapshotResponse> => {
+        const params = new URLSearchParams({ date })
+        if (warehouse_id) params.set('warehouse_id', warehouse_id)
+        return fetchWithAuth(`/inventory/snapshot?${params.toString()}`)
+    },
+
+    getInventoryValuation: (warehouse_id?: string): Promise<StockValuationResponse> => {
+        const params = new URLSearchParams()
+        if (warehouse_id) params.set('warehouse_id', warehouse_id)
+        const qs = params.toString()
+        return fetchWithAuth(`/inventory/valuation${qs ? `?${qs}` : ''}`)
     },
 
     createPurchaseReceipt: (data: Partial<PurchaseReceipt>): Promise<PurchaseReceipt> =>
@@ -1231,4 +1246,49 @@ export interface MRPPurchaseList {
 export interface MRPResultResponse {
     production_plan: MRPProductionPlan[]
     purchase_list: MRPPurchaseList[]
+}
+
+export interface StockSnapshotItem {
+    item_id: string
+    item_name: string
+    item_code: string | null
+    uom_name: string | null
+    warehouse_id: string
+    warehouse_name: string
+    qty_on_hand: number
+    valuation: number
+}
+
+export interface StockSnapshotResponse {
+    date: string
+    items: StockSnapshotItem[]
+    total_valuation: number
+}
+
+export interface StockValuationLotDetail {
+    lot_id: string
+    lot_number: string | null
+    qty_base: number
+    unit_cost_base: number
+    valuation: number
+    production_date: string | null
+    expiry_date: string | null
+    received_at: string
+}
+
+export interface StockValuationItem {
+    item_id: string
+    item_name: string
+    item_code: string | null
+    uom_name: string | null
+    warehouse_id: string
+    warehouse_name: string
+    qty_on_hand: number
+    valuation: number
+    lots_detail: StockValuationLotDetail[]
+}
+
+export interface StockValuationResponse {
+    items: StockValuationItem[]
+    total_valuation: number
 }

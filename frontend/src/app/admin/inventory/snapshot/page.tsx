@@ -1,0 +1,219 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { adminApi, Warehouse, StockSnapshotItem } from '@/lib/api'
+import { Loader2, ArrowLeft, Download, Calendar, Warehouse as WhIcon, DollarSign, Package } from 'lucide-react'
+import Link from 'next/link'
+import { format } from 'date-fns'
+
+export default function InventorySnapshotPage() {
+  const [date, setDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'))
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([])
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>('')
+  
+  const [loading, setLoading] = useState(false)
+  const [snapshotItems, setSnapshotItems] = useState<StockSnapshotItem[]>([])
+  const [totalValuation, setTotalValuation] = useState<number>(0)
+  
+  useEffect(() => {
+    // Load warehouses
+    adminApi.getInventoryWarehouses()
+      .then(setWarehouses)
+      .catch(console.error)
+  }, [])
+
+  useEffect(() => {
+    loadSnapshot()
+  }, [date, selectedWarehouseId])
+
+  async function loadSnapshot() {
+    if (!date) return
+    setLoading(true)
+    try {
+      const res = await adminApi.getInventorySnapshot(date, selectedWarehouseId || undefined)
+      // Sort alphabetically by item name
+      const sorted = (res.items || []).sort((a, b) => a.item_name.localeCompare(b.item_name))
+      setSnapshotItems(sorted)
+      setTotalValuation(res.total_valuation || 0)
+    } catch (err) {
+      console.error('Error loading inventory snapshot:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Calculate sum of active stock levels for top summary card
+  const totalStockQty = snapshotItems.reduce((acc, curr) => acc + curr.qty_on_hand, 0)
+
+  const handleExportCSV = () => {
+    if (snapshotItems.length === 0) return
+    
+    // Header
+    const csvRows = [
+      ['Código', 'Artículo', 'Almacén', 'Cantidad en Mano', 'U.M.', 'Valoración ($)'].join(',')
+    ]
+    
+    // Body rows
+    snapshotItems.forEach(item => {
+      const row = [
+        `"${item.item_code || ''}"`,
+        `"${item.item_name}"`,
+        `"${item.warehouse_name}"`,
+        item.qty_on_hand.toFixed(4),
+        `"${item.uom_name || 'un'}"`,
+        item.valuation.toFixed(2)
+      ]
+      csvRows.push(row.join(','))
+    })
+    
+    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + csvRows.join('\n')
+    const encodedUri = encodeURI(csvContent)
+    const link = document.createElement('a')
+    link.setAttribute('href', encodedUri)
+    link.setAttribute('download', `inventario-snapshot-${date}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  return (
+    <div className="max-w-[1500px] mx-auto space-y-6 pb-20 px-4">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="flex items-center gap-3">
+          <Link 
+            href="/admin/inventory" 
+            className="group p-2 bg-surface hover:bg-surface-raised border border-border rounded-xl transition-all duration-300"
+          >
+            <ArrowLeft className="w-4 h-4 text-text-secondary group-hover:text-primary group-hover:-translate-x-0.5 transition-all" />
+          </Link>
+          <div>
+            <h1 className="text-xl font-bold text-text-primary tracking-tight">Historial de Inventario</h1>
+            <p className="text-xs text-text-secondary mt-0.5">Consulta de stock y valorización PEPS a fechas pasadas</p>
+          </div>
+        </div>
+
+        {/* Filters */}
+        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+          {/* Date Picker */}
+          <div className="relative flex-1 sm:flex-initial sm:w-44">
+            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-secondary pointer-events-none" />
+            <input 
+              type="date" 
+              value={date}
+              onChange={e => setDate(e.target.value)}
+              className="w-full bg-surface border border-border rounded-xl pl-9 pr-3 h-10 text-xs font-semibold outline-none focus:border-primary focus:bg-surface-raised transition-all"
+            />
+          </div>
+          {/* Warehouse Selector */}
+          <div className="relative flex-1 sm:flex-initial sm:w-52">
+            <WhIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-secondary pointer-events-none" />
+            <select 
+              value={selectedWarehouseId}
+              onChange={e => setSelectedWarehouseId(e.target.value)}
+              className="w-full bg-surface border border-border rounded-xl pl-9 pr-3 h-10 text-xs font-semibold outline-none focus:border-primary appearance-none transition-all"
+            >
+              <option value="">Todos los Almacenes...</option>
+              {warehouses.map(w => (
+                <option key={w.id} value={w.id}>{w.name}</option>
+              ))}
+            </select>
+          </div>
+          {/* Export Button */}
+          <button 
+            onClick={handleExportCSV}
+            disabled={snapshotItems.length === 0}
+            className="h-10 px-4 bg-primary hover:bg-primary-hover text-text-inverse disabled:opacity-50 disabled:hover:bg-primary rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-md shadow-primary/10 active:scale-[0.98]"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Exportar CSV
+          </button>
+        </div>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-surface border border-border p-4 rounded-2xl shadow-sm flex items-center gap-4">
+          <div className="p-3 bg-primary/10 text-primary rounded-xl">
+            <Package className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-[10px] font-bold text-text-secondary uppercase tracking-wider">Productos con Registro</p>
+            <p className="text-xl font-black text-text-primary mt-0.5">{snapshotItems.length}</p>
+          </div>
+        </div>
+        <div className="bg-surface border border-border p-4 rounded-2xl shadow-sm flex items-center gap-4">
+          <div className="p-3 bg-warning/10 text-warning rounded-xl">
+            <WhIcon className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-[10px] font-bold text-text-secondary uppercase tracking-wider">Cantidad Física Consolidada</p>
+            <p className="text-xl font-black text-text-primary mt-0.5">
+              {loading ? '...' : totalStockQty.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+            </p>
+          </div>
+        </div>
+        <div className="bg-surface border border-border p-4 rounded-2xl shadow-sm flex items-center gap-4">
+          <div className="p-3 bg-success/10 text-success rounded-xl">
+            <DollarSign className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-[10px] font-bold text-text-secondary uppercase tracking-wider">Valoración Histórica (PEPS)</p>
+            <p className="text-xl font-black text-success mt-0.5">
+              {loading ? '...' : `$${totalValuation.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Table view */}
+      <div className="bg-surface border border-border rounded-2xl overflow-hidden shadow-sm">
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-20">
+            <Loader2 className="w-10 h-10 animate-spin text-primary opacity-40 mb-3" />
+            <p className="text-[10px] font-black uppercase tracking-widest text-text-secondary">Generando snapshot...</p>
+          </div>
+        ) : snapshotItems.length === 0 ? (
+          <div className="p-20 text-center text-text-secondary text-xs">
+            No se encontraron movimientos registrados en la fecha y almacenes seleccionados.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-border bg-surface-raised">
+                  <th className="p-3.5 px-4 font-bold text-text-secondary uppercase tracking-wider w-28 text-[9px]">Código</th>
+                  <th className="p-3.5 px-4 font-bold text-text-secondary uppercase tracking-wider text-[9px]">Artículo</th>
+                  <th className="p-3.5 px-4 font-bold text-text-secondary uppercase tracking-wider text-[9px]">Almacén</th>
+                  <th className="p-3.5 px-4 font-bold text-text-secondary uppercase tracking-wider text-[9px] text-right">Cantidad en Mano</th>
+                  <th className="p-3.5 px-4 font-bold text-text-secondary uppercase tracking-wider text-[9px] text-center w-20">U.M.</th>
+                  <th className="p-3.5 px-4 font-bold text-text-secondary uppercase tracking-wider text-[9px] text-right w-36">Valoración ($)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/60">
+                {snapshotItems.map((item, idx) => (
+                  <tr key={idx} className="hover:bg-surface-raised/40 transition-colors">
+                    <td className="p-3.5 px-4 font-medium text-text-secondary">{item.item_code || '---'}</td>
+                    <td className="p-3.5 px-4 font-semibold text-text-primary">{item.item_name}</td>
+                    <td className="p-3.5 px-4 font-medium text-text-secondary">{item.warehouse_name}</td>
+                    <td className="p-3.5 px-4 text-right font-bold text-text-primary">
+                      {item.qty_on_hand.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                    </td>
+                    <td className="p-3.5 px-4 text-center">
+                      <span className="text-[9px] font-semibold text-text-secondary bg-surface-raised border border-border/40 px-1.5 py-0.5 rounded uppercase tracking-wider">
+                        {item.uom_name || 'un'}
+                      </span>
+                    </td>
+                    <td className="p-3.5 px-4 text-right font-black text-primary">
+                      ${item.valuation.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}

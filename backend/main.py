@@ -44,7 +44,8 @@ from schemas import (
     RecipeCreate, RecipeResponse, RecipeBriefResponse, CalculateProductionNeedsRequest, ProductionNeedsResponse,
     ProductionOrderCreate, ProductionOrderResponse, ProductionOrderDetailResponse, OrderStatusUpdate, OrderCompleteRequest,
     CateringRequestCreate, CateringRequestResponse, MRPResultResponse, MRPPlanRequest, GenerateOrdersRequest,
-    PhysicalInventoryCreate, PhysicalInventoryResponse, PhysicalInventoryBriefResponse
+    PhysicalInventoryCreate, PhysicalInventoryResponse, PhysicalInventoryBriefResponse,
+    StockSnapshotResponse, StockValuationResponse
 )
 
 CARACAS_TZ = pytz.timezone("America/Caracas")
@@ -4183,16 +4184,167 @@ async def create_issue_document(doc: IssueDocumentCreate, org_id: str = Depends(
     return header_res.data[0]
 
 @app.get("/inventory/kardex", response_model=List[StockMovementResponse], tags=["Inventory"])
-async def get_kardex(item_id: Optional[UUID] = None, warehouse_id: Optional[UUID] = None, org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
+async def get_kardex(
+    item_id: Optional[UUID] = None, 
+    warehouse_id: Optional[UUID] = None, 
+    start_date: Optional[str] = None, 
+    end_date: Optional[str] = None, 
+    movement_type: Optional[str] = None, 
+    org_id: str = Depends(get_active_org_id), 
+    db=Depends(get_db), 
+    _=Depends(require_permission("inventory.view"))
+):
     query = db.table("stock_movements").select("*, items(name, uom_base(name)), warehouses(name)").eq("org_id", org_id)
     
     if item_id:
         query = query.eq("item_id", str(item_id))
     if warehouse_id:
         query = query.eq("warehouse_id", str(warehouse_id))
+    if start_date:
+        query = query.gte("created_at", f"{start_date}T00:00:00-04:00")
+    if end_date:
+        query = query.lte("created_at", f"{end_date}T23:59:59.999999-04:00")
+    if movement_type:
+        query = query.eq("movement_type", movement_type)
         
     res = query.order("created_at", desc=True).execute()
     return res.data
+
+@app.get("/inventory/snapshot", response_model=StockSnapshotResponse, tags=["Inventory"])
+async def get_inventory_snapshot(
+    date: str,
+    warehouse_id: Optional[UUID] = None,
+    org_id: str = Depends(get_active_org_id),
+    db=Depends(get_db),
+    _=Depends(require_permission("inventory.view"))
+):
+    target_timestamp = f"{date}T23:59:59.999999-04:00"
+    
+    query = db.table("stock_movements") \
+        .select("item_id, warehouse_id, qty_base, total_cost, items(name, code, uom_base(name)), warehouses(name)") \
+        .eq("org_id", org_id) \
+        .lte("created_at", target_timestamp)
+        
+    if warehouse_id:
+        query = query.eq("warehouse_id", str(warehouse_id))
+        
+    res = query.execute()
+    movements = res.data or []
+    
+    grouped = {}
+    for mv in movements:
+        item = mv.get("items") or {}
+        wh = mv.get("warehouses") or {}
+        uom_base = item.get("uom_base") or {}
+        uom_name = uom_base.get("name") if isinstance(uom_base, dict) else ""
+        
+        key = (mv["item_id"], mv["warehouse_id"])
+        if key not in grouped:
+            grouped[key] = {
+                "item_id": mv["item_id"],
+                "item_name": item.get("name") or "Unknown",
+                "item_code": item.get("code"),
+                "uom_name": uom_name,
+                "warehouse_id": mv["warehouse_id"],
+                "warehouse_name": wh.get("name") or "Unknown",
+                "qty_on_hand": 0.0,
+                "valuation": 0.0
+            }
+            
+        grouped[key]["qty_on_hand"] += float(mv["qty_base"])
+        grouped[key]["valuation"] += float(mv["total_cost"] or 0.0)
+        
+    items_list = []
+    total_val = 0.0
+    for key, data in grouped.items():
+        data["qty_on_hand"] = round(data["qty_on_hand"], 4)
+        data["valuation"] = round(data["valuation"], 2)
+        items_list.append(data)
+        total_val += data["valuation"]
+        
+    return {
+        "date": date,
+        "items": items_list,
+        "total_valuation": round(total_val, 2)
+    }
+
+@app.get("/inventory/valuation", response_model=StockValuationResponse, tags=["Inventory"])
+async def get_inventory_valuation(
+    warehouse_id: Optional[UUID] = None,
+    org_id: str = Depends(get_active_org_id),
+    db=Depends(get_db),
+    _=Depends(require_permission("inventory.view"))
+):
+    wh_res = db.table("warehouses").select("id, name").eq("org_id", org_id).execute()
+    if not wh_res.data:
+        return {"items": [], "total_valuation": 0.0}
+        
+    wh_ids = [w["id"] for w in wh_res.data]
+    wh_names = {w["id"]: w["name"] for w in wh_res.data}
+    
+    query = db.table("stock_lots") \
+        .select("id, warehouse_id, item_id, lot_number, qty_base, unit_cost_base, production_date, expiry_date, received_at, items(name, code, uom_base(name))") \
+        .in_("warehouse_id", wh_ids) \
+        .eq("is_exhausted", False)
+        
+    if warehouse_id:
+        query = query.eq("warehouse_id", str(warehouse_id))
+        
+    lots_res = query.execute()
+    lots = lots_res.data or []
+    
+    grouped = {}
+    for lot in lots:
+        item = lot.get("items") or {}
+        uom_base = item.get("uom_base") or {}
+        uom_name = uom_base.get("name") if isinstance(uom_base, dict) else ""
+        
+        key = (lot["item_id"], lot["warehouse_id"])
+        if key not in grouped:
+            grouped[key] = {
+                "item_id": lot["item_id"],
+                "item_name": item.get("name") or "Unknown",
+                "item_code": item.get("code"),
+                "uom_name": uom_name,
+                "warehouse_id": lot["warehouse_id"],
+                "warehouse_name": wh_names.get(lot["warehouse_id"]) or "Unknown",
+                "qty_on_hand": 0.0,
+                "valuation": 0.0,
+                "lots_detail": []
+            }
+            
+        qty = float(lot["qty_base"])
+        cost = float(lot["unit_cost_base"])
+        val = qty * cost
+        
+        grouped[key]["qty_on_hand"] += qty
+        grouped[key]["valuation"] += val
+        
+        received_str = str(lot["received_at"])
+        
+        grouped[key]["lots_detail"].append({
+            "lot_id": lot["id"],
+            "lot_number": lot["lot_number"],
+            "qty_base": round(qty, 4),
+            "unit_cost_base": round(cost, 4),
+            "valuation": round(val, 2),
+            "production_date": lot["production_date"],
+            "expiry_date": lot["expiry_date"],
+            "received_at": received_str
+        })
+        
+    items_list = []
+    total_val = 0.0
+    for key, data in grouped.items():
+        data["qty_on_hand"] = round(data["qty_on_hand"], 4)
+        data["valuation"] = round(data["valuation"], 2)
+        items_list.append(data)
+        total_val += data["valuation"]
+        
+    return {
+        "items": items_list,
+        "total_valuation": round(total_val, 2)
+    }
 
 @app.get("/inventory/purchase-receipts", tags=["Inventory"])
 async def list_purchase_receipts(org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.view"))):

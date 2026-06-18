@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { adminApi, StockMovement, InventoryItem, Warehouse } from '@/lib/api';
-import { Loader2, ArrowLeft, Printer, ArrowUpRight, ArrowDownRight, History, Search, Plus, ArrowRightLeft } from 'lucide-react';
+import { Loader2, ArrowLeft, Printer, ArrowUpRight, ArrowDownRight, History, Search, Plus, ArrowRightLeft, Download } from 'lucide-react';
 import Link from 'next/link';
 import { useReactToPrint } from 'react-to-print';
 import { MovementPrint } from '@/components/inventory/MovementPrint';
@@ -20,7 +20,13 @@ export default function KardexPage() {
   
   const [loading, setLoading] = useState(true);
   const [fetchingDetail, setFetchingDetail] = useState(false);
-  const [filters, setFilters] = useState({ item_id: '', warehouse_id: '' });
+  const [filters, setFilters] = useState({ 
+    item_id: '', 
+    warehouse_id: '',
+    start_date: '',
+    end_date: '',
+    movement_type: ''
+  });
 
   // Modal history state
   const [showHistory, setShowHistory] = useState(false);
@@ -78,13 +84,58 @@ export default function KardexPage() {
     setLoading(true);
     try {
       const data = await adminApi.getKardex(filters);
-      setMovements(data);
+      
+      let currentBal = 0;
+      const dataWithBalance = [...data].reverse().map(m => {
+        currentBal += m.qty_base;
+        return { ...m, running_balance: currentBal };
+      }).reverse();
+      
+      setMovements(dataWithBalance);
     } catch (error) {
       console.error('Error loading movements:', error);
     } finally {
       setLoading(false);
     }
   }
+
+  const handleExportCSV = () => {
+    if (movements.length === 0) return;
+    
+    const csvRows = [
+      ['Fecha', 'Hora', 'Tipo', 'Código Artículo', 'Artículo', 'Almacén', 'Cantidad', 'Saldo Acumulado', 'Referencia', 'Notas'].join(',')
+    ];
+    
+    movements.forEach(m => {
+      const item = items.find(i => i.id === m.item_id);
+      const wh = warehouses.find(w => w.id === m.warehouse_id);
+      const dateStr = new Date(m.created_at).toLocaleDateString();
+      const timeStr = new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      
+      const row = [
+        `"${dateStr}"`,
+        `"${timeStr}"`,
+        `"${tMov.t(m.movement_type)}"`,
+        `"${item?.code || '---'}"`,
+        `"${item?.name || 'Artículo'}"`,
+        `"${wh?.name || 'Almacén'}"`,
+        m.qty_base.toFixed(4),
+        ((m as any).running_balance ?? 0).toFixed(4),
+        `"${m.reference_id || ''}"`,
+        `"${(m.notes || '').replace(/"/g, '""')}"`
+      ];
+      csvRows.push(row.join(','));
+    });
+    
+    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + csvRows.join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `kardex-${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   async function fetchMovementDetail(movement: any) {
     const referenceId = movement.reference_id || movement.id;
@@ -240,6 +291,15 @@ export default function KardexPage() {
             >
               <History className="w-4.5 h-4.5" />
             </button>
+            <button 
+              onClick={handleExportCSV}
+              disabled={movements.length === 0}
+              className="flex items-center gap-1.5 border border-border bg-surface-raised text-text-primary px-3 h-10 rounded-xl text-[11px] font-bold hover:bg-surface disabled:opacity-50 transition-all shadow-sm whitespace-nowrap"
+              title="Exportar a CSV"
+            >
+              <Download className="w-3.5 h-3.5 text-primary" />
+              Exportar CSV
+            </button>
             <Link 
               href="/admin/inventory/movements/transfers/pending"
               className="flex items-center gap-1.5 border border-primary text-primary px-3 h-10 rounded-xl text-[11px] font-bold hover:bg-primary/5 transition-all shadow-sm whitespace-nowrap"
@@ -280,13 +340,13 @@ export default function KardexPage() {
 
       {/* Filtros */}
       <div className="bg-surface rounded-2xl border border-border p-6 shadow-sm">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
           <div className="space-y-2">
             <label className="text-xs font-bold text-text-secondary uppercase tracking-widest px-1">Artículo</label>
             <select 
               value={filters.item_id}
               onChange={e => setFilters({ ...filters, item_id: e.target.value })}
-              className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary outline-none focus:border-primary appearance-none cursor-pointer"
+              className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-xs text-text-primary outline-none focus:border-primary appearance-none cursor-pointer"
             >
               <option value="">Todos los artículos</option>
               {items.map(item => (
@@ -299,13 +359,50 @@ export default function KardexPage() {
             <select 
               value={filters.warehouse_id}
               onChange={e => setFilters({ ...filters, warehouse_id: e.target.value })}
-              className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary outline-none focus:border-primary appearance-none cursor-pointer"
+              className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-xs text-text-primary outline-none focus:border-primary appearance-none cursor-pointer"
             >
               <option value="">Todos los almacenes</option>
               {warehouses.map(wh => (
                 <option key={wh.id} value={wh.id}>{wh.name}</option>
               ))}
             </select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-text-secondary uppercase tracking-widest px-1">Tipo de Movimiento</label>
+            <select 
+              value={filters.movement_type}
+              onChange={e => setFilters({ ...filters, movement_type: e.target.value })}
+              className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-xs text-text-primary outline-none focus:border-primary appearance-none cursor-pointer"
+            >
+              <option value="">Todos los tipos</option>
+              <option value="purchase">{tMov.t('purchase')}</option>
+              <option value="production_in">{tMov.t('production_in')}</option>
+              <option value="production_out">{tMov.t('production_out')}</option>
+              <option value="sale">{tMov.t('sale')}</option>
+              <option value="transfer_in">{tMov.t('transfer_in')}</option>
+              <option value="transfer_out">{tMov.t('transfer_out')}</option>
+              <option value="adjustment_in">{tMov.t('adjustment_in')}</option>
+              <option value="adjustment_out">{tMov.t('adjustment_out')}</option>
+              <option value="initial">{tMov.t('initial')}</option>
+            </select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-text-secondary uppercase tracking-widest px-1">Fecha Desde</label>
+            <input 
+              type="date"
+              value={filters.start_date}
+              onChange={e => setFilters({ ...filters, start_date: e.target.value })}
+              className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-xs text-text-primary outline-none focus:border-primary"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-text-secondary uppercase tracking-widest px-1">Fecha Hasta</label>
+            <input 
+              type="date"
+              value={filters.end_date}
+              onChange={e => setFilters({ ...filters, end_date: e.target.value })}
+              className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-xs text-text-primary outline-none focus:border-primary"
+            />
           </div>
         </div>
       </div>
@@ -321,13 +418,14 @@ export default function KardexPage() {
                 <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest">Artículo</th>
                 <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest">Almacén</th>
                 <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest text-right">Cant. (Base)</th>
+                <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest text-right">Saldo</th>
                 <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest">Referencia / Notas</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {loading && movements.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-20 text-center"><Loader2 className="animate-spin w-8 h-8 text-primary mx-auto" /></td>
+                  <td colSpan={7} className="p-20 text-center"><Loader2 className="animate-spin w-8 h-8 text-primary mx-auto" /></td>
                 </tr>
               ) : movements.map((m) => (
                 <tr key={m.id} className="hover:bg-surface-raised/50 transition-colors">
@@ -367,6 +465,9 @@ export default function KardexPage() {
                   <td className={`p-4 text-sm font-mono font-bold text-right ${m.qty_base > 0 ? 'text-text-primary' : 'text-text-primary'}`}>
                       {m.qty_base > 0 ? '+' : ''}{m.qty_base.toFixed(2)}
                   </td>
+                  <td className="p-4 text-sm font-mono font-bold text-right text-text-secondary">
+                      {((m as any).running_balance ?? 0).toFixed(2)}
+                  </td>
                   <td className="p-4">
                       <p className="text-xs text-text-primary font-medium">{m.notes || '---'}</p>
                       <p className="text-[10px] text-text-secondary font-mono truncate max-w-[120px]">REF: {m.reference_id?.slice(0, 8) || '---'}</p>
@@ -375,7 +476,7 @@ export default function KardexPage() {
               ))}
               {!loading && movements.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="p-20 text-center">
+                  <td colSpan={7} className="p-20 text-center">
                       <History className="w-12 h-12 text-text-disabled mx-auto mb-4" />
                       <p className="text-text-secondary font-medium">No se han encontrado movimientos para los filtros aplicados</p>
                   </td>
