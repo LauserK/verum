@@ -3724,7 +3724,9 @@ async def create_item(item: ItemCreate, org_id: str = Depends(get_active_org_id)
         "base_uom_id": str(item.base_uom_id),
         "yield_alert_enabled": item.yield_alert_enabled,
         "yield_alert_threshold_pct": item.yield_alert_threshold_pct,
-        "shelf_life_days": item.shelf_life_days
+        "shelf_life_days": item.shelf_life_days,
+        "last_purchase_cost": item.last_purchase_cost,
+        "last_purchase_cost_updated_at": datetime.now(CARACAS_TZ).isoformat() if item.last_purchase_cost is not None else None
     }
     
     res = db.table("items").insert(data).execute()
@@ -3816,6 +3818,9 @@ async def update_item(item_id: UUID, item: ItemUpdate, db=Depends(get_db), _=Dep
     update_data = {k: (str(v) if isinstance(v, UUID) else v) 
                    for k, v in full_data.items()}
     
+    if "last_purchase_cost" in update_data:
+        update_data["last_purchase_cost_updated_at"] = datetime.now(CARACAS_TZ).isoformat()
+        
     if not update_data:
         raise HTTPException(status_code=400, detail="No data to update")
 

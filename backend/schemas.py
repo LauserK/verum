@@ -450,6 +450,7 @@ class ItemCreate(BaseModel):
     yield_alert_enabled: bool = False
     yield_alert_threshold_pct: Optional[float] = None
     shelf_life_days: Optional[int] = None
+    last_purchase_cost: Optional[float] = None
     presentations: List[UOMPresentationCreate] = []
 
 class ItemResponse(BaseModel):
@@ -475,6 +476,7 @@ class ItemUpdate(BaseModel):
     yield_alert_enabled: Optional[bool] = None
     yield_alert_threshold_pct: Optional[float] = None
     shelf_life_days: Optional[int] = None
+    last_purchase_cost: Optional[float] = None
 
 class WarehouseCreate(BaseModel):
     name: str
