@@ -849,6 +849,12 @@ export const adminApi = {
             method: 'POST',
             body: JSON.stringify(data)
         }),
+
+    bulkAdjustStock: (warehouseId: string, adjustments: StockAdjustItem[]): Promise<BulkStockAdjustResponse> =>
+        fetchWithAuth('/inventory/bulk-adjust-stock', {
+            method: 'POST',
+            body: JSON.stringify({ warehouse_id: warehouseId, adjustments })
+        }),
 }
 
 // ── Production Types (M20) ─────────────────────────
@@ -1291,4 +1297,22 @@ export interface StockValuationItem {
 export interface StockValuationResponse {
     items: StockValuationItem[]
     total_valuation: number
+}
+
+export interface StockAdjustItem {
+    item_code: string
+    qty_counted: number
+}
+
+export interface StockAdjustResult {
+    item_code: string
+    status: 'success' | 'error'
+    error_message?: string
+    qty_expected?: number
+    qty_counted?: number
+    difference?: number
+}
+
+export interface BulkStockAdjustResponse {
+    results: StockAdjustResult[]
 }

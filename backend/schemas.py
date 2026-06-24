@@ -839,3 +839,24 @@ class StockValuationResponse(BaseModel):
     total_valuation: float
 
 
+class StockAdjustItem(BaseModel):
+    item_code: str
+    qty_counted: float
+
+class BulkStockAdjustRequest(BaseModel):
+    warehouse_id: UUID
+    adjustments: List[StockAdjustItem]
+
+class StockAdjustResult(BaseModel):
+    item_code: str
+    status: str  # "success" or "error"
+    error_message: Optional[str] = None
+    qty_expected: Optional[float] = None
+    qty_counted: Optional[float] = None
+    difference: Optional[float] = None
+
+class BulkStockAdjustResponse(BaseModel):
+    results: List[StockAdjustResult]
+
+
+
