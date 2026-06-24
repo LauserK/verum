@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { adminApi, ItemCategory, UOMBase, InventoryItem, Warehouse } from '@/lib/api';
 import { 
   FileUp, 
@@ -65,6 +65,51 @@ export default function ImportUtilityPage() {
   const [stockStartRow, setStockStartRow] = useState<number>(2);
   const [stockImporting, setStockImporting] = useState(false);
   const [stockProgress, setStockProgress] = useState({ current: 0, total: 0 });
+
+  // Stock expected levels cache
+  const [warehouseStock, setWarehouseStock] = useState<Record<string, number>>({});
+  const warehouseStockRef = useRef(warehouseStock);
+
+  useEffect(() => {
+    warehouseStockRef.current = warehouseStock;
+  }, [warehouseStock]);
+
+  // Fetch stock levels when warehouse changes
+  useEffect(() => {
+    async function fetchWarehouseStock() {
+      if (!selectedWarehouseId) {
+        setWarehouseStock({});
+        return;
+      }
+      try {
+        const valRes = await adminApi.getInventoryValuation(selectedWarehouseId);
+        const mapping: Record<string, number> = {};
+        valRes.items.forEach(item => {
+          if (item.item_code) {
+            mapping[item.item_code] = item.qty_on_hand;
+          }
+        });
+        setWarehouseStock(mapping);
+      } catch (err) {
+        console.error('Error fetching warehouse stock:', err);
+      }
+    }
+    fetchWarehouseStock();
+  }, [selectedWarehouseId]);
+
+  // Update stock preview items with expected levels when warehouse stock changes
+  useEffect(() => {
+    if (stockData.length === 0) return;
+    setStockData(prev => prev.map(row => {
+      if (row.status !== 'pending') return row;
+      const expected = warehouseStock[row.item_code] !== undefined ? warehouseStock[row.item_code] : 0.0;
+      return {
+        ...row,
+        qty_expected: expected,
+        difference: row.qty_counted - expected
+      };
+    }));
+  }, [warehouseStock]);
 
   useEffect(() => {
     async function loadData() {
@@ -191,11 +236,16 @@ export default function ImportUtilityPage() {
       const existing = code ? existingItems.find(item => item.code === code) : null;
       const itemName = existing ? existing.name : 'Artículo no registrado';
 
+      const expected = warehouseStockRef.current[code] !== undefined ? warehouseStockRef.current[code] : 0.0;
+      const diff = qty - expected;
+
       return {
         id: Math.random().toString(36).substr(2, 9),
         item_code: code,
         item_name: itemName,
         qty_counted: isNaN(qty) ? 0.0 : qty,
+        qty_expected: expected,
+        difference: diff,
         status: 'pending' as const,
       };
     }).filter(r => r.item_code);
@@ -309,6 +359,16 @@ export default function ImportUtilityPage() {
 
       setStockData(updatedData);
       setStockProgress({ current: stockData.length, total: stockData.length });
+
+      // Refresh expected stocks after adjustment
+      const valRes = await adminApi.getInventoryValuation(selectedWarehouseId);
+      const mapping: Record<string, number> = {};
+      valRes.items.forEach(item => {
+        if (item.item_code) {
+          mapping[item.item_code] = item.qty_on_hand;
+        }
+      });
+      setWarehouseStock(mapping);
     } catch (err: any) {
       alert(`Error al ejecutar importación de stock: ${err.message}`);
       const errorData = stockData.map(row => 
@@ -765,8 +825,10 @@ export default function ImportUtilityPage() {
                                 value={row.qty_counted}
                                 onChange={e => {
                                   const newData = [...stockData];
-                                  newData[idx].qty_counted = Number(e.target.value) || 0.0;
-                                  setData(newData as any); // just triggers re-renders or updates
+                                  const val = Number(e.target.value) || 0.0;
+                                  newData[idx].qty_counted = val;
+                                  const expected = newData[idx].qty_expected ?? 0.0;
+                                  newData[idx].difference = val - expected;
                                   setStockData(newData);
                                 }}
                                 className="w-28 bg-transparent border border-transparent focus:border-primary focus:bg-surface rounded-xl px-2 h-10 text-xs font-bold text-text-primary outline-none transition-all"
