@@ -369,6 +369,14 @@ export default function ImportUtilityPage() {
         }
       });
       setWarehouseStock(mapping);
+
+      const successes = updatedData.filter(r => r.status === 'success').length;
+      const errors = updatedData.filter(r => r.status === 'error').length;
+      if (errors > 0) {
+        alert(`Ajuste de stock procesado con observaciones.\n\n- Ajustados con éxito: ${successes}\n- Con error: ${errors}\n\nRevise la columna 'Status' en la tabla para ver los detalles de los errores.`);
+      } else {
+        alert(`Ajuste de stock procesado con éxito.\n\nSe ajustaron ${successes} artículos correctamente.`);
+      }
     } catch (err: any) {
       alert(`Error al ejecutar importación de stock: ${err.message}`);
       const errorData = stockData.map(row => 
