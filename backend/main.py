@@ -4097,11 +4097,18 @@ async def create_purchase_receipt(receipt: PurchaseReceiptCreate, org_id: str = 
 @app.post("/inventory/issue-documents", response_model=IssueDocumentResponse, tags=["Inventory"])
 async def create_issue_document(doc: IssueDocumentCreate, org_id: str = Depends(get_active_org_id), user=Depends(get_current_user), db=Depends(get_db), _=Depends(require_permission("inventory.issue"))):
     # 1. Create the issue header
+    reason_db = doc.reason
+    notes_db = doc.notes
+    if reason_db not in ('sale', 'adjustment', 'waste', 'internal_consumption'):
+        # Fallback for constraint safety in case migration 041 is not yet applied
+        notes_db = f"[Motivo: {reason_db}] {notes_db or ''}".strip()
+        reason_db = 'adjustment'
+
     header_data = {
         "org_id": org_id,
         "warehouse_id": str(doc.warehouse_id),
-        "reason": doc.reason,
-        "notes": doc.notes,
+        "reason": reason_db,
+        "notes": notes_db,
         "status": "confirmed",
         "created_by": user.id
     }
@@ -4159,7 +4166,7 @@ async def create_issue_document(doc: IssueDocumentCreate, org_id: str = Depends(
             # Log movement
             movement_data = {
                 "org_id": org_id,
-                "movement_type": "adjustment_out" if doc.reason == "adjustment" else "sale",
+                "movement_type": "adjustment_out" if reason_db == "adjustment" else "sale",
                 "warehouse_id": str(doc.warehouse_id),
                 "item_id": str(line.item_id),
                 "lot_id": lot["id"],
@@ -4168,7 +4175,7 @@ async def create_issue_document(doc: IssueDocumentCreate, org_id: str = Depends(
                 "total_cost": -consume_qty * float(lot["unit_cost_base"]),
                 "reference_id": doc_id,
                 "reference_type": "issue_document",
-                "notes": doc.notes,
+                "notes": notes_db,
                 "created_by": user.id
             }
             db.table("stock_movements").insert(movement_data).execute()
