@@ -546,7 +546,7 @@ export const adminApi = {
         fetchWithAuth(`/roles?org_id=${orgId}`),
 
     getProfile: (): Promise<any> =>
-        fetchWithAuth('/auth/profile'),
+        fetchWithAuth('/me'),
 
     // Venues
     updateVenue: (id: string, data: { name?: string; address?: string }): Promise<Venue> =>
