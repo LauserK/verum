@@ -24,7 +24,11 @@ export default function InventorySnapshotPage() {
     }))
   }
 
-  const sortedSnapshotItems = [...snapshotItems].sort((a, b) => {
+  const filteredItems = selectedWarehouseId
+    ? snapshotItems.filter(item => item.warehouse_id === selectedWarehouseId)
+    : snapshotItems
+
+  const sortedSnapshotItems = [...filteredItems].sort((a, b) => {
     let aValue: any = (a as any)[sortConfig.key]
     let bValue: any = (b as any)[sortConfig.key]
 
@@ -78,7 +82,7 @@ export default function InventorySnapshotPage() {
   }
 
   // Group consolidated quantities by unit of measure
-  const qtyByUom = snapshotItems.reduce((acc, curr) => {
+  const qtyByUom = filteredItems.reduce((acc, curr) => {
     const uom = curr.uom_name || 'un'
     if (!acc[uom]) {
       acc[uom] = 0
@@ -88,7 +92,7 @@ export default function InventorySnapshotPage() {
   }, {} as Record<string, number>)
 
   const handleExportCSV = () => {
-    if (snapshotItems.length === 0) return
+    if (sortedSnapshotItems.length === 0) return
     
     // Header
     const csvRows = [
@@ -96,7 +100,7 @@ export default function InventorySnapshotPage() {
     ]
     
     // Body rows
-    snapshotItems.forEach(item => {
+    sortedSnapshotItems.forEach(item => {
       const row = [
         `"${item.item_code || ''}"`,
         `"${item.item_name}"`,
@@ -110,9 +114,14 @@ export default function InventorySnapshotPage() {
     
     const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + csvRows.join('\n')
     const encodedUri = encodeURI(csvContent)
+    
+    // Customize filename based on selected warehouse
+    const selectedWh = warehouses.find(w => w.id === selectedWarehouseId)
+    const whSuffix = selectedWh ? `-${selectedWh.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}` : ''
+    
     const link = document.createElement('a')
     link.setAttribute('href', encodedUri)
-    link.setAttribute('download', `inventario-snapshot-${date}.csv`)
+    link.setAttribute('download', `inventario-snapshot${whSuffix}-${date}.csv`)
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -165,7 +174,7 @@ export default function InventorySnapshotPage() {
           {/* Export Button */}
           <button 
             onClick={handleExportCSV}
-            disabled={snapshotItems.length === 0}
+            disabled={sortedSnapshotItems.length === 0}
             className="h-10 px-4 bg-primary hover:bg-primary-hover text-text-inverse disabled:opacity-50 disabled:hover:bg-primary rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-md shadow-primary/10 active:scale-[0.98]"
           >
             <Download className="w-3.5 h-3.5" />
@@ -182,7 +191,7 @@ export default function InventorySnapshotPage() {
           </div>
           <div>
             <p className="text-[10px] font-bold text-text-secondary uppercase tracking-wider">Productos con Registro</p>
-            <p className="text-xl font-black text-text-primary mt-0.5">{snapshotItems.length}</p>
+            <p className="text-xl font-black text-text-primary mt-0.5">{filteredItems.length}</p>
           </div>
         </div>
         <div className="bg-surface border border-border p-4 rounded-2xl shadow-sm flex items-start gap-4 min-h-[92px]">
@@ -227,7 +236,7 @@ export default function InventorySnapshotPage() {
             <Loader2 className="w-10 h-10 animate-spin text-primary opacity-40 mb-3" />
             <p className="text-[10px] font-black uppercase tracking-widest text-text-secondary">Generando snapshot...</p>
           </div>
-        ) : snapshotItems.length === 0 ? (
+        ) : filteredItems.length === 0 ? (
           <div className="p-20 text-center text-text-secondary text-xs">
             No se encontraron movimientos registrados en la fecha y almacenes seleccionados.
           </div>
