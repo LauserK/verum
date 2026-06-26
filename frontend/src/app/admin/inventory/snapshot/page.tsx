@@ -1,10 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, Fragment } from 'react'
 import { adminApi, Warehouse, StockSnapshotItem } from '@/lib/api'
-import { Loader2, ArrowLeft, Download, Calendar, Warehouse as WhIcon, DollarSign, Package, ChevronDown, ChevronUp } from 'lucide-react'
+import { Loader2, ArrowLeft, Download, Calendar, Warehouse as WhIcon, DollarSign, Package, Search, ChevronUp, ChevronDown } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'
+
+type SortField = 'item_code' | 'item_name' | 'warehouse_name' | 'qty_on_hand' | 'uom_name' | 'valuation';
+type GroupByOption = 'none' | 'warehouse' | 'item';
 
 export default function InventorySnapshotPage() {
   const [date, setDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'))
@@ -13,46 +16,11 @@ export default function InventorySnapshotPage() {
   
   const [loading, setLoading] = useState(false)
   const [snapshotItems, setSnapshotItems] = useState<StockSnapshotItem[]>([])
-  const [totalValuation, setTotalValuation] = useState<number>(0)
   
-  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' }>({ key: 'item_name', direction: 'asc' })
-
-  const handleSort = (key: string) => {
-    setSortConfig(prev => ({
-      key,
-      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
-    }))
-  }
-
-  const filteredItems = selectedWarehouseId
-    ? snapshotItems.filter(item => item.warehouse_id === selectedWarehouseId)
-    : snapshotItems
-
-  const sortedSnapshotItems = [...filteredItems].sort((a, b) => {
-    let aValue: any = (a as any)[sortConfig.key]
-    let bValue: any = (b as any)[sortConfig.key]
-
-    // Fallbacks for null or undefined values
-    if (aValue === null || aValue === undefined) aValue = ''
-    if (bValue === null || bValue === undefined) bValue = ''
-
-    if (typeof aValue === 'string') {
-      return sortConfig.direction === 'asc' 
-        ? aValue.localeCompare(bValue) 
-        : bValue.localeCompare(aValue)
-    } else {
-      return sortConfig.direction === 'asc' 
-        ? (aValue > bValue ? 1 : -1) 
-        : (aValue < bValue ? 1 : -1)
-    }
-  })
-
-  const SortIndicator = ({ column }: { column: string }) => {
-    if (sortConfig.key !== column) return <div className="w-3.5 h-3.5 opacity-10 flex items-center justify-center"><ChevronUp className="w-2.5 h-2.5" /></div>
-    return sortConfig.direction === 'asc' 
-      ? <ChevronUp className="w-2.5 h-2.5 text-primary" /> 
-      : <ChevronDown className="w-2.5 h-2.5 text-primary" />
-  }
+  const [searchTerm, setSearchTerm] = useState('')
+  const [groupBy, setGroupBy] = useState<GroupByOption>('none')
+  const [sortField, setSortField] = useState<SortField>('item_name')
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
   
   useEffect(() => {
     // Load warehouses
@@ -70,10 +38,7 @@ export default function InventorySnapshotPage() {
     setLoading(true)
     try {
       const res = await adminApi.getInventorySnapshot(date, selectedWarehouseId || undefined)
-      // Sort alphabetically by item name
-      const sorted = (res.items || []).sort((a, b) => a.item_name.localeCompare(b.item_name))
-      setSnapshotItems(sorted)
-      setTotalValuation(res.total_valuation || 0)
+      setSnapshotItems(res.items || [])
     } catch (err) {
       console.error('Error loading inventory snapshot:', err)
     } finally {
@@ -81,18 +46,178 @@ export default function InventorySnapshotPage() {
     }
   }
 
-  // Group consolidated quantities by unit of measure
-  const qtyByUom = filteredItems.reduce((acc, curr) => {
-    const uom = curr.uom_name || 'un'
-    if (!acc[uom]) {
-      acc[uom] = 0
+  // 1. Filter items by selected warehouse and search term
+  const filteredItems = useMemo(() => {
+    let items = snapshotItems;
+    if (selectedWarehouseId) {
+      items = items.filter(item => item.warehouse_id === selectedWarehouseId);
     }
-    acc[uom] += curr.qty_on_hand
-    return acc
-  }, {} as Record<string, number>)
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase().trim();
+      items = items.filter(item => 
+        (item.item_code || '').toLowerCase().includes(term) ||
+        item.item_name.toLowerCase().includes(term) ||
+        item.warehouse_name.toLowerCase().includes(term)
+      );
+    }
+    return items;
+  }, [snapshotItems, selectedWarehouseId, searchTerm])
+
+  // Group consolidated quantities by unit of measure
+  const qtyByUom = useMemo(() => {
+    return filteredItems.reduce((acc, curr) => {
+      const uom = curr.uom_name || 'un'
+      if (!acc[uom]) {
+        acc[uom] = 0
+      }
+      acc[uom] += curr.qty_on_hand
+      return acc
+    }, {} as Record<string, number>)
+  }, [filteredItems])
+
+  // 2. Calculate summary totals based on filtered items
+  const filteredTotalQty = useMemo(() => {
+    return filteredItems.reduce((acc, curr) => acc + curr.qty_on_hand, 0)
+  }, [filteredItems])
+
+  const filteredTotalValuation = useMemo(() => {
+    return filteredItems.reduce((acc, curr) => acc + curr.valuation, 0)
+  }, [filteredItems])
+
+  // Helper function to compare values for sorting
+  const compareValues = (a: any, b: any, field: SortField) => {
+    let valA = a[field]
+    let valB = b[field]
+
+    if (valA === undefined || valA === null) valA = ''
+    if (valB === undefined || valB === null) valB = ''
+
+    if (typeof valA === 'string' && typeof valB === 'string') {
+      return valA.localeCompare(valB, undefined, { sensitivity: 'base', numeric: true })
+    }
+
+    if (typeof valA === 'number' && typeof valB === 'number') {
+      return valA - valB
+    }
+
+    return String(valA).localeCompare(String(valB))
+  }
+
+  // 3. Sort items for ungrouped view
+  const sortedItems = useMemo(() => {
+    const items = [...filteredItems]
+    items.sort((a, b) => {
+      const comparison = compareValues(a, b, sortField)
+      return sortDirection === 'asc' ? comparison : -comparison
+    })
+    return items
+  }, [filteredItems, sortField, sortDirection])
+
+  // 4. Group items by warehouse
+  const warehouseGroups = useMemo(() => {
+    if (groupBy !== 'warehouse') return []
+    
+    const groupsMap: { [key: string]: StockSnapshotItem[] } = {}
+    
+    filteredItems.forEach(item => {
+      const key = item.warehouse_name || 'Sin Almacén'
+      if (!groupsMap[key]) {
+        groupsMap[key] = []
+      }
+      groupsMap[key].push(item)
+    })
+
+    const groupsList = Object.keys(groupsMap).map(warehouseName => {
+      const items = groupsMap[warehouseName]
+      const totalQty = items.reduce((sum, item) => sum + item.qty_on_hand, 0)
+      const totalValuation = items.reduce((sum, item) => sum + item.valuation, 0)
+
+      // Sort items within group
+      const sortedGroupItems = [...items].sort((a, b) => {
+        const comparison = compareValues(a, b, sortField)
+        return sortDirection === 'asc' ? comparison : -comparison
+      })
+
+      return {
+        warehouseName,
+        items: sortedGroupItems,
+        totalQty,
+        totalValuation
+      }
+    })
+
+    // Sort the groups themselves by warehouse name
+    groupsList.sort((a, b) => {
+      const comp = a.warehouseName.localeCompare(b.warehouseName)
+      return sortDirection === 'asc' ? comp : -comp
+    })
+    
+    return groupsList
+  }, [filteredItems, groupBy, sortField, sortDirection])
+
+  // 5. Consolidate/Group items by article
+  const consolidatedItems = useMemo(() => {
+    if (groupBy !== 'item') return []
+
+    const itemMap: { [key: string]: {
+      item_code?: string | null;
+      item_name: string;
+      uom_name?: string | null;
+      qty_on_hand: number;
+      valuation: number;
+      warehousesList: Set<string>;
+    }} = {}
+
+    filteredItems.forEach(item => {
+      const key = `${item.item_code || ''}_${item.item_name}`
+      if (!itemMap[key]) {
+        itemMap[key] = {
+          item_code: item.item_code,
+          item_name: item.item_name,
+          uom_name: item.uom_name,
+          qty_on_hand: 0,
+          valuation: 0,
+          warehousesList: new Set()
+        }
+      }
+      const entry = itemMap[key]
+      entry.qty_on_hand += item.qty_on_hand
+      entry.valuation += item.valuation
+      if (item.warehouse_name) {
+        entry.warehousesList.add(item.warehouse_name)
+      }
+    })
+
+    const list = Object.values(itemMap).map(entry => ({
+      item_code: entry.item_code,
+      item_name: entry.item_name,
+      uom_name: entry.uom_name,
+      qty_on_hand: entry.qty_on_hand,
+      valuation: entry.valuation,
+      warehouse_name: Array.from(entry.warehousesList).join(', ') || '---'
+    }))
+
+    // Sort the consolidated items
+    list.sort((a, b) => {
+      const comparison = compareValues(a, b, sortField)
+      return sortDirection === 'asc' ? comparison : -comparison
+    })
+
+    return list
+  }, [filteredItems, groupBy, sortField, sortDirection])
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortDirection('asc')
+    }
+  }
 
   const handleExportCSV = () => {
-    if (sortedSnapshotItems.length === 0) return
+    const itemsToExport = groupBy === 'item' ? consolidatedItems : (groupBy === 'warehouse' ? filteredItems : sortedItems)
+    if (itemsToExport.length === 0) return
     
     // Header
     const csvRows = [
@@ -100,7 +225,7 @@ export default function InventorySnapshotPage() {
     ]
     
     // Body rows
-    sortedSnapshotItems.forEach(item => {
+    itemsToExport.forEach(item => {
       const row = [
         `"${item.item_code || ''}"`,
         `"${item.item_name}"`,
@@ -115,16 +240,38 @@ export default function InventorySnapshotPage() {
     const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + csvRows.join('\n')
     const encodedUri = encodeURI(csvContent)
     
-    // Customize filename based on selected warehouse
+    // Customize filename based on selected warehouse & grouping
     const selectedWh = warehouses.find(w => w.id === selectedWarehouseId)
     const whSuffix = selectedWh ? `-${selectedWh.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}` : ''
+    const groupSuffix = groupBy !== 'none' ? `-agrupado-${groupBy}` : ''
     
     const link = document.createElement('a')
     link.setAttribute('href', encodedUri)
-    link.setAttribute('download', `inventario-snapshot${whSuffix}-${date}.csv`)
+    link.setAttribute('download', `inventario-snapshot${whSuffix}-${date}${groupSuffix}.csv`)
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
+  }
+
+  const renderSortableHeader = (field: SortField, label: string, align: 'left' | 'center' | 'right' = 'left', extraClass: string = '') => {
+    const isActive = sortField === field
+    return (
+      <th 
+        onClick={() => handleSort(field)}
+        className={`p-3.5 px-4 font-bold text-text-secondary uppercase tracking-wider text-[9px] cursor-pointer hover:bg-surface-raised transition-colors select-none group ${extraClass}`}
+      >
+        <div className={`flex items-center gap-1 ${align === 'right' ? 'justify-end' : align === 'center' ? 'justify-center' : 'justify-start'}`}>
+          <span>{label}</span>
+          <span className="w-3.5 h-3.5 flex items-center justify-center">
+            {isActive ? (
+              sortDirection === 'asc' ? <ChevronUp className="w-3.5 h-3.5 text-primary" /> : <ChevronDown className="w-3.5 h-3.5 text-primary" />
+            ) : (
+              <ChevronUp className="w-3.5 h-3.5 opacity-0 group-hover:opacity-40 text-text-secondary transition-opacity" />
+            )}
+          </span>
+        </div>
+      </th>
+    )
   }
 
   return (
@@ -174,7 +321,7 @@ export default function InventorySnapshotPage() {
           {/* Export Button */}
           <button 
             onClick={handleExportCSV}
-            disabled={sortedSnapshotItems.length === 0}
+            disabled={groupBy === 'item' ? consolidatedItems.length === 0 : (groupBy === 'warehouse' ? warehouseGroups.length === 0 : sortedItems.length === 0)}
             className="h-10 px-4 bg-primary hover:bg-primary-hover text-text-inverse disabled:opacity-50 disabled:hover:bg-primary rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-md shadow-primary/10 active:scale-[0.98]"
           >
             <Download className="w-3.5 h-3.5" />
@@ -191,7 +338,9 @@ export default function InventorySnapshotPage() {
           </div>
           <div>
             <p className="text-[10px] font-bold text-text-secondary uppercase tracking-wider">Productos con Registro</p>
-            <p className="text-xl font-black text-text-primary mt-0.5">{filteredItems.length}</p>
+            <p className="text-xl font-black text-text-primary mt-0.5">
+              {loading ? '...' : (groupBy === 'item' ? consolidatedItems.length : filteredItems.length)}
+            </p>
           </div>
         </div>
         <div className="bg-surface border border-border p-4 rounded-2xl shadow-sm flex items-start gap-4 min-h-[92px]">
@@ -223,8 +372,48 @@ export default function InventorySnapshotPage() {
           <div>
             <p className="text-[10px] font-bold text-text-secondary uppercase tracking-wider">Valoración Histórica (PEPS)</p>
             <p className="text-xl font-black text-success mt-0.5">
-              {loading ? '...' : `$${totalValuation.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              {loading ? '...' : `$${filteredTotalValuation.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
             </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Search and Grouping Toolbar */}
+      <div className="bg-surface border border-border p-4 rounded-2xl shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
+        {/* Search */}
+        <div className="relative w-full md:max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary pointer-events-none" />
+          <input 
+            type="text" 
+            placeholder="Buscar por código, artículo o almacén..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            className="w-full bg-surface-raised border border-border rounded-xl pl-10 pr-4 h-10 text-xs font-medium outline-none focus:border-primary transition-all"
+          />
+        </div>
+
+        {/* Group By */}
+        <div className="flex items-center gap-3 w-full md:w-auto justify-end">
+          <span className="text-xs font-bold text-text-secondary uppercase tracking-wider whitespace-nowrap">Agrupar por:</span>
+          <div className="flex bg-surface-raised border border-border p-0.5 rounded-xl">
+            <button
+              onClick={() => setGroupBy('none')}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${groupBy === 'none' ? 'bg-surface text-primary shadow-sm' : 'text-text-secondary hover:text-text-primary'}`}
+            >
+              Ninguno
+            </button>
+            <button
+              onClick={() => setGroupBy('warehouse')}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${groupBy === 'warehouse' ? 'bg-surface text-primary shadow-sm' : 'text-text-secondary hover:text-text-primary'}`}
+            >
+              Almacén
+            </button>
+            <button
+              onClick={() => setGroupBy('item')}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${groupBy === 'item' ? 'bg-surface text-primary shadow-sm' : 'text-text-secondary hover:text-text-primary'}`}
+            >
+              Artículo
+            </button>
           </div>
         </div>
       </div>
@@ -240,86 +429,114 @@ export default function InventorySnapshotPage() {
           <div className="p-20 text-center text-text-secondary text-xs">
             No se encontraron movimientos registrados en la fecha y almacenes seleccionados.
           </div>
+        ) : (groupBy === 'warehouse' ? warehouseGroups.length === 0 : groupBy === 'item' ? consolidatedItems.length === 0 : sortedItems.length === 0) ? (
+          <div className="p-20 text-center text-text-secondary text-xs flex flex-col items-center gap-2">
+            <span className="font-semibold text-text-primary">Sin resultados</span>
+            <span>No hay artículos que coincidan con la búsqueda "{searchTerm}".</span>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="border-b border-border bg-surface-raised">
-                  <th 
-                    className="p-3.5 px-4 font-bold text-text-secondary uppercase tracking-wider w-28 text-[9px] cursor-pointer hover:bg-surface-raised/60 transition-colors select-none"
-                    onClick={() => handleSort('item_code')}
-                  >
-                    <div className="flex items-center gap-1">
-                      Código
-                      <SortIndicator column="item_code" />
-                    </div>
-                  </th>
-                  <th 
-                    className="p-3.5 px-4 font-bold text-text-secondary uppercase tracking-wider text-[9px] cursor-pointer hover:bg-surface-raised/60 transition-colors select-none"
-                    onClick={() => handleSort('item_name')}
-                  >
-                    <div className="flex items-center gap-1">
-                      Artículo
-                      <SortIndicator column="item_name" />
-                    </div>
-                  </th>
-                  <th 
-                    className="p-3.5 px-4 font-bold text-text-secondary uppercase tracking-wider text-[9px] cursor-pointer hover:bg-surface-raised/60 transition-colors select-none"
-                    onClick={() => handleSort('warehouse_name')}
-                  >
-                    <div className="flex items-center gap-1">
-                      Almacén
-                      <SortIndicator column="warehouse_name" />
-                    </div>
-                  </th>
-                  <th 
-                    className="p-3.5 px-4 font-bold text-text-secondary uppercase tracking-wider text-[9px] text-right cursor-pointer hover:bg-surface-raised/60 transition-colors select-none"
-                    onClick={() => handleSort('qty_on_hand')}
-                  >
-                    <div className="flex items-center justify-end gap-1">
-                      Cantidad en Mano
-                      <SortIndicator column="qty_on_hand" />
-                    </div>
-                  </th>
-                  <th 
-                    className="p-3.5 px-4 font-bold text-text-secondary uppercase tracking-wider text-[9px] text-center w-20 cursor-pointer hover:bg-surface-raised/60 transition-colors select-none"
-                    onClick={() => handleSort('uom_name')}
-                  >
-                    <div className="flex items-center justify-center gap-1">
-                      U.M.
-                      <SortIndicator column="uom_name" />
-                    </div>
-                  </th>
-                  <th 
-                    className="p-3.5 px-4 font-bold text-text-secondary uppercase tracking-wider text-[9px] text-right w-36 cursor-pointer hover:bg-surface-raised/60 transition-colors select-none"
-                    onClick={() => handleSort('valuation')}
-                  >
-                    <div className="flex items-center justify-end gap-1">
-                      Valoración ($)
-                      <SortIndicator column="valuation" />
-                    </div>
-                  </th>
+                  {renderSortableHeader('item_code', 'Código', 'left', 'w-28')}
+                  {renderSortableHeader('item_name', 'Artículo')}
+                  {renderSortableHeader('warehouse_name', 'Almacén')}
+                  {renderSortableHeader('qty_on_hand', 'Cantidad en Mano', 'right')}
+                  {renderSortableHeader('uom_name', 'U.M.', 'center', 'w-20')}
+                  {renderSortableHeader('valuation', 'Valoración ($)', 'right', 'w-36')}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
-                {sortedSnapshotItems.map((item, idx) => (
-                  <tr key={idx} className="hover:bg-surface-raised/40 transition-colors">
-                    <td className="p-3.5 px-4 font-medium text-text-secondary">{item.item_code || '---'}</td>
-                    <td className="p-3.5 px-4 font-semibold text-text-primary">{item.item_name}</td>
-                    <td className="p-3.5 px-4 font-medium text-text-secondary">{item.warehouse_name}</td>
-                    <td className="p-3.5 px-4 text-right font-bold text-text-primary">
-                      {item.qty_on_hand.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
-                    </td>
-                    <td className="p-3.5 px-4 text-center">
-                      <span className="text-[9px] font-semibold text-text-secondary bg-surface-raised border border-border/40 px-1.5 py-0.5 rounded uppercase tracking-wider">
-                        {item.uom_name || 'un'}
-                      </span>
-                    </td>
-                    <td className="p-3.5 px-4 text-right font-black text-primary">
-                      ${item.valuation.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </td>
-                  </tr>
-                ))}
+                {groupBy === 'warehouse' && (
+                  warehouseGroups.map((group, groupIdx) => (
+                    <Fragment key={groupIdx}>
+                      {/* Group Header Row */}
+                      <tr className="bg-surface-raised/80 font-bold border-y border-border">
+                        <td colSpan={6} className="p-3.5 px-4 text-xs text-text-primary font-bold">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <WhIcon className="w-4 h-4 text-primary" />
+                              <span>Almacén: {group.warehouseName}</span>
+                              <span className="text-[10px] font-normal text-text-secondary bg-surface border border-border px-2 py-0.5 rounded-full">
+                                {group.items.length} {group.items.length === 1 ? 'artículo' : 'artículos'}
+                              </span>
+                            </div>
+                            <div className="flex gap-4 text-[10px] font-semibold text-text-secondary">
+                              <span>Cant. Consolidada: <strong className="text-text-primary">{group.totalQty.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</strong></span>
+                              <span>Valoración: <strong className="text-success">${group.totalValuation.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                      {/* Group Items */}
+                      {group.items.map((item, itemIdx) => (
+                        <tr key={`${groupIdx}-${itemIdx}`} className="hover:bg-surface-raised/40 transition-colors">
+                          <td className="p-3.5 px-4 font-medium text-text-secondary">{item.item_code || '---'}</td>
+                          <td className="p-3.5 px-4 font-semibold text-text-primary">{item.item_name}</td>
+                          <td className="p-3.5 px-4 font-medium text-text-secondary">{item.warehouse_name}</td>
+                          <td className="p-3.5 px-4 text-right font-bold text-text-primary">
+                            {item.qty_on_hand.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                          </td>
+                          <td className="p-3.5 px-4 text-center">
+                            <span className="text-[9px] font-semibold text-text-secondary bg-surface-raised border border-border/40 px-1.5 py-0.5 rounded uppercase tracking-wider">
+                              {item.uom_name || 'un'}
+                            </span>
+                          </td>
+                          <td className="p-3.5 px-4 text-right font-black text-primary">
+                            ${item.valuation.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      ))}
+                    </Fragment>
+                  ))
+                )}
+
+                {groupBy === 'item' && (
+                  consolidatedItems.map((item, idx) => (
+                    <tr key={idx} className="hover:bg-surface-raised/40 transition-colors">
+                      <td className="p-3.5 px-4 font-medium text-text-secondary">{item.item_code || '---'}</td>
+                      <td className="p-3.5 px-4 font-semibold text-text-primary">{item.item_name}</td>
+                      <td className="p-3.5 px-4 font-medium text-text-secondary italic">
+                        <span title={item.warehouse_name} className="truncate max-w-[200px] block">
+                          {item.warehouse_name}
+                        </span>
+                      </td>
+                      <td className="p-3.5 px-4 text-right font-bold text-text-primary">
+                        {item.qty_on_hand.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                      </td>
+                      <td className="p-3.5 px-4 text-center">
+                        <span className="text-[9px] font-semibold text-text-secondary bg-surface-raised border border-border/40 px-1.5 py-0.5 rounded uppercase tracking-wider">
+                          {item.uom_name || 'un'}
+                        </span>
+                      </td>
+                      <td className="p-3.5 px-4 text-right font-black text-primary">
+                        ${item.valuation.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  ))
+                )}
+
+                {groupBy === 'none' && (
+                  sortedItems.map((item, idx) => (
+                    <tr key={idx} className="hover:bg-surface-raised/40 transition-colors">
+                      <td className="p-3.5 px-4 font-medium text-text-secondary">{item.item_code || '---'}</td>
+                      <td className="p-3.5 px-4 font-semibold text-text-primary">{item.item_name}</td>
+                      <td className="p-3.5 px-4 font-medium text-text-secondary">{item.warehouse_name}</td>
+                      <td className="p-3.5 px-4 text-right font-bold text-text-primary">
+                        {item.qty_on_hand.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                      </td>
+                      <td className="p-3.5 px-4 text-center">
+                        <span className="text-[9px] font-semibold text-text-secondary bg-surface-raised border border-border/40 px-1.5 py-0.5 rounded uppercase tracking-wider">
+                          {item.uom_name || 'un'}
+                        </span>
+                      </td>
+                      <td className="p-3.5 px-4 text-right font-black text-primary">
+                        ${item.valuation.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

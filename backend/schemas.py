@@ -450,6 +450,7 @@ class ItemCreate(BaseModel):
     yield_alert_enabled: bool = False
     yield_alert_threshold_pct: Optional[float] = None
     shelf_life_days: Optional[int] = None
+    last_purchase_cost: Optional[float] = None
     presentations: List[UOMPresentationCreate] = []
 
 class ItemResponse(BaseModel):
@@ -475,6 +476,7 @@ class ItemUpdate(BaseModel):
     yield_alert_enabled: Optional[bool] = None
     yield_alert_threshold_pct: Optional[float] = None
     shelf_life_days: Optional[int] = None
+    last_purchase_cost: Optional[float] = None
 
 class WarehouseCreate(BaseModel):
     name: str
@@ -835,5 +837,26 @@ class StockValuationItem(BaseModel):
 class StockValuationResponse(BaseModel):
     items: List[StockValuationItem]
     total_valuation: float
+
+
+class StockAdjustItem(BaseModel):
+    item_code: str
+    qty_counted: float
+
+class BulkStockAdjustRequest(BaseModel):
+    warehouse_id: UUID
+    adjustments: List[StockAdjustItem]
+
+class StockAdjustResult(BaseModel):
+    item_code: str
+    status: str  # "success" or "error"
+    error_message: Optional[str] = None
+    qty_expected: Optional[float] = None
+    qty_counted: Optional[float] = None
+    difference: Optional[float] = None
+
+class BulkStockAdjustResponse(BaseModel):
+    results: List[StockAdjustResult]
+
 
 

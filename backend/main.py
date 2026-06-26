@@ -45,7 +45,8 @@ from schemas import (
     ProductionOrderCreate, ProductionOrderResponse, ProductionOrderDetailResponse, OrderStatusUpdate, OrderCompleteRequest,
     CateringRequestCreate, CateringRequestResponse, MRPResultResponse, MRPPlanRequest, GenerateOrdersRequest,
     PhysicalInventoryCreate, PhysicalInventoryResponse, PhysicalInventoryBriefResponse,
-    StockSnapshotResponse, StockValuationResponse
+    StockSnapshotResponse, StockValuationResponse,
+    BulkStockAdjustRequest, BulkStockAdjustResponse, StockAdjustResult, StockAdjustItem
 )
 
 CARACAS_TZ = pytz.timezone("America/Caracas")
@@ -3724,7 +3725,9 @@ async def create_item(item: ItemCreate, org_id: str = Depends(get_active_org_id)
         "base_uom_id": str(item.base_uom_id),
         "yield_alert_enabled": item.yield_alert_enabled,
         "yield_alert_threshold_pct": item.yield_alert_threshold_pct,
-        "shelf_life_days": item.shelf_life_days
+        "shelf_life_days": item.shelf_life_days,
+        "last_purchase_cost": item.last_purchase_cost,
+        "last_purchase_cost_updated_at": datetime.now(CARACAS_TZ).isoformat() if item.last_purchase_cost is not None else None
     }
     
     res = db.table("items").insert(data).execute()
@@ -3816,6 +3819,9 @@ async def update_item(item_id: UUID, item: ItemUpdate, db=Depends(get_db), _=Dep
     update_data = {k: (str(v) if isinstance(v, UUID) else v) 
                    for k, v in full_data.items()}
     
+    if "last_purchase_cost" in update_data:
+        update_data["last_purchase_cost_updated_at"] = datetime.now(CARACAS_TZ).isoformat()
+        
     if not update_data:
         raise HTTPException(status_code=400, detail="No data to update")
 
@@ -5939,5 +5945,194 @@ async def process_physical_inventory(
     }).eq("id", str(id)).execute()
 
     return await get_physical_inventory_detail(id, db)
+
+
+@app.post("/inventory/bulk-adjust-stock", response_model=BulkStockAdjustResponse, tags=["Inventory"])
+async def bulk_adjust_stock(
+    body: BulkStockAdjustRequest,
+    org_id: str = Depends(get_active_org_id),
+    user=Depends(get_current_user),
+    db=Depends(get_db),
+    _=Depends(require_permission("inventory.audit_count"))
+):
+    # Verify warehouse exists and belongs to active org
+    wh_res = db.table("warehouses").select("id").eq("id", str(body.warehouse_id)).eq("org_id", org_id).execute()
+    if not wh_res.data:
+        raise HTTPException(status_code=404, detail="Warehouse not found or access denied")
+
+    results = []
+    for adj in body.adjustments:
+        item_code = adj.item_code
+        qty_counted = adj.qty_counted
+        
+        # 1. Fetch item
+        item_res = db.table("items").select("id, last_purchase_cost").eq("code", item_code).eq("org_id", org_id).execute()
+        if not item_res.data:
+            results.append(StockAdjustResult(
+                item_code=item_code,
+                status="error",
+                error_message="Artículo no registrado",
+                qty_counted=qty_counted
+            ))
+            continue
+            
+        item = item_res.data[0]
+        item_id = item["id"]
+        last_purchase_cost = float(item["last_purchase_cost"]) if item.get("last_purchase_cost") is not None else 0.0
+        
+        # 2. Get expected quantity in stock
+        stock_res = db.table("stock").select("id, qty_base").eq("warehouse_id", str(body.warehouse_id)).eq("item_id", str(item_id)).execute()
+        qty_expected = float(stock_res.data[0]["qty_base"]) if stock_res.data else 0.0
+        
+        difference = qty_counted - qty_expected
+        
+        if difference == 0.0:
+            results.append(StockAdjustResult(
+                item_code=item_code,
+                status="success",
+                qty_expected=qty_expected,
+                qty_counted=qty_counted,
+                difference=0.0
+            ))
+            continue
+            
+        # 3. Process adjustments
+        try:
+            if difference > 0.0:
+                # Positive Adjustment
+                # Create stock lot
+                lot_data = {
+                    "warehouse_id": str(body.warehouse_id),
+                    "item_id": str(item_id),
+                    "lot_number": "AJUSTE-IMPORTACION",
+                    "qty_base": difference,
+                    "unit_cost_base": last_purchase_cost,
+                    "is_exhausted": False
+                }
+                lot_res = db.table("stock_lots").insert(lot_data).execute()
+                if not lot_res.data:
+                    raise Exception("Error creating stock lot")
+                lot_id = lot_res.data[0]["id"]
+                
+                # Log movement
+                movement_data = {
+                    "org_id": org_id,
+                    "movement_type": "adjustment_in",
+                    "warehouse_id": str(body.warehouse_id),
+                    "item_id": str(item_id),
+                    "lot_id": lot_id,
+                    "qty_base": difference,
+                    "unit_cost_base": last_purchase_cost,
+                    "total_cost": difference * last_purchase_cost,
+                    "created_by": user.id,
+                    "notes": "Ajuste de stock por importación de Excel"
+                }
+                db.table("stock_movements").insert(movement_data).execute()
+                
+                # Update stock
+                if stock_res.data:
+                    db.table("stock").update({
+                        "qty_base": qty_expected + difference
+                    }).eq("id", stock_res.data[0]["id"]).execute()
+                else:
+                    db.table("stock").insert({
+                        "warehouse_id": str(body.warehouse_id),
+                        "item_id": str(item_id),
+                        "qty_base": difference
+                    }).execute()
+                    
+            else:
+                # Negative Adjustment
+                qty_to_consume = abs(difference)
+                
+                # Fetch non-exhausted lots for this item/warehouse, ordered by received_at asc
+                lots_res = db.table("stock_lots") \
+                    .select("id, qty_base, unit_cost_base") \
+                    .eq("item_id", str(item_id)) \
+                    .eq("warehouse_id", str(body.warehouse_id)) \
+                    .eq("is_exhausted", False) \
+                    .order("received_at", desc=False) \
+                    .execute()
+                
+                remaining = qty_to_consume
+                available_lots = lots_res.data or []
+                
+                for lot in available_lots:
+                    if remaining <= 0.0:
+                        break
+                    lot_qty = float(lot["qty_base"])
+                    consume_qty = min(remaining, lot_qty)
+                    
+                    new_lot_qty = lot_qty - consume_qty
+                    db.table("stock_lots").update({
+                        "qty_base": new_lot_qty,
+                        "is_exhausted": new_lot_qty <= 0.0
+                    }).eq("id", lot["id"]).execute()
+                    
+                    # Log movement
+                    movement_data = {
+                        "org_id": org_id,
+                        "movement_type": "adjustment_out",
+                        "warehouse_id": str(body.warehouse_id),
+                        "item_id": str(item_id),
+                        "lot_id": lot["id"],
+                        "qty_base": -consume_qty,
+                        "unit_cost_base": float(lot["unit_cost_base"]),
+                        "total_cost": -consume_qty * float(lot["unit_cost_base"]),
+                        "created_by": user.id,
+                        "notes": "Ajuste de stock por importación de Excel"
+                    }
+                    db.table("stock_movements").insert(movement_data).execute()
+                    
+                    remaining -= consume_qty
+                
+                # Discrepancy: if remaining > 0, log adjustment_out without lot_id
+                if remaining > 0.0:
+                    movement_data = {
+                        "org_id": org_id,
+                        "movement_type": "adjustment_out",
+                        "warehouse_id": str(body.warehouse_id),
+                        "item_id": str(item_id),
+                        "lot_id": None,
+                        "qty_base": -remaining,
+                        "unit_cost_base": last_purchase_cost,
+                        "total_cost": -remaining * last_purchase_cost,
+                        "created_by": user.id,
+                        "notes": "Ajuste de stock por importación de Excel (ajuste de diferencia sin lote)"
+                    }
+                    db.table("stock_movements").insert(movement_data).execute()
+                
+                # Update main stock table to physical counted qty
+                if stock_res.data:
+                    db.table("stock").update({
+                        "qty_base": max(0.0, qty_counted)
+                    }).eq("id", stock_res.data[0]["id"]).execute()
+                else:
+                    db.table("stock").insert({
+                        "warehouse_id": str(body.warehouse_id),
+                        "item_id": str(item_id),
+                        "qty_base": max(0.0, qty_counted)
+                    }).execute()
+                    
+            results.append(StockAdjustResult(
+                item_code=item_code,
+                status="success",
+                qty_expected=qty_expected,
+                qty_counted=qty_counted,
+                difference=difference
+            ))
+            
+        except Exception as e:
+            results.append(StockAdjustResult(
+                item_code=item_code,
+                status="error",
+                error_message=str(e),
+                qty_expected=qty_expected,
+                qty_counted=qty_counted,
+                difference=difference
+            ))
+            
+    return BulkStockAdjustResponse(results=results)
+
 
 

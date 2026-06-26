@@ -93,6 +93,7 @@ export default function MobileInventoryCount() {
       if (!openScanner) return
 
       try {
+        // @ts-ignore
         const { Html5Qrcode } = await import('html5-qrcode')
         const scanner = new Html5Qrcode('warehouse-qr-reader')
         scannerInstance = scanner
@@ -101,12 +102,12 @@ export default function MobileInventoryCount() {
           { facingMode: 'environment' },
           {
             fps: 10,
-            qrbox: (width, height) => {
+            qrbox: (width: number, height: number) => {
               const size = Math.min(width, height) * 0.7
               return { width: size, height: size }
             }
           },
-          (decodedText) => {
+          (decodedText: string) => {
             const trimmed = decodedText.trim()
             const matchedWh = warehouses.find(wh => 
               wh.id === trimmed || 
@@ -116,7 +117,7 @@ export default function MobileInventoryCount() {
             if (matchedWh) {
               setSelectedWarehouseId(matchedWh.id)
               setOpenScanner(false)
-              scanner.stop().catch(err => console.error('Error stopping scanner:', err))
+              scanner.stop().catch((err: any) => console.error('Error stopping scanner:', err))
             } else {
               setScannerError(`Código no corresponde a ningún almacén activo: "${trimmed}"`)
             }
@@ -148,6 +149,7 @@ export default function MobileInventoryCount() {
       if (!openItemScanner) return
 
       try {
+        // @ts-ignore
         const { Html5Qrcode } = await import('html5-qrcode')
         const scanner = new Html5Qrcode('item-qr-reader')
         scannerInstance = scanner
@@ -156,12 +158,12 @@ export default function MobileInventoryCount() {
           { facingMode: 'environment' },
           {
             fps: 10,
-            qrbox: (width, height) => {
+            qrbox: (width: number, height: number) => {
               const size = Math.min(width, height) * 0.7
               return { width: size, height: size }
             }
           },
-          async (decodedText) => {
+          async (decodedText: string) => {
             const trimmed = decodedText.trim()
             const queryLower = trimmed.toLowerCase()
 
@@ -175,7 +177,7 @@ export default function MobileInventoryCount() {
             if (matchedItem) {
               selectItem(matchedItem)
               setOpenItemScanner(false)
-              scanner.stop().catch(err => console.error('Error stopping scanner:', err))
+              scanner.stop().catch((err: any) => console.error('Error stopping scanner:', err))
               return
             }
 
@@ -185,10 +187,10 @@ export default function MobileInventoryCount() {
               if (res && res.item) {
                 selectItem(res.item)
                 setOpenItemScanner(false)
-                scanner.stop().catch(err => console.error('Error stopping scanner:', err))
+                scanner.stop().catch((err: any) => console.error('Error stopping scanner:', err))
                 return
               }
-            } catch (err) {
+            } catch (err: any) {
               console.error('Error resolving lot number from scanned text:', err)
             }
 
