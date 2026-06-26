@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { adminApi, StockMovement, InventoryItem, Warehouse } from '@/lib/api';
-import { Loader2, ArrowLeft, Printer, ArrowUpRight, ArrowDownRight, History, Search, Plus, ArrowRightLeft, Download } from 'lucide-react';
+import { Loader2, ArrowLeft, Printer, ArrowUpRight, ArrowDownRight, History, Search, Plus, ArrowRightLeft, Download, Package } from 'lucide-react';
 import Link from 'next/link';
 import { useReactToPrint } from 'react-to-print';
 import { MovementPrint } from '@/components/inventory/MovementPrint';
@@ -17,6 +17,8 @@ export default function KardexPage() {
   const [movements, setMovements] = useState<StockMovement[]>([]);
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [itemSearchQuery, setItemSearchQuery] = useState('');
+  const [showItemSuggestions, setShowItemSuggestions] = useState(false);
   
   const [loading, setLoading] = useState(true);
   const [fetchingDetail, setFetchingDetail] = useState(false);
@@ -66,6 +68,17 @@ export default function KardexPage() {
   useEffect(() => {
     loadMovements();
   }, [filters]);
+
+  useEffect(() => {
+    if (!filters.item_id) {
+      setItemSearchQuery('');
+    } else {
+      const item = items.find(i => i.id === filters.item_id);
+      if (item && itemSearchQuery !== item.name) {
+        setItemSearchQuery(item.name);
+      }
+    }
+  }, [filters.item_id, items]);
 
   async function loadInitialData() {
     try {
@@ -358,18 +371,90 @@ export default function KardexPage() {
       {/* Filtros */}
       <div className="bg-surface rounded-2xl border border-border p-6 shadow-sm">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
-          <div className="space-y-2">
+          <div className="space-y-2 relative">
             <label className="text-xs font-bold text-text-secondary uppercase tracking-widest px-1">Artículo</label>
-            <select 
-              value={filters.item_id}
-              onChange={e => setFilters({ ...filters, item_id: e.target.value })}
-              className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-xs text-text-primary outline-none focus:border-primary appearance-none cursor-pointer"
-            >
-              <option value="">Todos los artículos</option>
-              {items.map(item => (
-                <option key={item.id} value={item.id}>{item.name}</option>
-              ))}
-            </select>
+            <div className="relative">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary pointer-events-none z-10" />
+              <input
+                type="text"
+                value={itemSearchQuery}
+                onFocus={() => setShowItemSuggestions(true)}
+                onBlur={() => {
+                  setTimeout(() => {
+                    setShowItemSuggestions(false);
+                  }, 200);
+                }}
+                onChange={e => {
+                  const val = e.target.value;
+                  setItemSearchQuery(val);
+                  setShowItemSuggestions(true);
+                  if (!val) {
+                    setFilters(prev => ({ ...prev, item_id: '' }));
+                  }
+                }}
+                placeholder="Buscar artículo..."
+                className="w-full bg-surface border border-border rounded-xl pl-10 pr-10 h-11 text-xs text-text-primary outline-none focus:border-primary placeholder-text-secondary/60 transition-all font-semibold"
+              />
+              {itemSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setItemSearchQuery('');
+                    setFilters(prev => ({ ...prev, item_id: '' }));
+                    setShowItemSuggestions(false);
+                  }}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary hover:text-text-primary flex items-center justify-center rounded-full bg-border/20 z-10 transition-colors"
+                >
+                  <Plus className="w-3.5 h-3.5 rotate-45" />
+                </button>
+              )}
+            </div>
+
+            {showItemSuggestions && (
+              <div className="absolute z-50 w-full mt-1 bg-surface border border-border rounded-xl shadow-xl max-h-60 overflow-y-auto z-[9999]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setItemSearchQuery('');
+                    setFilters(prev => ({ ...prev, item_id: '' }));
+                    setShowItemSuggestions(false);
+                  }}
+                  className="w-full text-left px-4 py-3 hover:bg-surface-raised border-b border-border text-xs font-semibold text-text-secondary flex items-center gap-2"
+                >
+                  <Package className="w-3.5 h-3.5 text-text-disabled" />
+                  Todos los artículos
+                </button>
+                {items
+                  .filter(item => {
+                    if (!itemSearchQuery) return true;
+                    return (
+                      item.name.toLowerCase().includes(itemSearchQuery.toLowerCase()) ||
+                      (item.code || '').toLowerCase().includes(itemSearchQuery.toLowerCase())
+                    );
+                  })
+                  .map(item => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        setItemSearchQuery(item.name);
+                        setFilters(prev => ({ ...prev, item_id: item.id }));
+                        setShowItemSuggestions(false);
+                      }}
+                      className="w-full text-left px-4 py-3 hover:bg-surface-raised border-b border-border last:border-0 flex items-center gap-3 text-xs"
+                    >
+                      <Package className="w-4 h-4 text-primary shrink-0" />
+                      <div className="min-w-0">
+                        <p className="font-semibold text-text-primary truncate">{item.name}</p>
+                        <p className="text-[10px] text-text-secondary uppercase mt-0.5 font-medium">
+                          {item.code || 'S/C'} • {item.uom_name || 'un'}
+                        </p>
+                      </div>
+                    </button>
+                  ))
+                }
+              </div>
+            )}
           </div>
           <div className="space-y-2">
             <label className="text-xs font-bold text-text-secondary uppercase tracking-widest px-1">Almacén</label>
