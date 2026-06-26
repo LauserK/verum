@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { adminApi, Warehouse, StockSnapshotItem } from '@/lib/api'
-import { Loader2, ArrowLeft, Download, Calendar, Warehouse as WhIcon, DollarSign, Package, ChevronDown } from 'lucide-react'
+import { Loader2, ArrowLeft, Download, Calendar, Warehouse as WhIcon, DollarSign, Package, ChevronDown, ChevronUp } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'
 
@@ -14,6 +14,41 @@ export default function InventorySnapshotPage() {
   const [loading, setLoading] = useState(false)
   const [snapshotItems, setSnapshotItems] = useState<StockSnapshotItem[]>([])
   const [totalValuation, setTotalValuation] = useState<number>(0)
+  
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' }>({ key: 'item_name', direction: 'asc' })
+
+  const handleSort = (key: string) => {
+    setSortConfig(prev => ({
+      key,
+      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
+    }))
+  }
+
+  const sortedSnapshotItems = [...snapshotItems].sort((a, b) => {
+    let aValue: any = (a as any)[sortConfig.key]
+    let bValue: any = (b as any)[sortConfig.key]
+
+    // Fallbacks for null or undefined values
+    if (aValue === null || aValue === undefined) aValue = ''
+    if (bValue === null || bValue === undefined) bValue = ''
+
+    if (typeof aValue === 'string') {
+      return sortConfig.direction === 'asc' 
+        ? aValue.localeCompare(bValue) 
+        : bValue.localeCompare(aValue)
+    } else {
+      return sortConfig.direction === 'asc' 
+        ? (aValue > bValue ? 1 : -1) 
+        : (aValue < bValue ? 1 : -1)
+    }
+  })
+
+  const SortIndicator = ({ column }: { column: string }) => {
+    if (sortConfig.key !== column) return <div className="w-3.5 h-3.5 opacity-10 flex items-center justify-center"><ChevronUp className="w-2.5 h-2.5" /></div>
+    return sortConfig.direction === 'asc' 
+      ? <ChevronUp className="w-2.5 h-2.5 text-primary" /> 
+      : <ChevronDown className="w-2.5 h-2.5 text-primary" />
+  }
   
   useEffect(() => {
     // Load warehouses
@@ -201,16 +236,64 @@ export default function InventorySnapshotPage() {
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="border-b border-border bg-surface-raised">
-                  <th className="p-3.5 px-4 font-bold text-text-secondary uppercase tracking-wider w-28 text-[9px]">Código</th>
-                  <th className="p-3.5 px-4 font-bold text-text-secondary uppercase tracking-wider text-[9px]">Artículo</th>
-                  <th className="p-3.5 px-4 font-bold text-text-secondary uppercase tracking-wider text-[9px]">Almacén</th>
-                  <th className="p-3.5 px-4 font-bold text-text-secondary uppercase tracking-wider text-[9px] text-right">Cantidad en Mano</th>
-                  <th className="p-3.5 px-4 font-bold text-text-secondary uppercase tracking-wider text-[9px] text-center w-20">U.M.</th>
-                  <th className="p-3.5 px-4 font-bold text-text-secondary uppercase tracking-wider text-[9px] text-right w-36">Valoración ($)</th>
+                  <th 
+                    className="p-3.5 px-4 font-bold text-text-secondary uppercase tracking-wider w-28 text-[9px] cursor-pointer hover:bg-surface-raised/60 transition-colors select-none"
+                    onClick={() => handleSort('item_code')}
+                  >
+                    <div className="flex items-center gap-1">
+                      Código
+                      <SortIndicator column="item_code" />
+                    </div>
+                  </th>
+                  <th 
+                    className="p-3.5 px-4 font-bold text-text-secondary uppercase tracking-wider text-[9px] cursor-pointer hover:bg-surface-raised/60 transition-colors select-none"
+                    onClick={() => handleSort('item_name')}
+                  >
+                    <div className="flex items-center gap-1">
+                      Artículo
+                      <SortIndicator column="item_name" />
+                    </div>
+                  </th>
+                  <th 
+                    className="p-3.5 px-4 font-bold text-text-secondary uppercase tracking-wider text-[9px] cursor-pointer hover:bg-surface-raised/60 transition-colors select-none"
+                    onClick={() => handleSort('warehouse_name')}
+                  >
+                    <div className="flex items-center gap-1">
+                      Almacén
+                      <SortIndicator column="warehouse_name" />
+                    </div>
+                  </th>
+                  <th 
+                    className="p-3.5 px-4 font-bold text-text-secondary uppercase tracking-wider text-[9px] text-right cursor-pointer hover:bg-surface-raised/60 transition-colors select-none"
+                    onClick={() => handleSort('qty_on_hand')}
+                  >
+                    <div className="flex items-center justify-end gap-1">
+                      Cantidad en Mano
+                      <SortIndicator column="qty_on_hand" />
+                    </div>
+                  </th>
+                  <th 
+                    className="p-3.5 px-4 font-bold text-text-secondary uppercase tracking-wider text-[9px] text-center w-20 cursor-pointer hover:bg-surface-raised/60 transition-colors select-none"
+                    onClick={() => handleSort('uom_name')}
+                  >
+                    <div className="flex items-center justify-center gap-1">
+                      U.M.
+                      <SortIndicator column="uom_name" />
+                    </div>
+                  </th>
+                  <th 
+                    className="p-3.5 px-4 font-bold text-text-secondary uppercase tracking-wider text-[9px] text-right w-36 cursor-pointer hover:bg-surface-raised/60 transition-colors select-none"
+                    onClick={() => handleSort('valuation')}
+                  >
+                    <div className="flex items-center justify-end gap-1">
+                      Valoración ($)
+                      <SortIndicator column="valuation" />
+                    </div>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
-                {snapshotItems.map((item, idx) => (
+                {sortedSnapshotItems.map((item, idx) => (
                   <tr key={idx} className="hover:bg-surface-raised/40 transition-colors">
                     <td className="p-3.5 px-4 font-medium text-text-secondary">{item.item_code || '---'}</td>
                     <td className="p-3.5 px-4 font-semibold text-text-primary">{item.item_name}</td>
