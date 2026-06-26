@@ -95,6 +95,7 @@ export default function KardexPage() {
 
   async function loadMovements() {
     setLoading(true);
+    setMovements([]);
     try {
       const data = await adminApi.getKardex(filters);
       
