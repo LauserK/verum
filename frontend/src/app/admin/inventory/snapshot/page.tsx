@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { adminApi, Warehouse, StockSnapshotItem } from '@/lib/api'
-import { Loader2, ArrowLeft, Download, Calendar, Warehouse as WhIcon, DollarSign, Package } from 'lucide-react'
+import { Loader2, ArrowLeft, Download, Calendar, Warehouse as WhIcon, DollarSign, Package, ChevronDown } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'
 
@@ -111,13 +111,14 @@ export default function InventorySnapshotPage() {
             <select 
               value={selectedWarehouseId}
               onChange={e => setSelectedWarehouseId(e.target.value)}
-              className="w-full bg-surface border border-border rounded-xl pl-9 pr-3 h-10 text-xs font-semibold outline-none focus:border-primary appearance-none transition-all"
+              className="w-full bg-surface border border-border rounded-xl pl-9 pr-8 h-10 text-xs font-semibold outline-none focus:border-primary appearance-none transition-all cursor-pointer"
             >
-              <option value="">Todos los Almacenes...</option>
+              <option value="">Todos los Depósitos...</option>
               {warehouses.map(w => (
                 <option key={w.id} value={w.id}>{w.name}</option>
               ))}
             </select>
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-secondary pointer-events-none" />
           </div>
           {/* Export Button */}
           <button 
