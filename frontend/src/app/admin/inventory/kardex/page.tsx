@@ -85,13 +85,19 @@ export default function KardexPage() {
     try {
       const data = await adminApi.getKardex(filters);
       
-      let currentBal = 0;
-      const dataWithBalance = [...data].reverse().map(m => {
-        currentBal += m.qty_base;
-        return { ...m, running_balance: currentBal };
-      }).reverse();
-      
-      setMovements(dataWithBalance);
+      if (!filters.item_id) {
+        // No specific item selected, do not calculate running balance
+        setMovements(data);
+      } else {
+        // Calculate running balance chronologically for the selected item
+        let currentBal = 0;
+        const dataWithBalance = [...data].reverse().map(m => {
+          currentBal += m.qty_base;
+          return { ...m, running_balance: currentBal };
+        }).reverse();
+        
+        setMovements(dataWithBalance);
+      }
     } catch (error) {
       console.error('Error loading movements:', error);
     } finally {
@@ -102,9 +108,13 @@ export default function KardexPage() {
   const handleExportCSV = () => {
     if (movements.length === 0) return;
     
-    const csvRows = [
-      ['Fecha', 'Hora', 'Tipo', 'Código Artículo', 'Artículo', 'Almacén', 'Cantidad', 'Saldo Acumulado', 'Referencia', 'Notas'].join(',')
-    ];
+    const csvHeaders = ['Fecha', 'Hora', 'Tipo', 'Código Artículo', 'Artículo', 'Almacén', 'Cantidad'];
+    if (filters.item_id) {
+      csvHeaders.push('Saldo Acumulado');
+    }
+    csvHeaders.push('Referencia', 'Notas');
+
+    const csvRows = [csvHeaders.join(',')];
     
     movements.forEach(m => {
       const item = items.find(i => i.id === m.item_id);
@@ -119,11 +129,18 @@ export default function KardexPage() {
         `"${item?.code || '---'}"`,
         `"${item?.name || 'Artículo'}"`,
         `"${wh?.name || 'Almacén'}"`,
-        m.qty_base.toFixed(4),
-        ((m as any).running_balance ?? 0).toFixed(4),
+        m.qty_base.toFixed(4)
+      ];
+
+      if (filters.item_id) {
+        row.push(((m as any).running_balance ?? 0).toFixed(4));
+      }
+
+      row.push(
         `"${m.reference_id || ''}"`,
         `"${(m.notes || '').replace(/"/g, '""')}"`
-      ];
+      );
+
       csvRows.push(row.join(','));
     });
     
@@ -418,14 +435,16 @@ export default function KardexPage() {
                 <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest">Artículo</th>
                 <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest">Almacén</th>
                 <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest text-right">Cant. (Base)</th>
-                <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest text-right">Saldo</th>
+                {filters.item_id && (
+                  <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest text-right">Saldo</th>
+                )}
                 <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest">Referencia / Notas</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {loading && movements.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="p-20 text-center"><Loader2 className="animate-spin w-8 h-8 text-primary mx-auto" /></td>
+                  <td colSpan={filters.item_id ? 7 : 6} className="p-20 text-center"><Loader2 className="animate-spin w-8 h-8 text-primary mx-auto" /></td>
                 </tr>
               ) : movements.map((m) => (
                 <tr key={m.id} className="hover:bg-surface-raised/50 transition-colors">
@@ -465,9 +484,11 @@ export default function KardexPage() {
                   <td className={`p-4 text-sm font-mono font-bold text-right ${m.qty_base > 0 ? 'text-text-primary' : 'text-text-primary'}`}>
                       {m.qty_base > 0 ? '+' : ''}{m.qty_base.toFixed(2)}
                   </td>
-                  <td className="p-4 text-sm font-mono font-bold text-right text-text-secondary">
-                      {((m as any).running_balance ?? 0).toFixed(2)}
-                  </td>
+                  {filters.item_id && (
+                    <td className="p-4 text-sm font-mono font-bold text-right text-text-secondary">
+                        {((m as any).running_balance ?? 0).toFixed(2)}
+                    </td>
+                  )}
                   <td className="p-4">
                       <p className="text-xs text-text-primary font-medium">{m.notes || '---'}</p>
                       <p className="text-[10px] text-text-secondary font-mono truncate max-w-[120px]">REF: {m.reference_id?.slice(0, 8) || '---'}</p>
@@ -476,7 +497,7 @@ export default function KardexPage() {
               ))}
               {!loading && movements.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="p-20 text-center">
+                  <td colSpan={filters.item_id ? 7 : 6} className="p-20 text-center">
                       <History className="w-12 h-12 text-text-disabled mx-auto mb-4" />
                       <p className="text-text-secondary font-medium">No se han encontrado movimientos para los filtros aplicados</p>
                   </td>
