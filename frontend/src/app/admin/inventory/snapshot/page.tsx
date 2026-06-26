@@ -42,8 +42,15 @@ export default function InventorySnapshotPage() {
     }
   }
 
-  // Calculate sum of active stock levels for top summary card
-  const totalStockQty = snapshotItems.reduce((acc, curr) => acc + curr.qty_on_hand, 0)
+  // Group consolidated quantities by unit of measure
+  const qtyByUom = snapshotItems.reduce((acc, curr) => {
+    const uom = curr.uom_name || 'un'
+    if (!acc[uom]) {
+      acc[uom] = 0
+    }
+    acc[uom] += curr.qty_on_hand
+    return acc
+  }, {} as Record<string, number>)
 
   const handleExportCSV = () => {
     if (snapshotItems.length === 0) return
@@ -143,15 +150,26 @@ export default function InventorySnapshotPage() {
             <p className="text-xl font-black text-text-primary mt-0.5">{snapshotItems.length}</p>
           </div>
         </div>
-        <div className="bg-surface border border-border p-4 rounded-2xl shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-warning/10 text-warning rounded-xl">
+        <div className="bg-surface border border-border p-4 rounded-2xl shadow-sm flex items-start gap-4 min-h-[92px]">
+          <div className="p-3 bg-warning/10 text-warning rounded-xl shrink-0">
             <WhIcon className="w-5 h-5" />
           </div>
-          <div>
+          <div className="flex-1 min-w-0">
             <p className="text-[10px] font-bold text-text-secondary uppercase tracking-wider">Cantidad Física Consolidada</p>
-            <p className="text-xl font-black text-text-primary mt-0.5">
-              {loading ? '...' : totalStockQty.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
-            </p>
+            <div className="mt-1 space-y-1 max-h-[85px] overflow-y-auto pr-0.5 scrollbar-thin">
+              {loading ? (
+                <p className="text-sm font-black text-text-primary">...</p>
+              ) : Object.keys(qtyByUom).length === 0 ? (
+                <p className="text-sm font-black text-text-primary">0.00</p>
+              ) : (
+                Object.entries(qtyByUom).map(([uom, qty]) => (
+                  <div key={uom} className="flex justify-between items-center text-xs font-bold text-text-primary border-b border-border/30 pb-0.5 last:border-0 last:pb-0">
+                    <span className="font-black">{qty.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</span>
+                    <span className="text-[9px] text-text-secondary font-semibold uppercase ml-2 bg-surface-raised px-1.5 py-0.5 rounded border border-border/40 shrink-0">{uom}</span>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
         <div className="bg-surface border border-border p-4 rounded-2xl shadow-sm flex items-center gap-4">
