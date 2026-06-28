@@ -451,6 +451,7 @@ class ItemCreate(BaseModel):
     yield_alert_threshold_pct: Optional[float] = None
     shelf_life_days: Optional[int] = None
     last_purchase_cost: Optional[float] = None
+    min_stock: float = 0.0
     presentations: List[UOMPresentationCreate] = []
 
 class ItemResponse(BaseModel):
@@ -464,6 +465,7 @@ class ItemResponse(BaseModel):
     uom_name: Optional[str] = None
     last_purchase_cost: Optional[float] = None
     last_purchase_cost_updated_at: Optional[datetime] = None
+    min_stock: float = 0.0
     is_active: bool
     created_at: datetime
 
@@ -477,6 +479,7 @@ class ItemUpdate(BaseModel):
     yield_alert_threshold_pct: Optional[float] = None
     shelf_life_days: Optional[int] = None
     last_purchase_cost: Optional[float] = None
+    min_stock: Optional[float] = None
 
 class WarehouseCreate(BaseModel):
     name: str
@@ -859,4 +862,13 @@ class BulkStockAdjustResponse(BaseModel):
     results: List[StockAdjustResult]
 
 
-
+class LowStockAlertItem(BaseModel):
+    item_id: UUID
+    item_name: str
+    item_code: Optional[str] = None
+    uom_code: str
+    warehouse_name: str
+    qty_base: float
+    qty_reserved: float
+    qty_available: float
+    min_stock: float

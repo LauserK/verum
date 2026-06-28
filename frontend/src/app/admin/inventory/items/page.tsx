@@ -71,6 +71,9 @@ function Row({ item, categories, uoms, t, openEdit, handleDelete }: {
             <td className="p-4 text-sm text-text-secondary font-medium">
             {uoms.find(u => u.id === item.base_uom_id)?.code || '---'}
             </td>
+            <td className="p-4 text-sm text-text-secondary font-medium font-mono">
+            {item.min_stock !== undefined ? Number(item.min_stock).toFixed(2) : '0.00'}
+            </td>
             <td className="p-4 text-right">
             <div className="flex justify-end gap-2">
                 <button 
@@ -144,7 +147,8 @@ export default function ItemsPage() {
     code: '', 
     type: 'raw_material', 
     base_uom_id: '',
-    category_id: ''
+    category_id: '',
+    min_stock: 0
   });
 
   const [errorModal, setErrorModal] = useState<{ isOpen: boolean; message: string }>({
@@ -248,7 +252,8 @@ export default function ItemsPage() {
           code: '', 
           type: 'raw_material', 
           base_uom_id: uoms[0]?.id || '',
-          category_id: ''
+          category_id: '',
+          min_stock: 0
       });
       setShowModal(true);
   }
@@ -260,7 +265,8 @@ export default function ItemsPage() {
           code: item.code || '',
           type: item.type,
           base_uom_id: item.base_uom_id,
-          category_id: item.category_id || ''
+          category_id: item.category_id || '',
+          min_stock: item.min_stock || 0
       });
       setShowModal(true);
   }
@@ -442,6 +448,11 @@ export default function ItemsPage() {
                     {t('table.uom')} <SortIndicator column="uom_name" />
                   </div>
                 </th>
+                <th className="p-4 cursor-pointer hover:bg-primary/5 transition-colors" onClick={() => handleSort('min_stock')}>
+                  <div className="flex items-center gap-2 text-xs font-black text-text-secondary uppercase tracking-widest">
+                    Stock Mín. <SortIndicator column="min_stock" />
+                  </div>
+                </th>
                 <th className="p-4 text-xs font-bold text-text-secondary uppercase tracking-widest text-right">Acciones</th>
               </tr>
             </thead>
@@ -454,7 +465,7 @@ export default function ItemsPage() {
                       return (
                         <Fragment key={key}>
                           <tr className="group/group-header cursor-pointer select-none" onClick={() => toggleGroup(key)}>
-                              <td colSpan={7} className="p-0 border-b border-border">
+                              <td colSpan={8} className="p-0 border-b border-border">
                                   <div className={`flex items-center justify-between px-4 py-3 sticky left-0 transition-colors ${isCollapsed ? 'bg-surface hover:bg-surface-raised/50' : 'bg-surface-raised/80 backdrop-blur-sm'}`}>
                                       <div className="flex items-center gap-3">
                                           <ChevronDown className={`w-4 h-4 text-primary transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`} />
@@ -487,7 +498,7 @@ export default function ItemsPage() {
               
               {sortedItems.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="p-12 text-center">
+                  <td colSpan={8} className="p-12 text-center">
                       <Archive className="w-10 h-10 text-text-disabled mx-auto mb-3" />
                       <p className="text-text-secondary font-medium">{searchTerm ? 'No se encontraron resultados' : t('empty')}</p>
                   </td>
@@ -580,6 +591,17 @@ export default function ItemsPage() {
                     <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-disabled pointer-events-none" />
                 </div>
                 {editingId && <p className="text-[10px] text-text-disabled mt-1 px-1">* La unidad base no se puede cambiar después de crear el artículo.</p>}
+              </div>
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest ml-1">Stock Mínimo (Seguridad)</label>
+                <input 
+                  type="number" 
+                  step="any"
+                  value={formData.min_stock}
+                  onChange={e => setFormData({...formData, min_stock: parseFloat(e.target.value) || 0})}
+                  className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                  placeholder="0.00"
+                />
               </div>
             </div>
 

@@ -2,7 +2,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { adminApi, getProfile, type VenueInfo, type InventoryDashboardSummary } from '@/lib/api'
+import { adminApi, getProfile, type VenueInfo, type InventoryDashboardSummary, type LowStockAlertItem } from '@/lib/api'
 import { useVenue } from '@/components/VenueContext'
 import { Box, Wrench, AlertTriangle, ClipboardList, Clock, ArrowRight, Archive, Warehouse, History } from 'lucide-react'
 import Link from 'next/link'
@@ -12,6 +12,7 @@ import { es } from 'date-fns/locale'
 export default function InventoryDashboardPage() {
   const { availableVenues } = useVenue()
   const [data, setData] = useState<InventoryDashboardSummary | null>(null)
+  const [lowStockAlerts, setLowStockAlerts] = useState<LowStockAlertItem[]>([])
   const [selectedVenue, setSelectedVenue] = useState<string>('')
   const [loading, setLoading] = useState(true)
 
@@ -24,14 +25,21 @@ export default function InventoryDashboardPage() {
     }
 
     if (active) setLoading(true)
-    adminApi.getInventoryDashboard(selectedVenue || undefined)
-        .then(res => {
-        if (active) setData(res)
-        })
-        .catch(console.error)
-        .finally(() => {
-        if (active) setLoading(false)
-        })
+    
+    Promise.all([
+      adminApi.getInventoryDashboard(selectedVenue || undefined),
+      adminApi.getLowStockAlerts(selectedVenue || undefined)
+    ])
+    .then(([dashboardRes, alertsRes]) => {
+      if (active) {
+        setData(dashboardRes)
+        setLowStockAlerts(alertsRes)
+      }
+    })
+    .catch(console.error)
+    .finally(() => {
+      if (active) setLoading(false)
+    })
     
     return () => { active = false }
   }, [selectedVenue, availableVenues])
@@ -193,6 +201,63 @@ export default function InventoryDashboardPage() {
                 <Link href="/admin/inventory/utensils/schedules" className="text-xs font-bold text-primary hover:underline">Administrar programaciones →</Link>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* Block 3: Low Stock Alerts */}
+      <section className="space-y-4 pt-6 border-t border-border">
+        <h2 className="text-lg font-bold text-text-primary flex items-center gap-2">
+          <AlertTriangle className="w-5 h-5 text-error animate-pulse" /> Alertas de Desabastecimiento (Materias Primas)
+        </h2>
+        
+        <div className="bg-surface border border-border rounded-2xl p-5 shadow-sm">
+          {lowStockAlerts.length === 0 ? (
+            <p className="text-sm text-text-secondary text-center py-6">Todas las materias primas y artículos están por encima del stock de seguridad.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-border text-[10px] font-black uppercase tracking-wider text-text-secondary">
+                    <th className="pb-3">Código</th>
+                    <th className="pb-3">Artículo</th>
+                    <th className="pb-3">Depósito</th>
+                    <th className="pb-3 text-center">Físico</th>
+                    <th className="pb-3 text-center">Reservado</th>
+                    <th className="pb-3 text-center">Disponible</th>
+                    <th className="pb-3 text-center">Stock Mín.</th>
+                    <th className="pb-3 text-right">Estado</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border text-sm">
+                  {lowStockAlerts.map((alert) => {
+                    const isDeficit = alert.qty_available < 0;
+                    return (
+                      <tr key={`${alert.item_id}_${alert.warehouse_name}`} className="hover:bg-surface-raised/50 transition-colors group">
+                        <td className="py-3 font-mono text-xs text-text-secondary">{alert.item_code || '---'}</td>
+                        <td className="py-3 font-bold text-text-primary">
+                          <Link href={`/admin/inventory/items/${alert.item_id}`} className="hover:text-primary transition-colors">
+                            {alert.item_name}
+                          </Link>
+                        </td>
+                        <td className="py-3 text-text-secondary">{alert.warehouse_name}</td>
+                        <td className="py-3 text-center font-mono">{alert.qty_base.toFixed(2)}</td>
+                        <td className="py-3 text-center font-mono text-warning">{alert.qty_reserved.toFixed(2)}</td>
+                        <td className={`py-3 text-center font-mono font-bold ${isDeficit ? 'text-error' : 'text-text-primary'}`}>
+                          {alert.qty_available.toFixed(2)}
+                        </td>
+                        <td className="py-3 text-center font-mono text-text-secondary">{alert.min_stock.toFixed(2)}</td>
+                        <td className="py-3 text-right">
+                          <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${isDeficit ? 'bg-error/10 text-error border border-error/20' : 'bg-warning/10 text-warning border border-warning/20'}`}>
+                            {isDeficit ? 'Déficit OP' : 'Bajo Mínimo'}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </section>
     </div>

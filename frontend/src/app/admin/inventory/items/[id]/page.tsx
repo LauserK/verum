@@ -5,7 +5,7 @@ import { adminApi, InventoryItem, UOMBase, ItemCategory, UOMPresentation, Wareho
 import { 
     Plus, X, Save, Loader2, ArrowLeft, Tag, Pencil, 
     Trash2, DollarSign, Package, Settings, History, 
-    Warehouse as WarehouseIcon, Scale, Trash 
+    Warehouse as WarehouseIcon, Scale, Trash, Clock
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -312,27 +312,43 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
 
           {activeTab === 'warehouses' && (
               <div className="space-y-6 animate-in fade-in">
-                  {itemStock.length > 0 && (
-                      <div className="bg-primary/5 rounded-2xl border border-primary/20 p-6 flex items-center justify-between">
-                          <div className="flex items-center gap-4">
-                              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-                                  <Package className="w-6 h-6 text-primary" />
+                  {itemStock.length > 0 && (() => {
+                      const totalPhysical = itemStock.reduce((acc, s) => acc + (s.qty_base || 0), 0);
+                      const totalReserved = itemStock.reduce((acc, s) => acc + (s.qty_reserved || 0), 0);
+                      const totalAvailable = totalPhysical - totalReserved;
+                      const uomCode = uoms.find(u => u.id === item?.base_uom_id)?.code || '';
+                      return (
+                          <div className="bg-surface rounded-2xl border border-border p-6 shadow-sm grid grid-cols-1 sm:grid-cols-3 gap-6">
+                              <div className="flex items-center gap-4">
+                                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                                      <Package className="w-6 h-6 text-primary" />
+                                  </div>
+                                  <div>
+                                      <h4 className="text-xs font-bold text-text-secondary uppercase tracking-widest">Total Físico</h4>
+                                      <p className="text-2xl font-black text-text-primary font-mono mt-1">{totalPhysical.toFixed(2)} <span className="text-xs font-normal text-text-secondary">{uomCode}</span></p>
+                                  </div>
                               </div>
-                              <div>
-                                  <h3 className="font-bold text-text-primary text-lg">Stock Total</h3>
-                                  <p className="text-sm text-text-secondary">Suma de existencias en todos los almacenes</p>
+                              <div className="flex items-center gap-4 border-t sm:border-t-0 sm:border-x border-border pt-4 sm:pt-0 sm:px-6">
+                                  <div className="w-12 h-12 rounded-full bg-warning/10 flex items-center justify-center flex-shrink-0">
+                                      <Clock className="w-6 h-6 text-warning" />
+                                  </div>
+                                  <div>
+                                      <h4 className="text-xs font-bold text-text-secondary uppercase tracking-widest">Total Reservado</h4>
+                                      <p className="text-2xl font-black text-warning font-mono mt-1">{totalReserved.toFixed(2)} <span className="text-xs font-normal text-text-secondary">{uomCode}</span></p>
+                                  </div>
+                              </div>
+                              <div className="flex items-center gap-4 border-t sm:border-t-0 pt-4 sm:pt-0 sm:pl-6">
+                                  <div className="w-12 h-12 rounded-full bg-success/10 flex items-center justify-center flex-shrink-0">
+                                      <WarehouseIcon className="w-6 h-6 text-success" />
+                                  </div>
+                                  <div>
+                                      <h4 className="text-xs font-bold text-text-secondary uppercase tracking-widest">Total Disponible</h4>
+                                      <p className={`text-2xl font-black font-mono mt-1 ${totalAvailable < (item?.min_stock || 0) ? 'text-error' : 'text-success'}`}>{totalAvailable.toFixed(2)} <span className="text-xs font-normal text-text-secondary">{uomCode}</span></p>
+                                  </div>
                               </div>
                           </div>
-                          <div className="text-right">
-                              <p className="text-3xl font-black text-primary font-mono">
-                                  {itemStock.reduce((acc, s) => acc + (s.qty_base || 0), 0).toFixed(2)}
-                              </p>
-                              <p className="text-[10px] text-primary font-bold uppercase tracking-widest">
-                                  {uoms.find(u => u.id === item.base_uom_id)?.code}
-                              </p>
-                          </div>
-                      </div>
-                  )}
+                      );
+                  })()}
 
                   <div className="bg-surface rounded-2xl border border-border p-6 shadow-sm">
                       <div className="flex justify-between items-center mb-6">
@@ -352,23 +368,39 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
                       </div>
 
                       <div className="space-y-3">
-                          {itemStock.map(stock => (
-                              <div key={stock.id} className="flex items-center justify-between p-4 bg-surface-raised rounded-xl border border-border group hover:border-primary/30 transition-all">
-                                  <div className="flex items-center gap-3">
-                                      <div className="w-10 h-10 rounded-lg bg-surface flex items-center justify-center border border-border">
-                                          <WarehouseIcon className="w-5 h-5 text-text-secondary" />
+                          {itemStock.map(stock => {
+                              const qty_available = stock.qty_base - (stock.qty_reserved || 0);
+                              return (
+                                  <div key={stock.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-surface-raised rounded-xl border border-border gap-4 group hover:border-primary/30 transition-all">
+                                      <div className="flex items-center gap-3">
+                                          <div className="w-10 h-10 rounded-lg bg-surface flex items-center justify-center border border-border">
+                                              <WarehouseIcon className="w-5 h-5 text-text-secondary" />
+                                          </div>
+                                          <div>
+                                              <p className="font-bold text-sm text-text-primary">{stock.warehouses?.name || 'Almacén'}</p>
+                                              <p className="text-[10px] text-text-disabled uppercase font-bold tracking-widest">{stock.warehouses?.type || 'General'}</p>
+                                          </div>
                                       </div>
-                                      <div>
-                                          <p className="font-bold text-sm text-text-primary">{stock.warehouses?.name || 'Almacén'}</p>
-                                          <p className="text-[10px] text-text-disabled uppercase font-bold tracking-widest">{stock.warehouses?.type || 'General'}</p>
+                                      <div className="flex items-center gap-6 self-end sm:self-center">
+                                          <div className="text-center w-16">
+                                              <p className="text-[9px] text-text-secondary uppercase font-bold tracking-wider">Físico</p>
+                                              <p className="text-sm font-bold text-text-primary font-mono mt-0.5">{stock.qty_base.toFixed(2)}</p>
+                                          </div>
+                                          <div className="text-center w-16">
+                                              <p className="text-[9px] text-text-secondary uppercase font-bold tracking-wider">Reservado</p>
+                                              <p className="text-sm font-bold text-warning font-mono mt-0.5">{(stock.qty_reserved || 0).toFixed(2)}</p>
+                                          </div>
+                                          <div className="text-center w-16">
+                                              <p className="text-[9px] text-text-secondary uppercase font-bold tracking-wider">Disponible</p>
+                                              <p className={`text-sm font-black font-mono mt-0.5 ${qty_available < (item?.min_stock || 0) ? 'text-error' : 'text-success'}`}>{qty_available.toFixed(2)}</p>
+                                          </div>
+                                          <div className="text-right w-12 flex items-center justify-end">
+                                              <span className="text-[10px] text-text-disabled font-bold uppercase">{uoms.find(u => u.id === item?.base_uom_id)?.code}</span>
+                                          </div>
                                       </div>
                                   </div>
-                                  <div className="text-right">
-                                      <p className="text-xl font-black text-text-primary font-mono">{stock.qty_base.toFixed(2)}</p>
-                                      <p className="text-[10px] text-text-secondary font-bold uppercase">{uoms.find(u => u.id === item.base_uom_id)?.code}</p>
-                                  </div>
-                              </div>
-                          ))}
+                              );
+                          })}
                           {itemStock.length === 0 && (
                               <div className="text-center py-10 border-2 border-dashed border-border rounded-2xl">
                                   <p className="text-text-disabled text-sm">Este artículo no tiene stock registrado en ningún almacén.</p>

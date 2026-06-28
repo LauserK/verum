@@ -46,7 +46,8 @@ from schemas import (
     CateringRequestCreate, CateringRequestResponse, MRPResultResponse, MRPPlanRequest, GenerateOrdersRequest,
     PhysicalInventoryCreate, PhysicalInventoryResponse, PhysicalInventoryBriefResponse,
     StockSnapshotResponse, StockValuationResponse,
-    BulkStockAdjustRequest, BulkStockAdjustResponse, StockAdjustResult, StockAdjustItem
+    BulkStockAdjustRequest, BulkStockAdjustResponse, StockAdjustResult, StockAdjustItem,
+    LowStockAlertItem
 )
 
 CARACAS_TZ = pytz.timezone("America/Caracas")
@@ -4386,6 +4387,57 @@ async def get_inventory_valuation(
         "total_valuation": round(total_val, 2)
     }
 
+
+@app.get("/inventory/alerts/low-stock", response_model=List[LowStockAlertItem], tags=["Inventory"])
+async def get_low_stock_alerts(
+    warehouse_id: Optional[UUID] = None,
+    org_id: str = Depends(get_active_org_id),
+    db=Depends(get_db),
+    _=Depends(require_permission("inventory.view"))
+):
+    wh_res = db.table("warehouses").select("id, name").eq("org_id", org_id).execute()
+    if not wh_res.data:
+        return []
+    wh_ids = [w["id"] for w in wh_res.data]
+    wh_names = {w["id"]: w["name"] for w in wh_res.data}
+    
+    stock_query = db.table("stock").select("*, items(name, code, min_stock, uom_base(code))").in_("warehouse_id", wh_ids)
+    if warehouse_id:
+        stock_query = stock_query.eq("warehouse_id", str(warehouse_id))
+        
+    stock_res = stock_query.execute()
+    alerts = []
+    
+    for s in (stock_res.data or []):
+        item = s.get("items")
+        if not item:
+            continue
+        
+        qty_base = float(s["qty_base"] or 0)
+        qty_reserved = float(s["qty_reserved"] or 0)
+        qty_available = qty_base - qty_reserved
+        min_stock = float(item.get("min_stock") or 0)
+        
+        if qty_available < min_stock:
+            uom_code = "un"
+            if item.get("uom_base") and isinstance(item["uom_base"], dict):
+                uom_code = item["uom_base"].get("code") or "un"
+                
+            alerts.append({
+                "item_id": s["item_id"],
+                "item_name": item.get("name") or "Unknown",
+                "item_code": item.get("code"),
+                "uom_code": uom_code,
+                "warehouse_name": wh_names.get(s["warehouse_id"]) or "Unknown",
+                "qty_base": qty_base,
+                "qty_reserved": qty_reserved,
+                "qty_available": qty_available,
+                "min_stock": min_stock
+            })
+            
+    alerts.sort(key=lambda x: x["qty_available"])
+    return alerts
+
 @app.get("/inventory/purchase-receipts", tags=["Inventory"])
 async def list_purchase_receipts(org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
     res = db.table("purchase_receipts") \
@@ -4996,11 +5048,25 @@ async def create_production_order(
     
     ing_res = db.table("recipe_ingredients").select("item_id, qty_base").eq("recipe_id", recipe["id"]).execute()
     for ing in (ing_res.data or []):
+        qty_planned = float(Decimal(str(ing["qty_base"])) * scale_factor)
         db.table("production_order_consumptions").insert({
             "order_id": order_id,
             "item_id": ing["item_id"],
-            "qty_planned_base": float(Decimal(str(ing["qty_base"])) * scale_factor)
+            "qty_planned_base": qty_planned
         }).execute()
+        
+        # Update reservations in stock
+        stock_res = db.table("stock").select("id, qty_reserved").eq("warehouse_id", str(order.warehouse_id)).eq("item_id", ing["item_id"]).execute()
+        if stock_res.data:
+            current_reserved = float(stock_res.data[0]["qty_reserved"] or 0.0)
+            db.table("stock").update({"qty_reserved": current_reserved + qty_planned}).eq("id", stock_res.data[0]["id"]).execute()
+        else:
+            db.table("stock").insert({
+                "warehouse_id": str(order.warehouse_id),
+                "item_id": ing["item_id"],
+                "qty_base": 0.0,
+                "qty_reserved": qty_planned
+            }).execute()
 
     return res.data[0]
 
@@ -5008,10 +5074,31 @@ async def create_production_order(
 async def update_production_order_status(
     order_id: UUID, req: OrderStatusUpdate, org_id: str = Depends(get_active_org_id), db=Depends(get_db), current_user = Depends(require_permission("production.execute"))
 ):
+    order_res = db.table("production_orders").select("status, warehouse_id").eq("id", str(order_id)).execute()
+    if not order_res.data:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    current_status = order_res.data[0]["status"]
+    warehouse_id = order_res.data[0]["warehouse_id"]
+    
     update_data = {"status": req.status}
     if req.status == "in_progress": update_data["started_at"] = datetime.now(CARACAS_TZ).isoformat()
     res = db.table("production_orders").update(update_data).eq("id", str(order_id)).eq("org_id", org_id).execute()
     if not res.data: raise HTTPException(status_code=404, detail="Order not found")
+    
+    if req.status == "cancelled" and current_status in ["pending", "in_progress", "paused"]:
+        # Revert reservations!
+        planned_cons = db.table("production_order_consumptions").select("item_id, qty_planned_base").eq("order_id", str(order_id)).execute()
+        for p in (planned_cons.data or []):
+            item_id = str(p["item_id"])
+            qty_planned = float(p["qty_planned_base"])
+            if qty_planned > 0:
+                stock_res = db.table("stock").select("id, qty_reserved").eq("warehouse_id", warehouse_id).eq("item_id", item_id).execute()
+                if stock_res.data:
+                    current_reserved = float(stock_res.data[0]["qty_reserved"] or 0.0)
+                    new_reserved = max(0.0, current_reserved - qty_planned)
+                    db.table("stock").update({"qty_reserved": new_reserved}).eq("id", stock_res.data[0]["id"]).execute()
+                    
     return res.data[0]
 
 @app.post("/production/orders/{order_id}/complete", tags=["Production"])
@@ -5058,8 +5145,8 @@ async def complete_production_order(
         origin_wh_id = order["warehouse_id"]
         
         actual_consumptions = req.consumptions
+        planned_cons = db.table("production_order_consumptions").select("item_id, qty_planned_base").eq("order_id", str(order_id)).execute()
         if not actual_consumptions:
-            planned_cons = db.table("production_order_consumptions").select("item_id, qty_planned_base").eq("order_id", str(order_id)).execute()
             actual_consumptions = [{"item_id": p["item_id"], "qty_actual_base": p["qty_planned_base"]} for p in (planned_cons.data or [])]
         
         for cons in actual_consumptions:
@@ -5069,6 +5156,17 @@ async def complete_production_order(
             db.table("production_order_consumptions").update({
                 "qty_actual_base": qty_actual
             }).eq("order_id", str(order_id)).eq("item_id", item_id).execute()
+            
+        # Release reservations for ingredients
+        for p in (planned_cons.data or []):
+            item_id = str(p["item_id"])
+            qty_planned = float(p["qty_planned_base"])
+            if qty_planned > 0:
+                stock_res = db.table("stock").select("id, qty_reserved").eq("warehouse_id", origin_wh_id).eq("item_id", item_id).execute()
+                if stock_res.data:
+                    current_reserved = float(stock_res.data[0]["qty_reserved"] or 0.0)
+                    new_reserved = max(0.0, current_reserved - qty_planned)
+                    db.table("stock").update({"qty_reserved": new_reserved}).eq("id", stock_res.data[0]["id"]).execute()
             
             lots_res = db.table("stock_lots") \
                 .select("*") \

@@ -688,6 +688,13 @@ export const adminApi = {
         return fetchWithAuth(`/inventory/valuation${qs ? `?${qs}` : ''}`)
     },
 
+    getLowStockAlerts: (warehouse_id?: string): Promise<LowStockAlertItem[]> => {
+        const params = new URLSearchParams()
+        if (warehouse_id) params.set('warehouse_id', warehouse_id)
+        const qs = params.toString()
+        return fetchWithAuth(`/inventory/alerts/low-stock${qs ? `?${qs}` : ''}`)
+    },
+
     createPurchaseReceipt: (data: Partial<PurchaseReceipt>): Promise<PurchaseReceipt> =>
         fetchWithAuth('/inventory/purchase-receipts', { method: 'POST', body: JSON.stringify(data) }),
 
@@ -1149,6 +1156,19 @@ export interface InventoryItem {
     created_at: string
     yield_alert_enabled?: boolean
     yield_alert_threshold_pct?: number | null
+    min_stock?: number
+}
+
+export interface LowStockAlertItem {
+    item_id: string
+    item_name: string
+    item_code: string | null
+    uom_code: string
+    warehouse_name: string
+    qty_base: number
+    qty_reserved: number
+    qty_available: number
+    min_stock: number
 }
 
 export interface Warehouse {
