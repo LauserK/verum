@@ -19,7 +19,8 @@ def authorized_client(client, authenticated_user_mock):
     from main import get_active_org_id
     app.dependency_overrides[get_active_org_id] = lambda: ORG_ID
     
-    with patch("main.resolve_permission", return_value=True):
+    with patch("main.resolve_permission", return_value=True), \
+         patch("main.check_restriction", return_value=False):
         yield client
     
     app.dependency_overrides.clear()
@@ -67,6 +68,18 @@ def test_create_item(authorized_client, mock_supabase):
         "base_uom_id": BASE_UOM_ID,
         "is_active": True,
         "created_at": "2026-06-10T12:00:00Z"
+    }])
+    mock_supabase.table().select().eq().execute.return_value = MagicMock(data=[{
+        "id": item_id,
+        "org_id": ORG_ID,
+        "code": "ITEM-001",
+        "name": "Harina de Trigo",
+        "type": "raw_material",
+        "category_id": None,
+        "base_uom_id": BASE_UOM_ID,
+        "is_active": True,
+        "created_at": "2026-06-10T12:00:00Z",
+        "uom_base": {"name": "Gramos"}
     }])
 
     response = authorized_client.post("/inventory/items", json={
@@ -132,6 +145,18 @@ def test_update_item(authorized_client, mock_supabase):
         "base_uom_id": BASE_UOM_ID,
         "is_active": True,
         "created_at": "2026-06-10T12:00:00Z"
+    }])
+    mock_supabase.table().select().eq().execute.return_value = MagicMock(data=[{
+        "id": item_id,
+        "org_id": ORG_ID,
+        "code": "ITEM-001-UPD",
+        "name": "Harina de Trigo Especial",
+        "type": "raw_material",
+        "category_id": None,
+        "base_uom_id": BASE_UOM_ID,
+        "is_active": True,
+        "created_at": "2026-06-10T12:00:00Z",
+        "uom_base": {"name": "Gramos"}
     }])
 
     response = authorized_client.patch(f"/inventory/items/{item_id}", json={

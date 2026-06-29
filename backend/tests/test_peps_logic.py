@@ -62,17 +62,37 @@ def test_fifo_issue_logic(authorized_client, mock_supabase):
     # Lot 2: 20 units @ $1.2
     # Issue: 15 units -> Should consume 10 from Lot 1 and 5 from Lot 2
     
-    # 1. Get lots
+    # Mock issue document creation (header)
+    issue_id = str(uuid.uuid4())
+    mock_supabase.table().insert().execute.return_value = MagicMock(data=[{
+        "id": issue_id,
+        "org_id": ORG_ID,
+        "warehouse_id": WAREHOUSE_ID,
+        "reason": "sale",
+        "status": "confirmed",
+        "created_at": "2026-06-10T12:00:00Z"
+    }])
+    
+    # Mock presentation lookup
+    mock_supabase.table().select().eq().execute.return_value = MagicMock(data=[{"conversion_factor": 1.0}])
+    
+    # Mock lots query
     mock_supabase.table().select().eq().eq().filter().order().execute.return_value = MagicMock(data=[
         {"id": LOT_1_ID, "qty_base": 10.0, "unit_cost_base": 1.0, "item_id": ITEM_ID, "warehouse_id": WAREHOUSE_ID},
         {"id": LOT_2_ID, "qty_base": 20.0, "unit_cost_base": 1.2, "item_id": ITEM_ID, "warehouse_id": WAREHOUSE_ID}
     ])
     
-    # 2. Get item info (for org_id and base_uom_id)
+    # Mock item info lookup (single)
     mock_supabase.table().select().eq().single().execute.return_value = MagicMock(data={"org_id": ORG_ID, "id": ITEM_ID})
 
-    # 3. Update stock (decrement)
+    # Mock stock query (2 eq's)
+    mock_supabase.table().select().eq().eq().execute.return_value = MagicMock(data=[
+        {"id": str(uuid.uuid4()), "qty_base": 50.0}
+    ])
+
+    # Mock RPC and other updates
     mock_supabase.rpc().execute.return_value = MagicMock(data=[])
+    mock_supabase.table().update().eq().execute.return_value = MagicMock(data=[])
 
     response = authorized_client.post("/inventory/issue-documents", json={
         "warehouse_id": WAREHOUSE_ID,
