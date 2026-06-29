@@ -1,16 +1,17 @@
-from main import get_current_shift, get_active_shift_for_today, CARACAS_TZ
+from main import get_active_shift_for_today, CARACAS_TZ
+from app.checklists.utils import get_current_shift
 from datetime import datetime
 from unittest.mock import patch, MagicMock
 import pytz
 
 def test_get_current_shift_morning():
     # Mock datetime para que sean las 8 AM en Caracas
-    with patch("main.datetime") as mock_date:
+    with patch("app.checklists.utils.datetime") as mock_date:
         mock_date.now.return_value = datetime(2024, 1, 1, 8, 0, tzinfo=CARACAS_TZ)
         assert get_current_shift() == "morning"
 
 def test_get_current_shift_mid():
-    with patch("main.datetime") as mock_date:
+    with patch("app.checklists.utils.datetime") as mock_date:
         mock_date.now.return_value = datetime(2024, 1, 1, 15, 0, tzinfo=CARACAS_TZ)
         assert get_current_shift() == "mid"
 
@@ -30,7 +31,7 @@ def test_get_active_shift_flexible():
 def test_get_active_shift_fixed_valid_day():
     mock_db = MagicMock()
     # Lunes 1 de Enero 2024 es iso_weekday 1
-    with patch("main.datetime") as mock_date:
+    with patch("app.attendance.utils.datetime") as mock_date:
         mock_date.now.return_value = datetime(2024, 1, 1, 10, 0, tzinfo=CARACAS_TZ)
         
         mock_db.table().select().eq().eq().eq().execute.return_value.data = [{
@@ -48,7 +49,7 @@ def test_get_active_shift_fixed_valid_day():
 def test_get_active_shift_fixed_invalid_day():
     mock_db = MagicMock()
     # Domingo 7 de Enero 2024 es iso_weekday 7
-    with patch("main.datetime") as mock_date:
+    with patch("app.attendance.utils.datetime") as mock_date:
         mock_date.now.return_value = datetime(2024, 1, 7, 10, 0, tzinfo=CARACAS_TZ)
         
         mock_db.table().select().eq().eq().eq().execute.return_value.data = [{
