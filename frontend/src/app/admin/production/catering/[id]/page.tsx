@@ -20,14 +20,16 @@ import {
     Trash2,
     X,
     Search,
-    Save
+    Save,
+    Truck
 } from 'lucide-react'
 import Link from 'next/link'
-import { adminApi, CateringRequest, MRPResultResponse, Warehouse, InventoryItem, getProfile, Profile } from '@/lib/api'
+import { adminApi, CateringRequest, MRPResultResponse, RecipeResponse, Warehouse, InventoryItem, getProfile, Profile } from '@/lib/api'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { useReactToPrint } from 'react-to-print'
 import { MRPPurchaseListPrint } from '@/components/production/MRPPurchaseListPrint'
+import { MRPDispatchListPrint, DispatchItem } from '@/components/production/MRPDispatchListPrint'
 
 export default function MRPConsolePage() {
     const { id } = useParams()
@@ -42,6 +44,8 @@ export default function MRPConsolePage() {
     const [generatingOrders, setGeneratingOrders] = useState(false)
     const [mrpResult, setMrpResult] = useState<MRPResultResponse | null>(null)
     const [profile, setProfile] = useState<Profile | null>(null)
+    // Map of item_id -> RecipeResponse for the catering request lines
+    const [recipesMap, setRecipesMap] = useState<Record<string, RecipeResponse>>({}) 
     
     // Config States
     const [eventDate, setEventDate] = useState('')
@@ -155,12 +159,63 @@ export default function MRPConsolePage() {
         return item.name.toLowerCase().includes(query) || (item.code && item.code.toLowerCase().includes(query))
     })
     
-    // Printing
+    // Printing - Purchase List
     const printRef = useRef<HTMLDivElement>(null)
     const handlePrint = useReactToPrint({
         contentRef: printRef,
         documentTitle: `MRP-${request?.name || 'Catering'}`
     })
+
+    // Printing - Dispatch List
+    const dispatchPrintRef = useRef<HTMLDivElement>(null)
+    const handleDispatchPrint = useReactToPrint({
+        contentRef: dispatchPrintRef,
+        documentTitle: `Despacho-${request?.name || 'Catering'}`
+    })
+
+    // Compute dispatch list: 1 level of recipe expansion.
+    // For each catering request line item, scales its DIRECT recipe ingredients
+    // by the quantity requested. This means pizza → masa, queso, salsa
+    // (NOT salsa's sub-ingredients). Items without a recipe are shown as-is.
+    const computeDispatchList = (): DispatchItem[] => {
+        if (!request?.lines) return []
+        const map: Record<string, { item_name: string; uom_name: string; qty: number; source: 'ingredient' }> = {}
+
+        for (const line of request.lines) {
+            const recipe = recipesMap[line.item_id]
+            const qtyRequested = line.qty_base
+
+            if (recipe && recipe.ingredients && recipe.ingredients.length > 0) {
+                const yieldQty = recipe.yield_qty_base || 1
+                const scale = qtyRequested / yieldQty
+
+                for (const ing of recipe.ingredients) {
+                    const ingName: string = ing.items?.name || ing.item_name || ing.item_id
+                    const ingUom: string = ing.items?.uom_base?.name || ing.uom_name || ''
+                    const ingQty: number = (ing.qty_base || 0) * scale
+                    const key = ing.item_id
+
+                    if (map[key]) {
+                        map[key].qty += ingQty
+                    } else {
+                        map[key] = { item_name: ingName, uom_name: ingUom, qty: ingQty, source: 'ingredient' }
+                    }
+                }
+            } else {
+                // No recipe found: show the item itself (pre-made or purchased as-is)
+                const itemName = line.items?.name || line.item_name || line.item_id
+                const itemUom = line.items?.uom_base?.name || line.uom_name || ''
+                const key = line.item_id
+                if (map[key]) {
+                    map[key].qty += qtyRequested
+                } else {
+                    map[key] = { item_name: itemName, uom_name: itemUom, qty: qtyRequested, source: 'ingredient' }
+                }
+            }
+        }
+
+        return Object.values(map)
+    }
 
     useEffect(() => {
         loadData()
@@ -194,11 +249,24 @@ export default function MRPConsolePage() {
     }
 
     async function handleRunMRP() {
-        if (!selectedWarehouseId) return
+        if (!selectedWarehouseId || !request) return
         setCalculating(true)
         try {
             const result = await adminApi.generateMRPPlan(id as string, selectedWarehouseId)
             setMrpResult(result)
+
+            // Load recipes for each catering line item (1-level dispatch expansion)
+            const lines = request.lines || []
+            const recipeResults = await Promise.allSettled(
+                lines.map(line => adminApi.getRecipe(line.item_id).then(r => ({ item_id: line.item_id, recipe: r })))
+            )
+            const map: Record<string, RecipeResponse> = {}
+            for (const res of recipeResults) {
+                if (res.status === 'fulfilled') {
+                    map[res.value.item_id] = res.value.recipe
+                }
+            }
+            setRecipesMap(map)
         } catch (err) {
             console.error('Error running MRP:', err)
         } finally {
@@ -348,7 +416,7 @@ export default function MRPConsolePage() {
             </div>
 
             {/* Main Console Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
                 
                 {/* Column 1: Base Requirements */}
                 <div className="space-y-3">
@@ -525,9 +593,75 @@ export default function MRPConsolePage() {
                     </div>
                 </div>
 
+                {/* Column 4: Dispatch / Logistics List */}
+                <div className="space-y-3">
+                    <div className="flex items-center justify-between px-1">
+                        <div className="flex items-center gap-2">
+                            <div className="p-1.5 bg-success/10 rounded-md text-success">
+                                <Truck className="w-4 h-4" />
+                            </div>
+                            <h2 className="font-bold text-text-primary uppercase tracking-wider text-xs">Lista de Despacho</h2>
+                        </div>
+                        {Object.keys(recipesMap).length > 0 && (
+                            <button 
+                                onClick={() => handleDispatchPrint()}
+                                className="flex items-center gap-1.5 px-2.5 py-1 bg-success text-text-inverse rounded-full text-[9px] font-bold uppercase tracking-wider hover:bg-success/80 transition-all active:scale-95"
+                            >
+                                <Printer className="w-3 h-3" />
+                                Exportar PDF
+                            </button>
+                        )}
+                    </div>
+
+                    <div className="bg-surface border border-border rounded-2xl overflow-hidden shadow-sm min-h-[160px]">
+                        {Object.keys(recipesMap).length === 0 ? (
+                            <div className="flex flex-col items-center justify-center p-10 text-center space-y-3">
+                                <div className="w-12 h-12 bg-surface-raised rounded-xl flex items-center justify-center text-text-secondary/20">
+                                    <Truck className="w-6 h-6" />
+                                </div>
+                                <p className="text-xs text-text-secondary font-medium">Corre el MRP para ver qué ingredientes debes llevar al evento</p>
+                            </div>
+                        ) : (() => {
+                            const dispatchList = computeDispatchList()
+                            return (
+                                <div className="divide-y divide-border">
+                                    {dispatchList.length > 0 && (
+                                        <div className="px-4 py-2 bg-surface-raised/40 flex items-center justify-between">
+                                            <span className="text-[8px] font-black uppercase tracking-widest text-text-secondary">Ingredientes a Llevar</span>
+                                            <span className="text-[8px] font-bold text-text-secondary bg-surface border border-border px-1.5 py-0.5 rounded uppercase">{dispatchList.length} items</span>
+                                        </div>
+                                    )}
+                                    {[...dispatchList]
+                                        .sort((a, b) => a.item_name.localeCompare(b.item_name))
+                                        .map((item, idx) => (
+                                        <div key={idx} className="py-2.5 px-4 grid grid-cols-12 gap-2 items-center hover:bg-surface-raised transition-colors">
+                                            <div className="col-span-7 min-w-0">
+                                                <p className="font-medium text-xs text-text-primary truncate">{item.item_name}</p>
+                                            </div>
+                                            <div className="col-span-2 text-center">
+                                                <span className="text-[9px] font-semibold text-text-secondary bg-surface-raised border border-border/40 px-1.5 py-0.5 rounded uppercase tracking-wider whitespace-nowrap">
+                                                    {item.uom_name}
+                                                </span>
+                                            </div>
+                                            <div className="col-span-3 text-right">
+                                                <p className="text-xs font-bold text-success">{formatCeilQty(item.qty)}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {dispatchList.length === 0 && (
+                                        <div className="p-8 text-center">
+                                            <p className="text-xs text-text-secondary">No hay ingredientes calculados.</p>
+                                        </div>
+                                    )}
+                                </div>
+                            )
+                        })()}
+                    </div>
+                </div>
+
             </div>
 
-            {/* Hidden Print Component */}
+            {/* Hidden Print Components */}
             <div className="hidden">
                 {mrpResult && (
                     <MRPPurchaseListPrint 
@@ -537,6 +671,18 @@ export default function MRPConsolePage() {
                             eventDate: request.event_date,
                             tentativeProductionDate: request.tentative_production_date || tentativeDate,
                             purchaseList: [...mrpResult.purchase_list].sort((a, b) => a.item_name.localeCompare(b.item_name)),
+                            generatedBy: profile?.full_name || 'Sistema'
+                        }}
+                    />
+                )}
+                {Object.keys(recipesMap).length > 0 && (
+                    <MRPDispatchListPrint
+                        ref={dispatchPrintRef}
+                        data={{
+                            eventName: request.name,
+                            eventDate: request.event_date,
+                            tentativeProductionDate: request.tentative_production_date || tentativeDate,
+                            dispatchList: computeDispatchList(),
                             generatedBy: profile?.full_name || 'Sistema'
                         }}
                     />
