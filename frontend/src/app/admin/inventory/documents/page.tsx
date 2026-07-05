@@ -43,6 +43,7 @@ export default function InventoryDocumentsPage() {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showReceiveModal, setShowReceiveModal] = useState(false);
   const [errorModal, setErrorModal] = useState({ isOpen: false, message: '' });
+  const [cancelConfirmModal, setCancelConfirmModal] = useState({ isOpen: false, docId: '' });
   
   const [selectedDoc, setSelectedDoc] = useState<any>(null);
   const [selectedDocLines, setSelectedDocLines] = useState<any[]>([]);
@@ -884,7 +885,7 @@ export default function InventoryDocumentsPage() {
               <div>
                 {selectedDoc.status === 'draft' && (
                   <button
-                    onClick={() => handleCancelDocument(selectedDoc.id)}
+                    onClick={() => setCancelConfirmModal({ isOpen: true, docId: selectedDoc.id })}
                     className="flex items-center gap-1.5 text-xs font-bold text-error border border-error/20 bg-error/5 hover:bg-error/15 px-4 h-9 rounded-xl transition-all"
                     disabled={saving}
                   >
@@ -1010,6 +1011,21 @@ export default function InventoryDocumentsPage() {
           </div>
         </div>
       )}
+
+      {/* Confirmation Dialog for Cancellation */}
+      <ConfirmationModal 
+        isOpen={cancelConfirmModal.isOpen}
+        title="Anular Documento"
+        message="¿Está seguro de que desea anular este documento de inventario? Esta acción no se puede deshacer y liberará los cambios pendientes."
+        confirmLabel="Anular Documento"
+        cancelLabel="Cancelar"
+        onConfirm={async () => {
+          const docId = cancelConfirmModal.docId;
+          setCancelConfirmModal({ isOpen: false, docId: '' });
+          await handleCancelDocument(docId);
+        }}
+        onCancel={() => setCancelConfirmModal({ isOpen: false, docId: '' })}
+      />
     </div>
   );
 }
