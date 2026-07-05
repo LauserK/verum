@@ -17,7 +17,10 @@ from app.inventory.schemas import (
     CreateUtensilCategoryRequest, UpdateUtensilCategoryRequest, CreateUtensilRequest, UpdateUtensilRequest,
     CreateTicketRequest, CreateTicketEntryRequest, CloseTicketRequest,
     UtensilMovementRequest, UtensilCountItemSchema, CreateUtensilCountRequest, ConfirmCountItemSchema, ConfirmCountRequest,
-    CreateCountScheduleRequest, UpdateCountScheduleRequest
+    CreateCountScheduleRequest, UpdateCountScheduleRequest,
+    InventoryDocumentLineSchema, InventoryDocumentCreate, InventoryDocumentUpdate,
+    InventoryDocumentLineResponse, InventoryDocumentResponse,
+    TransferReceiveLineSchema, TransferReceiveRequest
 )
 
 CARACAS_TZ = pytz.timezone("America/Caracas")
@@ -833,3 +836,780 @@ async def get_inventory_dashboard_summary(
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Unified Inventory Documents Endpoints ─────────────────
+
+async def get_next_document_number(db, org_id: str, doc_type: str) -> str:
+    res = db.table("inventory_document_sequences").select("last_value").eq("org_id", org_id).eq("document_type", doc_type).execute()
+    if res.data:
+        next_val = int(res.data[0]["last_value"]) + 1
+        db.table("inventory_document_sequences").update({"last_value": next_val}).eq("org_id", org_id).eq("document_type", doc_type).execute()
+    else:
+        next_val = 1
+        db.table("inventory_document_sequences").insert({"org_id": org_id, "document_type": doc_type, "last_value": 1}).execute()
+        
+    prefix = "ING" if doc_type == "receipt" else "EGR" if doc_type == "issue" else "TRA"
+    return f"{prefix}-{next_val:04d}"
+
+
+@router.post("/inventory/documents", response_model=InventoryDocumentResponse)
+async def create_inventory_document(
+    doc: InventoryDocumentCreate,
+    org_id: str = Depends(get_active_org_id),
+    user = Depends(get_current_user),
+    db = Depends(get_db),
+    bypass_auth: bool = False
+):
+    # Check permissions dynamically based on document type
+    required_perm = "inventory.receive" if doc.document_type == "receipt" else "inventory.issue" if doc.document_type == "issue" else "inventory.transfer"
+    if not bypass_auth and not await resolve_permission(user.id, required_perm, db, org_id):
+        raise HTTPException(status_code=403, detail="Not authorized to create this type of document")
+
+    if doc.document_type == "transfer" and not doc.destination_warehouse_id:
+        raise HTTPException(status_code=400, detail="Destination warehouse is required for transfer documents")
+        
+    if doc.document_type == "transfer" and str(doc.warehouse_id) == str(doc.destination_warehouse_id):
+        raise HTTPException(status_code=400, detail="Origin and destination warehouses must be different")
+
+    doc_number = await get_next_document_number(db, org_id, doc.document_type)
+    
+    header_data = {
+        "org_id": org_id,
+        "document_type": doc.document_type,
+        "document_number": doc_number,
+        "status": "draft",
+        "warehouse_id": str(doc.warehouse_id),
+        "destination_warehouse_id": str(doc.destination_warehouse_id) if doc.destination_warehouse_id else None,
+        "supplier": doc.supplier,
+        "reason": doc.reason,
+        "notes": doc.notes,
+        "created_by": user.id
+    }
+    
+    res = db.table("inventory_documents").insert(header_data).execute()
+    if not res.data:
+        raise HTTPException(status_code=400, detail="Error creating document header")
+        
+    doc_id = res.data[0]["id"]
+    
+    # Process lines to compute base quantities
+    for line in doc.lines:
+        factor = 1.0
+        if line.presentation_id:
+            pres_res = db.table("uom_presentations").select("conversion_factor").eq("id", str(line.presentation_id)).execute()
+            if pres_res.data:
+                factor = float(pres_res.data[0]["conversion_factor"])
+                
+        qty_base = float(line.qty_presentation) * factor
+        
+        line_data = {
+            "document_id": doc_id,
+            "item_id": str(line.item_id),
+            "qty_presentation": line.qty_presentation,
+            "presentation_id": str(line.presentation_id) if line.presentation_id else None,
+            "qty_base": qty_base,
+            "unit_cost_presentation": line.unit_cost_presentation,
+            "unit_cost_base": (line.unit_cost_presentation / factor) if (line.unit_cost_presentation is not None and factor > 0) else None,
+            "lot_number": line.lot_number,
+            "expiry_date": line.expiry_date
+        }
+        db.table("inventory_document_lines").insert(line_data).execute()
+
+    ret = res.data[0]
+    if doc.auto_confirm and doc.document_type == "transfer":
+        from app.inventory.schemas import TransferReceiveRequest, TransferReceiveLineSchema
+        await process_inventory_document(UUID(doc_id), org_id, user, db, bypass_auth=True)
+        res_lines = db.table("inventory_document_lines").select("id, qty_presentation").eq("document_id", doc_id).execute()
+        rec_lines = []
+        for rl in (res_lines.data or []):
+            rec_lines.append(TransferReceiveLineSchema(
+                id=rl["id"],
+                qty_received_presentation=rl["qty_presentation"]
+            ))
+        await receive_transfer_document(UUID(doc_id), TransferReceiveRequest(notes=doc.notes, lines=rec_lines), org_id, user, db, bypass_auth=True)
+        if isinstance(ret, dict):
+            ret = {**ret, "status": "confirmed"}
+
+    return ret
+
+
+@router.get("/inventory/documents", response_model=List[InventoryDocumentResponse])
+async def list_inventory_documents(
+    doc_type: Optional[str] = None,
+    status: Optional[str] = None,
+    warehouse_id: Optional[UUID] = None,
+    org_id: str = Depends(get_active_org_id),
+    user = Depends(get_current_user),
+    db = Depends(get_db)
+):
+    query = db.table("inventory_documents") \
+        .select("*, warehouse:warehouse_id(name), destination_warehouse:destination_warehouse_id(name), creator:created_by(full_name)") \
+        .eq("org_id", org_id)
+        
+    if doc_type:
+        query = query.eq("document_type", doc_type)
+    if status:
+        query = query.eq("status", status)
+    if warehouse_id:
+        query = query.or_(f"warehouse_id.eq.{warehouse_id},destination_warehouse_id.eq.{warehouse_id}")
+        
+    res = query.order("created_at", desc=True).execute()
+    
+    # Flatten names for serialization
+    data = []
+    for doc in (res.data or []):
+        doc["warehouse_name"] = doc.get("warehouse", {}).get("name") if doc.get("warehouse") else None
+        doc["destination_warehouse_name"] = doc.get("destination_warehouse", {}).get("name") if doc.get("destination_warehouse") else None
+        doc["creator_name"] = doc.get("creator", {}).get("full_name") if doc.get("creator") else None
+        data.append(doc)
+        
+    return data
+
+
+@router.get("/inventory/documents/{id}")
+async def get_inventory_document_detail(
+    id: UUID,
+    org_id: str = Depends(get_active_org_id),
+    user = Depends(get_current_user),
+    db = Depends(get_db)
+):
+    res_header = db.table("inventory_documents") \
+        .select("*, warehouse:warehouse_id(name), destination_warehouse:destination_warehouse_id(name), creator:created_by(full_name), processor:processed_by(full_name), canceller:cancelled_by(full_name)") \
+        .eq("id", str(id)) \
+        .execute()
+        
+    if not res_header.data:
+        raise HTTPException(status_code=404, detail="Document not found")
+        
+    header = res_header.data[0]
+    header["warehouse_name"] = header.get("warehouse", {}).get("name") if header.get("warehouse") else None
+    header["destination_warehouse_name"] = header.get("destination_warehouse", {}).get("name") if header.get("destination_warehouse") else None
+    header["creator_name"] = header.get("creator", {}).get("full_name") if header.get("creator") else None
+    header["processor_name"] = header.get("processor", {}).get("full_name") if header.get("processor") else None
+    header["canceller_name"] = header.get("canceller", {}).get("full_name") if header.get("canceller") else None
+    
+    res_lines = db.table("inventory_document_lines") \
+        .select("*, items(name, code, uom_base(name)), uom_presentations(name)") \
+        .eq("document_id", str(id)) \
+        .execute()
+        
+    lines = []
+    for line in (res_lines.data or []):
+        line["item_name"] = line.get("items", {}).get("name") if line.get("items") else None
+        line["presentation_name"] = line.get("uom_presentations", {}).get("name") if line.get("uom_presentations") else None
+        lines.append(line)
+        
+    return {
+        "header": header,
+        "lines": lines
+    }
+
+
+@router.put("/inventory/documents/{id}", response_model=InventoryDocumentResponse)
+async def update_inventory_document(
+    id: UUID,
+    doc: InventoryDocumentUpdate,
+    org_id: str = Depends(get_active_org_id),
+    user = Depends(get_current_user),
+    db = Depends(get_db)
+):
+    res_header = db.table("inventory_documents").select("status").eq("id", str(id)).execute()
+    if not res_header.data:
+        raise HTTPException(status_code=404, detail="Document not found")
+        
+    if res_header.data[0]["status"] != "draft":
+        raise HTTPException(status_code=400, detail="Only documents in draft status can be modified")
+        
+    payload = doc.dict(exclude_none=True, exclude={"lines"})
+    if payload:
+        db.table("inventory_documents").update(payload).eq("id", str(id)).execute()
+        
+    if doc.lines is not None:
+        # Delete existing lines and re-insert
+        db.table("inventory_document_lines").delete().eq("document_id", str(id)).execute()
+        
+        for line in doc.lines:
+            factor = 1.0
+            if line.presentation_id:
+                pres_res = db.table("uom_presentations").select("conversion_factor").eq("id", str(line.presentation_id)).execute()
+                if pres_res.data:
+                    factor = float(pres_res.data[0]["conversion_factor"])
+                    
+            qty_base = float(line.qty_presentation) * factor
+            
+            line_data = {
+                "document_id": str(id),
+                "item_id": str(line.item_id),
+                "qty_presentation": line.qty_presentation,
+                "presentation_id": str(line.presentation_id) if line.presentation_id else None,
+                "qty_base": qty_base,
+                "unit_cost_presentation": line.unit_cost_presentation,
+                "unit_cost_base": (line.unit_cost_presentation / factor) if (line.unit_cost_presentation is not None and factor > 0) else None,
+                "lot_number": line.lot_number,
+                "expiry_date": line.expiry_date
+            }
+            db.table("inventory_document_lines").insert(line_data).execute()
+            
+    final_res = db.table("inventory_documents").select("*").eq("id", str(id)).execute()
+    return final_res.data[0]
+
+
+@router.delete("/inventory/documents/{id}")
+async def delete_inventory_document(
+    id: UUID,
+    db = Depends(get_db)
+):
+    res_header = db.table("inventory_documents").select("status").eq("id", str(id)).execute()
+    if not res_header.data:
+        raise HTTPException(status_code=404, detail="Document not found")
+        
+    if res_header.data[0]["status"] != "draft":
+        raise HTTPException(status_code=400, detail="Only draft documents can be deleted")
+        
+    db.table("inventory_documents").delete().eq("id", str(id)).execute()
+    return {"ok": True}
+
+
+@router.post("/inventory/documents/{id}/process", response_model=InventoryDocumentResponse)
+async def process_inventory_document(
+    id: UUID,
+    org_id: str = Depends(get_active_org_id),
+    user = Depends(get_current_user),
+    db = Depends(get_db),
+    bypass_auth: bool = False
+):
+    res_header = db.table("inventory_documents").select("*").eq("id", str(id)).execute()
+    if not res_header.data:
+        raise HTTPException(status_code=404, detail="Document not found")
+        
+    header = res_header.data[0]
+    if header["status"] != "draft":
+        raise HTTPException(status_code=400, detail="Document is not in draft status")
+        
+    lines_res = db.table("inventory_document_lines").select("*").eq("document_id", str(id)).execute()
+    lines = lines_res.data or []
+    
+    if not lines:
+        raise HTTPException(status_code=400, detail="Cannot process an empty document")
+
+    # 1. Process Stock Actions based on document type
+    if header["document_type"] == "receipt":
+        # Check permissions
+        if not bypass_auth and not await resolve_permission(user.id, "inventory.receive", db, org_id):
+            raise HTTPException(status_code=403, detail="Not authorized to process receipts")
+            
+        for line in lines:
+            # Create stock lot
+            lot_data = {
+                "warehouse_id": header["warehouse_id"],
+                "item_id": line["item_id"],
+                "lot_number": line["lot_number"] or f"LT-{str(uuid.uuid4()).replace('-', '')[:8].upper()}",
+                "qty_base": float(line["qty_base"]),
+                "unit_cost_base": float(line["unit_cost_base"] or 0),
+                "expiry_date": line["expiry_date"]
+            }
+            lot_res = db.table("stock_lots").insert(lot_data).execute()
+            lot_id = lot_res.data[0]["id"]
+            
+            # Increment stock
+            stock_res = db.table("stock").select("id, qty_base").eq("warehouse_id", header["warehouse_id"]).eq("item_id", line["item_id"]).execute()
+            if stock_res.data:
+                new_qty = float(stock_res.data[0]["qty_base"]) + float(line["qty_base"])
+                db.table("stock").update({"qty_base": new_qty}).eq("id", stock_res.data[0]["id"]).execute()
+            else:
+                db.table("stock").insert({
+                    "warehouse_id": header["warehouse_id"],
+                    "item_id": line["item_id"],
+                    "qty_base": float(line["qty_base"])
+                }).execute()
+                
+            # Log movement
+            db.table("stock_movements").insert({
+                "org_id": org_id,
+                "movement_type": "purchase",
+                "warehouse_id": header["warehouse_id"],
+                "item_id": line["item_id"],
+                "lot_id": lot_id,
+                "qty_base": float(line["qty_base"]),
+                "unit_cost_base": float(line["unit_cost_base"] or 0),
+                "total_cost": float(line["qty_base"]) * float(line["unit_cost_base"] or 0),
+                "reference_id": str(id),
+                "reference_type": "inventory_document",
+                "created_by": user.id
+            }).execute()
+            
+            # Update last purchase cost on items
+            db.table("items").update({
+                "last_purchase_cost": float(line["unit_cost_base"] or 0),
+                "last_purchase_cost_updated_at": datetime.now(CARACAS_TZ).isoformat()
+            }).eq("id", line["item_id"]).execute()
+            
+        # Update status
+        db.table("inventory_documents").update({
+            "status": "confirmed",
+            "processed_by": user.id,
+            "processed_at": datetime.now(CARACAS_TZ).isoformat()
+        }).eq("id", str(id)).execute()
+
+    elif header["document_type"] == "issue":
+        if not bypass_auth and not await resolve_permission(user.id, "inventory.issue", db, org_id):
+            raise HTTPException(status_code=403, detail="Not authorized to process issue documents")
+            
+        for line in lines:
+            total_to_consume = float(line["qty_base"])
+            
+            # FIFO consumption from stock_lots
+            lots_res = db.table("stock_lots") \
+                .select("*") \
+                .eq("item_id", line["item_id"]) \
+                .eq("warehouse_id", header["warehouse_id"]) \
+                .filter("qty_base", "gt", 0) \
+                .order("received_at", desc=False) \
+                .execute()
+                
+            remaining = total_to_consume
+            for lot in (lots_res.data or []):
+                if remaining <= 0:
+                    break
+                lot_qty = float(lot["qty_base"])
+                consume_qty = min(remaining, lot_qty)
+                
+                db.table("stock_lots").update({
+                    "qty_base": lot_qty - consume_qty,
+                    "is_exhausted": (lot_qty - consume_qty) <= 0
+                }).eq("id", lot["id"]).execute()
+                
+                db.table("stock_movements").insert({
+                    "org_id": org_id,
+                    "movement_type": "adjustment_out" if header["reason"] == "adjustment" else "sale",
+                    "warehouse_id": header["warehouse_id"],
+                    "item_id": line["item_id"],
+                    "lot_id": lot["id"],
+                    "qty_base": -consume_qty,
+                    "unit_cost_base": float(lot["unit_cost_base"]),
+                    "total_cost": -consume_qty * float(lot["unit_cost_base"]),
+                    "reference_id": str(id),
+                    "reference_type": "inventory_document",
+                    "notes": header["notes"],
+                    "created_by": user.id
+                }).execute()
+                
+                remaining -= consume_qty
+                
+            # Log deficit
+            if remaining > 0:
+                db.table("stock_movements").insert({
+                    "org_id": org_id,
+                    "movement_type": "adjustment_out" if header["reason"] == "adjustment" else "sale",
+                    "warehouse_id": header["warehouse_id"],
+                    "item_id": line["item_id"],
+                    "qty_base": -remaining,
+                    "unit_cost_base": 0.0,
+                    "total_cost": 0.0,
+                    "reference_id": str(id),
+                    "reference_type": "inventory_document",
+                    "notes": f"Defecto de stock (DÉFICIT)",
+                    "created_by": user.id
+                }).execute()
+                
+            # Update stock
+            stock_res = db.table("stock").select("id, qty_base").eq("warehouse_id", header["warehouse_id"]).eq("item_id", line["item_id"]).execute()
+            if stock_res.data:
+                new_qty = max(0.0, float(stock_res.data[0]["qty_base"]) - total_to_consume)
+                db.table("stock").update({"qty_base": new_qty}).eq("id", stock_res.data[0]["id"]).execute()
+                
+        db.table("inventory_documents").update({
+            "status": "confirmed",
+            "processed_by": user.id,
+            "processed_at": datetime.now(CARACAS_TZ).isoformat()
+        }).eq("id", str(id)).execute()
+
+    elif header["document_type"] == "transfer":
+        if not bypass_auth and not await resolve_permission(user.id, "inventory.transfer", db, org_id):
+            raise HTTPException(status_code=403, detail="Not authorized to process transfers")
+            
+        for line in lines:
+            total_to_move = float(line["qty_base"])
+            
+            # FIFO consumption from origin
+            lots_res = db.table("stock_lots") \
+                .select("*") \
+                .eq("item_id", line["item_id"]) \
+                .eq("warehouse_id", header["warehouse_id"]) \
+                .filter("qty_base", "gt", 0) \
+                .order("received_at", desc=False) \
+                .execute()
+                
+            remaining = total_to_move
+            total_cost_at_origin = 0.0
+            
+            for lot in (lots_res.data or []):
+                if remaining <= 0:
+                    break
+                lot_qty = float(lot["qty_base"])
+                consume_qty = min(remaining, lot_qty)
+                cost_of_lot = float(lot["unit_cost_base"])
+                
+                total_cost_at_origin += consume_qty * cost_of_lot
+                
+                db.table("stock_lots").update({
+                    "qty_base": lot_qty - consume_qty,
+                    "is_exhausted": (lot_qty - consume_qty) <= 0
+                }).eq("id", lot["id"]).execute()
+                
+                db.table("stock_movements").insert({
+                    "org_id": org_id,
+                    "movement_type": "transfer_out",
+                    "warehouse_id": header["warehouse_id"],
+                    "item_id": line["item_id"],
+                    "lot_id": lot["id"],
+                    "qty_base": -consume_qty,
+                    "unit_cost_base": cost_of_lot,
+                    "total_cost": -consume_qty * cost_of_lot,
+                    "reference_id": str(id),
+                    "reference_type": "inventory_document",
+                    "notes": f"Traslado a almacén {header['destination_warehouse_id']}",
+                    "created_by": user.id
+                }).execute()
+                
+                remaining -= consume_qty
+                
+            # Log deficit
+            if remaining > 0:
+                db.table("stock_movements").insert({
+                    "org_id": org_id,
+                    "movement_type": "transfer_out",
+                    "warehouse_id": header["warehouse_id"],
+                    "item_id": line["item_id"],
+                    "qty_base": -remaining,
+                    "unit_cost_base": 0.0,
+                    "total_cost": 0.0,
+                    "reference_id": str(id),
+                    "reference_type": "inventory_document",
+                    "notes": f"Traslado a almacén {header['destination_warehouse_id']} (DÉFICIT)",
+                    "created_by": user.id
+                }).execute()
+                
+            weighted_unit_cost = total_cost_at_origin / total_to_move if total_to_move > 0 else 0.0
+            
+            # Save weighted unit cost to the line
+            db.table("inventory_document_lines").update({
+                "unit_cost_base": weighted_unit_cost
+            }).eq("id", line["id"]).execute()
+            
+            # Update stock at origin
+            stock_res = db.table("stock").select("id, qty_base").eq("warehouse_id", header["warehouse_id"]).eq("item_id", line["item_id"]).execute()
+            if stock_res.data:
+                new_qty = float(stock_res.data[0]["qty_base"]) - total_to_move
+                db.table("stock").update({"qty_base": new_qty}).eq("id", stock_res.data[0]["id"]).execute()
+            else:
+                db.table("stock").insert({
+                    "warehouse_id": header["warehouse_id"],
+                    "item_id": line["item_id"],
+                    "qty_base": -total_to_move
+                }).execute()
+                
+        db.table("inventory_documents").update({
+            "status": "in_transit",
+            "processed_by": user.id,
+            "processed_at": datetime.now(CARACAS_TZ).isoformat()
+        }).eq("id", str(id)).execute()
+        
+    final_doc = db.table("inventory_documents").select("*").eq("id", str(id)).execute()
+    return final_doc.data[0]
+
+
+@router.post("/inventory/documents/{id}/receive", response_model=InventoryDocumentResponse)
+async def receive_transfer_document(
+    id: UUID,
+    req: TransferReceiveRequest,
+    org_id: str = Depends(get_active_org_id),
+    user = Depends(get_current_user),
+    db = Depends(get_db),
+    bypass_auth: bool = False
+):
+    if not bypass_auth and not await resolve_permission(user.id, "inventory.transfer_confirm", db, org_id):
+        raise HTTPException(status_code=403, detail="Not authorized to confirm transfers")
+
+    res_header = db.table("inventory_documents").select("*").eq("id", str(id)).execute()
+    if not res_header.data:
+        raise HTTPException(status_code=404, detail="Document not found")
+        
+    header = res_header.data[0]
+    if header["document_type"] != "transfer" or header["status"] != "in_transit":
+        raise HTTPException(status_code=400, detail="Document is not an in-transit transfer")
+        
+    has_discrepancy = False
+    
+    # Process receipt lines
+    for line in req.lines:
+        orig_line_res = db.table("inventory_document_lines").select("*").eq("id", str(line.id)).execute()
+        if not orig_line_res.data:
+            continue
+        orig_line = orig_line_res.data[0]
+        
+        factor = 1.0
+        if orig_line["presentation_id"]:
+            pres_res = db.table("uom_presentations").select("conversion_factor").eq("id", orig_line["presentation_id"]).execute()
+            if pres_res.data:
+                factor = float(pres_res.data[0]["conversion_factor"])
+                
+        qty_received_base = float(line.qty_received_presentation) * factor
+        if abs(qty_received_base - float(orig_line["qty_base"])) > 0.0001:
+            has_discrepancy = True
+            
+        db.table("inventory_document_lines").update({
+            "qty_received_presentation": line.qty_received_presentation,
+            "qty_received_base": qty_received_base
+        }).eq("id", str(line.id)).execute()
+        
+        # Add stock at destination
+        if qty_received_base > 0:
+            lot_data = {
+                "warehouse_id": header["destination_warehouse_id"],
+                "item_id": orig_line["item_id"],
+                "lot_number": f"TR-{str(id).replace('-', '')[:8].upper()}",
+                "qty_base": qty_received_base,
+                "unit_cost_base": float(orig_line["unit_cost_base"] or 0),
+                "received_at": datetime.now(CARACAS_TZ).isoformat()
+            }
+            lot_res = db.table("stock_lots").insert(lot_data).execute()
+            lot_id = lot_res.data[0]["id"]
+            
+            db.table("stock_movements").insert({
+                "org_id": org_id,
+                "movement_type": "transfer_in",
+                "warehouse_id": header["destination_warehouse_id"],
+                "item_id": orig_line["item_id"],
+                "lot_id": lot_id,
+                "qty_base": qty_received_base,
+                "unit_cost_base": float(orig_line["unit_cost_base"] or 0),
+                "total_cost": qty_received_base * float(orig_line["unit_cost_base"] or 0),
+                "reference_id": str(id),
+                "reference_type": "inventory_document",
+                "notes": f"Recibido de almacén {header['warehouse_id']}",
+                "created_by": user.id
+            }).execute()
+            
+            stock_res = db.table("stock").select("id, qty_base").eq("warehouse_id", header["destination_warehouse_id"]).eq("item_id", orig_line["item_id"]).execute()
+            if stock_res.data:
+                new_qty = float(stock_res.data[0]["qty_base"]) + qty_received_base
+                db.table("stock").update({"qty_base": new_qty}).eq("id", stock_res.data[0]["id"]).execute()
+            else:
+                db.table("stock").insert({
+                    "warehouse_id": header["destination_warehouse_id"],
+                    "item_id": orig_line["item_id"],
+                    "qty_base": qty_received_base
+                }).execute()
+                
+    final_status = "confirmed" # Unified to confirmed, discrepancies visible in lines
+    db.table("inventory_documents").update({
+        "status": final_status,
+        "processed_by": user.id,
+        "processed_at": datetime.now(CARACAS_TZ).isoformat(),
+        "notes": req.notes if req.notes else header["notes"]
+    }).eq("id", str(id)).execute()
+    
+    final_doc = db.table("inventory_documents").select("*").eq("id", str(id)).execute()
+    return final_doc.data[0]
+
+
+@router.post("/inventory/documents/{id}/cancel", response_model=InventoryDocumentResponse)
+async def cancel_inventory_document(
+    id: UUID,
+    org_id: str = Depends(get_active_org_id),
+    user = Depends(get_current_user),
+    db = Depends(get_db),
+    bypass_auth: bool = False
+):
+    res_header = db.table("inventory_documents").select("*").eq("id", str(id)).execute()
+    if not res_header.data:
+        raise HTTPException(status_code=404, detail="Document not found")
+        
+    header = res_header.data[0]
+    if header["status"] == "cancelled":
+        raise HTTPException(status_code=400, detail="Document is already cancelled")
+        
+    # Check permissions based on document type
+    required_perm = "inventory.receive" if header["document_type"] == "receipt" else "inventory.issue" if header["document_type"] == "issue" else "inventory.transfer"
+    if not bypass_auth and not await resolve_permission(user.id, required_perm, db, org_id):
+        raise HTTPException(status_code=403, detail="Not authorized to cancel this document")
+
+    # If it was in draft, just mark as cancelled
+    if header["status"] == "draft":
+        db.table("inventory_documents").update({
+            "status": "cancelled",
+            "cancelled_by": user.id,
+            "cancelled_at": datetime.now(CARACAS_TZ).isoformat()
+        }).eq("id", str(id)).execute()
+        
+        final_doc = db.table("inventory_documents").select("*").eq("id", str(id)).execute()
+        return final_doc.data[0]
+
+    # Reversion logic for executed documents
+    if header["document_type"] == "receipt":
+        # 1. We look at movements to deduct the exact quantity
+        movs_res = db.table("stock_movements").select("*").eq("reference_id", str(id)).eq("reference_type", "inventory_document").execute()
+        for mov in (movs_res.data or []):
+            if mov["lot_id"]:
+                # Subtract from lot
+                lot_res = db.table("stock_lots").select("qty_base").eq("id", mov["lot_id"]).execute()
+                if lot_res.data:
+                    new_lot_qty = max(0.0, float(lot_res.data[0]["qty_base"]) - float(mov["qty_base"]))
+                    db.table("stock_lots").update({
+                        "qty_base": new_lot_qty,
+                        "is_exhausted": new_lot_qty <= 0
+                    }).eq("id", mov["lot_id"]).execute()
+            
+            # Subtract from stock
+            stock_res = db.table("stock").select("id, qty_base").eq("warehouse_id", header["warehouse_id"]).eq("item_id", mov["item_id"]).execute()
+            if stock_res.data:
+                new_stock_qty = max(0.0, float(stock_res.data[0]["qty_base"]) - float(mov["qty_base"]))
+                db.table("stock").update({"qty_base": new_stock_qty}).eq("id", stock_res.data[0]["id"]).execute()
+                
+            # Log compensating movement
+            db.table("stock_movements").insert({
+                "org_id": org_id,
+                "movement_type": "adjustment_out",
+                "warehouse_id": header["warehouse_id"],
+                "item_id": mov["item_id"],
+                "lot_id": mov["lot_id"],
+                "qty_base": -float(mov["qty_base"]),
+                "unit_cost_base": float(mov["unit_cost_base"]),
+                "total_cost": -float(mov["qty_base"]) * float(mov["unit_cost_base"]),
+                "reference_id": str(id),
+                "reference_type": "inventory_document",
+                "notes": "Cancelación de ingreso",
+                "created_by": user.id
+            }).execute()
+
+    elif header["document_type"] == "issue":
+        # 1. Find the FIFO logs from stock_movements
+        movs_res = db.table("stock_movements").select("*").eq("reference_id", str(id)).eq("reference_type", "inventory_document").execute()
+        for mov in (movs_res.data or []):
+            if mov["lot_id"]:
+                # Add back to lot
+                lot_res = db.table("stock_lots").select("qty_base").eq("id", mov["lot_id"]).execute()
+                if lot_res.data:
+                    new_lot_qty = float(lot_res.data[0]["qty_base"]) + abs(float(mov["qty_base"]))
+                    db.table("stock_lots").update({
+                        "qty_base": new_lot_qty,
+                        "is_exhausted": new_lot_qty <= 0
+                    }).eq("id", mov["lot_id"]).execute()
+            
+            # Add back to stock
+            stock_res = db.table("stock").select("id, qty_base").eq("warehouse_id", header["warehouse_id"]).eq("item_id", mov["item_id"]).execute()
+            if stock_res.data:
+                new_stock_qty = float(stock_res.data[0]["qty_base"]) + abs(float(mov["qty_base"]))
+                db.table("stock").update({"qty_base": new_stock_qty}).eq("id", stock_res.data[0]["id"]).execute()
+                
+            # Log compensating movement
+            db.table("stock_movements").insert({
+                "org_id": org_id,
+                "movement_type": "adjustment_in",
+                "warehouse_id": header["warehouse_id"],
+                "item_id": mov["item_id"],
+                "lot_id": mov["lot_id"],
+                "qty_base": abs(float(mov["qty_base"])),
+                "unit_cost_base": float(mov["unit_cost_base"]),
+                "total_cost": abs(float(mov["qty_base"])) * float(mov["unit_cost_base"]),
+                "reference_id": str(id),
+                "reference_type": "inventory_document",
+                "notes": "Cancelación de egreso",
+                "created_by": user.id
+            }).execute()
+
+    elif header["document_type"] == "transfer":
+        # 1. Reverse origin deduction (always exists if status != draft)
+        movs_res = db.table("stock_movements") \
+            .select("*") \
+            .eq("reference_id", str(id)) \
+            .eq("reference_type", "inventory_document") \
+            .eq("movement_type", "transfer_out") \
+            .execute()
+            
+        for mov in (movs_res.data or []):
+            if mov["lot_id"]:
+                # Add back to origin lot
+                lot_res = db.table("stock_lots").select("qty_base").eq("id", mov["lot_id"]).execute()
+                if lot_res.data:
+                    new_lot_qty = float(lot_res.data[0]["qty_base"]) + abs(float(mov["qty_base"]))
+                    db.table("stock_lots").update({
+                        "qty_base": new_lot_qty,
+                        "is_exhausted": new_lot_qty <= 0
+                    }).eq("id", mov["lot_id"]).execute()
+                    
+            # Add back to origin stock
+            stock_res = db.table("stock").select("id, qty_base").eq("warehouse_id", header["warehouse_id"]).eq("item_id", mov["item_id"]).execute()
+            if stock_res.data:
+                new_stock_qty = float(stock_res.data[0]["qty_base"]) + abs(float(mov["qty_base"]))
+                db.table("stock").update({"qty_base": new_stock_qty}).eq("id", stock_res.data[0]["id"]).execute()
+                
+            # Log origin compensating movement
+            db.table("stock_movements").insert({
+                "org_id": org_id,
+                "movement_type": "transfer_in",
+                "warehouse_id": header["warehouse_id"],
+                "item_id": mov["item_id"],
+                "lot_id": mov["lot_id"],
+                "qty_base": abs(float(mov["qty_base"])),
+                "unit_cost_base": float(mov["unit_cost_base"]),
+                "total_cost": abs(float(mov["qty_base"])) * float(mov["unit_cost_base"]),
+                "reference_id": str(id),
+                "reference_type": "inventory_document",
+                "notes": "Cancelación de traslado (Origen)",
+                "created_by": user.id
+            }).execute()
+
+        # 2. Reverse destination reception (if status == confirmed)
+        if header["status"] == "confirmed":
+            dest_movs_res = db.table("stock_movements") \
+                .select("*") \
+                .eq("reference_id", str(id)) \
+                .eq("reference_type", "inventory_document") \
+                .eq("movement_type", "transfer_in") \
+                .neq("warehouse_id", header["warehouse_id"]) \
+                .execute()
+                
+            for mov in (dest_movs_res.data or []):
+                if mov["lot_id"]:
+                    # Deduct from destination lot
+                    lot_res = db.table("stock_lots").select("qty_base").eq("id", mov["lot_id"]).execute()
+                    if lot_res.data:
+                        new_lot_qty = max(0.0, float(lot_res.data[0]["qty_base"]) - float(mov["qty_base"]))
+                        db.table("stock_lots").update({
+                            "qty_base": new_lot_qty,
+                            "is_exhausted": new_lot_qty <= 0
+                        }).eq("id", mov["lot_id"]).execute()
+                        
+                # Deduct from destination stock
+                stock_res = db.table("stock").select("id, qty_base").eq("warehouse_id", header["destination_warehouse_id"]).eq("item_id", mov["item_id"]).execute()
+                if stock_res.data:
+                    new_stock_qty = max(0.0, float(stock_res.data[0]["qty_base"]) - float(mov["qty_base"]))
+                    db.table("stock").update({"qty_base": new_stock_qty}).eq("id", stock_res.data[0]["id"]).execute()
+                    
+                # Log destination compensating movement
+                db.table("stock_movements").insert({
+                    "org_id": org_id,
+                    "movement_type": "transfer_out",
+                    "warehouse_id": header["destination_warehouse_id"],
+                    "item_id": mov["item_id"],
+                    "lot_id": mov["lot_id"],
+                    "qty_base": -float(mov["qty_base"]),
+                    "unit_cost_base": float(mov["unit_cost_base"]),
+                    "total_cost": -float(mov["qty_base"]) * float(mov["unit_cost_base"]),
+                    "reference_id": str(id),
+                    "reference_type": "inventory_document",
+                    "notes": "Cancelación de traslado (Destino)",
+                    "created_by": user.id
+                }).execute()
+
+    db.table("inventory_documents").update({
+        "status": "cancelled",
+        "cancelled_by": user.id,
+        "cancelled_at": datetime.now(CARACAS_TZ).isoformat()
+    }).eq("id", str(id)).execute()
+    
+    final_doc = db.table("inventory_documents").select("*").eq("id", str(id)).execute()
+    return final_doc.data[0]

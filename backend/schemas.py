@@ -92,3 +92,10 @@ from app.transfers.schemas import (
     TransferLineCreate, TransferCreate, TransferLineConfirm,
     TransferConfirm, TransferResponse
 )
+
+# ── Unified Inventory Documents Models ────────────────────
+from app.inventory.schemas import (
+    InventoryDocumentLineSchema, InventoryDocumentCreate, InventoryDocumentUpdate,
+    InventoryDocumentLineResponse, InventoryDocumentResponse,
+    TransferReceiveLineSchema, TransferReceiveRequest
+)

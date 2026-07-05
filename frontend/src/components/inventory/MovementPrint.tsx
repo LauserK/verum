@@ -104,7 +104,7 @@ export const MovementPrint = forwardRef<HTMLDivElement, MovementPrintProps>(({ t
             {isTransfer && data.id && (
                 <div className="p-3 border-2 border-gray-900 rounded-2xl bg-white shadow-sm flex flex-col items-center">
                     <QRCodeSVG 
-                        value={`${typeof window !== 'undefined' ? window.location.origin : ''}/admin/inventory/movements/transfers/${data.id}/confirm`}
+                        value={`${typeof window !== 'undefined' ? window.location.origin : ''}/admin/inventory/documents?id=${data.id}`}
                         size={100}
                         level="H"
                     />

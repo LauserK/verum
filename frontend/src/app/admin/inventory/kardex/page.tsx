@@ -7,7 +7,6 @@ import Link from 'next/link';
 import { useReactToPrint } from 'react-to-print';
 import { MovementPrint } from '@/components/inventory/MovementPrint';
 import MovementDetailModal from '@/components/inventory/MovementDetailModal';
-import DocumentsHistoryModal from '@/components/inventory/DocumentsHistoryModal';
 import ConfirmationModal from '@/components/ConfirmationModal';
 import { useTranslations } from '@/components/I18nProvider';
 
@@ -30,8 +29,6 @@ export default function KardexPage() {
     movement_type: ''
   });
 
-  // Modal history state
-  const [showHistory, setShowHistory] = useState(false);
 
   // Modal detail state
   const [showDetail, setShowDetail] = useState(false);
@@ -310,18 +307,9 @@ export default function KardexPage() {
             <h1 className="text-xl font-bold text-text-primary">Kardex de Inventario</h1>
             <p className="text-[11px] text-text-secondary">Movimientos por lote (PEPS)</p>
           </div>
-        </div>
-
-        <div className="flex items-center gap-2 md:flex-nowrap flex-wrap">
+           <div className="flex items-center gap-2 md:flex-nowrap flex-wrap">
           {/* Grupo de Consulta y Estado */}
           <div className="flex items-center gap-1.5 shrink-0">
-            <button 
-              onClick={() => setShowHistory(true)}
-              className="p-2 bg-surface-raised border border-border text-primary rounded-xl hover:bg-surface transition-all shadow-sm"
-              title="Ver Historial Documentos"
-            >
-              <History className="w-4.5 h-4.5" />
-            </button>
             <button 
               onClick={handleExportCSV}
               disabled={movements.length === 0}
@@ -331,41 +319,8 @@ export default function KardexPage() {
               <Download className="w-3.5 h-3.5 text-primary" />
               Exportar CSV
             </button>
-            <Link 
-              href="/admin/inventory/movements/transfers/pending"
-              className="flex items-center gap-1.5 border border-primary text-primary px-3 h-10 rounded-xl text-[11px] font-bold hover:bg-primary/5 transition-all shadow-sm whitespace-nowrap"
-            >
-              <ArrowRightLeft className="w-3.5 h-3.5" />
-              Traslados Pendientes
-            </Link>
           </div>
-
-          <div className="hidden md:block w-px h-6 bg-border mx-0.5 shrink-0" />
-
-          {/* Grupo de Acciones de Registro */}
-          <div className="flex items-center gap-1.5 md:flex-nowrap flex-wrap">
-            <Link 
-              href="/admin/inventory/movements/transfers/create"
-              className="flex items-center gap-1.5 border border-border text-text-primary px-3 h-10 rounded-xl text-[11px] font-bold hover:bg-surface-raised transition-all whitespace-nowrap"
-            >
-              <ArrowRightLeft className="w-3.5 h-3.5 text-warning" />
-              Nuevo Traslado
-            </Link>
-            <Link 
-              href="/admin/inventory/movements/receipts"
-              className="flex items-center gap-1.5 border border-border text-text-primary px-3 h-10 rounded-xl text-[11px] font-bold hover:bg-surface-raised transition-all whitespace-nowrap"
-            >
-              <ArrowUpRight className="w-3.5 h-3.5 text-success" />
-              Registrar Ingreso
-            </Link>
-            <Link 
-              href="/admin/inventory/movements/issues"
-              className="flex items-center gap-1.5 border border-border text-text-primary px-3 h-10 rounded-xl text-[11px] font-bold hover:bg-surface-raised transition-all whitespace-nowrap"
-            >
-              <ArrowDownRight className="w-3.5 h-3.5 text-error" />
-              Registrar Egreso
-            </Link>
-          </div>
+        </div>
         </div>
       </div>
 
@@ -594,13 +549,6 @@ export default function KardexPage() {
         </div>
       </div>
 
-      {/* History Modal */}
-      <DocumentsHistoryModal 
-        isOpen={showHistory}
-        onClose={() => setShowHistory(false)}
-        onViewDetail={handleShowDetail}
-        onPrint={handlePrintFromModal}
-      />
 
       {/* Detail Modal */}
       <MovementDetailModal 

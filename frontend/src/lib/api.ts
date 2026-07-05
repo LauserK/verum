@@ -730,6 +730,29 @@ export const adminApi = {
     getTransferDetail: (id: string): Promise<any> =>
         fetchWithAuth(`/inventory/transfers/${id}`),
 
+    createInventoryDocument: (data: any): Promise<any> =>
+        fetchWithAuth('/inventory/documents', { method: 'POST', body: JSON.stringify(data) }),
+
+    getInventoryDocuments: (type?: string, status?: string): Promise<any[]> => {
+        const params = new URLSearchParams()
+        if (type) params.set('type', type)
+        if (status) params.set('status', status)
+        const qs = params.toString()
+        return fetchWithAuth(`/inventory/documents${qs ? `?${qs}` : ''}`)
+    },
+
+    getInventoryDocument: (id: string): Promise<any> =>
+        fetchWithAuth(`/inventory/documents/${id}`),
+
+    processInventoryDocument: (id: string): Promise<any> =>
+        fetchWithAuth(`/inventory/documents/${id}/process`, { method: 'POST' }),
+
+    receiveTransferDocument: (id: string, data: any): Promise<any> =>
+        fetchWithAuth(`/inventory/documents/${id}/receive`, { method: 'POST', body: JSON.stringify(data) }),
+
+    cancelInventoryDocument: (id: string): Promise<any> =>
+        fetchWithAuth(`/inventory/documents/${id}/cancel`, { method: 'POST' }),
+
     getMovementsByReference: (referenceId: string): Promise<StockMovement[]> =>
         fetchWithAuth(`/inventory/movements/reference/${referenceId}`),
 

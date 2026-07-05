@@ -365,196 +365,76 @@ async def disable_item_presentation(item_id: UUID, pres_id: UUID, db=Depends(get
         .execute()
     return {"ok": True}
 
-# ── Production & Inventory Endpoints (M17) ───────────────
-
-@router.post("/inventory/purchase-receipts", response_model=PurchaseReceiptResponse, tags=["Inventory"])
+# ── Production & Inventory ───────────────────────────────
+@router.post("/inventory/purchase-receipts", response_model=Any, tags=["Inventory"])
 async def create_purchase_receipt(receipt: PurchaseReceiptCreate, org_id: str = Depends(get_active_org_id), user=Depends(get_current_user), db=Depends(get_db), _=Depends(require_permission("inventory.receive"))):
-    # 1. Create the receipt header
-    receipt_data = {
-        "org_id": org_id,
-        "warehouse_id": str(receipt.warehouse_id),
-        "supplier": receipt.supplier,
+    from app.inventory.router import create_inventory_document, process_inventory_document
+    from app.inventory.schemas import InventoryDocumentCreate, InventoryDocumentLineSchema
+
+    lines = []
+    for line in receipt.lines:
+        lines.append(InventoryDocumentLineSchema(
+            item_id=line.item_id,
+            qty_presentation=line.qty_presentation,
+            presentation_id=line.presentation_id,
+            unit_cost_presentation=line.unit_cost_presentation,
+            lot_number=line.lot_number,
+            expiry_date=line.expiry_date
+        ))
+
+    doc_create = InventoryDocumentCreate(
+        document_type="receipt",
+        warehouse_id=receipt.warehouse_id,
+        supplier=receipt.supplier,
+        notes=receipt.receipt_number,
+        lines=lines
+    )
+
+    doc = await create_inventory_document(doc_create, org_id, user, db, bypass_auth=True)
+    await process_inventory_document(doc["id"], org_id, user, db, bypass_auth=True)
+
+    return {
+        "id": doc["id"],
+        "status": "confirmed",
+        "warehouse_id": receipt.warehouse_id,
         "receipt_number": receipt.receipt_number,
         "date": receipt.date,
-        "status": "confirmed", # Directly confirmed for M17 simplicity
         "created_by": user.id,
         "confirmed_at": datetime.now(CARACAS_TZ).isoformat()
     }
-    
-    res = db.table("purchase_receipts").insert(receipt_data).execute()
-    if not res.data:
-        raise HTTPException(status_code=400, detail="Error creating purchase receipt")
-    
-    receipt_id = res.data[0]["id"]
-    
-    # 2. Process lines
-    for line in receipt.lines:
-        # Get presentation for conversion
-        factor = 1.0
-        if line.presentation_id:
-            pres_res = db.table("uom_presentations").select("conversion_factor").eq("id", str(line.presentation_id)).execute()
-            if pres_res.data:
-                factor = float(pres_res.data[0]["conversion_factor"])
-        
-        qty_base = float(line.qty_presentation) * factor
-        unit_cost_base = float(line.unit_cost_presentation) / factor
-        
-        # Insert receipt line
-        line_data = {
-            "receipt_id": receipt_id,
-            "item_id": str(line.item_id),
-            "qty_base": qty_base,
-            "presentation_id": str(line.presentation_id) if line.presentation_id else None,
-            "qty_presentation": line.qty_presentation,
-            "unit_cost_base": unit_cost_base,
-            "expiry_date": line.expiry_date,
-            "lot_number": line.lot_number
-        }
-        db.table("purchase_receipt_lines").insert(line_data).execute()
-        
-        # Create stock lot
-        lot_data = {
-            "warehouse_id": str(receipt.warehouse_id),
-            "item_id": str(line.item_id),
-            "lot_number": line.lot_number,
-            "qty_base": qty_base,
-            "unit_cost_base": unit_cost_base,
-            "expiry_date": line.expiry_date
-        }
-        lot_res = db.table("stock_lots").insert(lot_data).execute()
-        lot_id = lot_res.data[0]["id"]
-        
-        # Update stock table (manual increment)
-        stock_res = db.table("stock").select("id, qty_base").eq("warehouse_id", str(receipt.warehouse_id)).eq("item_id", str(line.item_id)).execute()
-        if stock_res.data:
-            new_qty = float(stock_res.data[0]["qty_base"]) + qty_base
-            db.table("stock").update({"qty_base": new_qty}).eq("id", stock_res.data[0]["id"]).execute()
-        else:
-            db.table("stock").insert({
-                "warehouse_id": str(receipt.warehouse_id),
-                "item_id": str(line.item_id),
-                "qty_base": qty_base
-            }).execute()
-            
-        # Log movement
-        movement_data = {
-            "org_id": org_id,
-            "movement_type": "purchase",
-            "warehouse_id": str(receipt.warehouse_id),
-            "item_id": str(line.item_id),
-            "lot_id": lot_id,
-            "qty_base": qty_base,
-            "unit_cost_base": unit_cost_base,
-            "total_cost": qty_base * unit_cost_base,
-            "reference_id": receipt_id,
-            "reference_type": "purchase_receipt",
-            "created_by": user.id
-        }
-        db.table("stock_movements").insert(movement_data).execute()
 
-        # Update last purchase cost in items
-        db.table("items").update({
-            "last_purchase_cost": unit_cost_base,
-            "last_purchase_cost_updated_at": datetime.now(CARACAS_TZ).isoformat()
-        }).eq("id", str(line.item_id)).execute()
-
-    return res.data[0]
-
-@router.post("/inventory/issue-documents", response_model=IssueDocumentResponse, tags=["Inventory"])
+@router.post("/inventory/issue-documents", response_model=Any, tags=["Inventory"])
 async def create_issue_document(doc: IssueDocumentCreate, org_id: str = Depends(get_active_org_id), user=Depends(get_current_user), db=Depends(get_db), _=Depends(require_permission("inventory.issue"))):
-    # 1. Create the issue header
-    reason_db = doc.reason
-    notes_db = doc.notes
-    if reason_db not in ('sale', 'adjustment', 'waste', 'internal_consumption'):
-        # Fallback for constraint safety in case migration 041 is not yet applied
-        notes_db = f"[Motivo: {reason_db}] {notes_db or ''}".strip()
-        reason_db = 'adjustment'
+    from app.inventory.router import create_inventory_document, process_inventory_document
+    from app.inventory.schemas import InventoryDocumentCreate, InventoryDocumentLineSchema
 
-    header_data = {
-        "org_id": org_id,
-        "warehouse_id": str(doc.warehouse_id),
-        "reason": reason_db,
-        "notes": notes_db,
+    lines = []
+    for line in doc.lines:
+        lines.append(InventoryDocumentLineSchema(
+            item_id=line.item_id,
+            qty_presentation=line.qty_presentation,
+            presentation_id=line.presentation_id
+        ))
+
+    doc_create = InventoryDocumentCreate(
+        document_type="issue",
+        warehouse_id=doc.warehouse_id,
+        reason=doc.reason,
+        notes=doc.notes,
+        lines=lines
+    )
+
+    new_doc = await create_inventory_document(doc_create, org_id, user, db, bypass_auth=True)
+    await process_inventory_document(new_doc["id"], org_id, user, db, bypass_auth=True)
+
+    return {
+        "id": new_doc["id"],
         "status": "confirmed",
+        "warehouse_id": doc.warehouse_id,
+        "reason": doc.reason,
+        "notes": doc.notes,
         "created_by": user.id
     }
-    header_res = db.table("issue_documents").insert(header_data).execute()
-    if not header_res.data:
-        raise HTTPException(status_code=400, detail="Error creating issue document header")
-    
-    doc_id = header_res.data[0]["id"]
-    
-    # 2. Process lines with FIFO logic
-    for line in doc.lines:
-        # Get presentation for conversion
-        factor = 1.0
-        if line.presentation_id:
-            pres_res = db.table("uom_presentations").select("conversion_factor").eq("id", str(line.presentation_id)).execute()
-            if pres_res.data:
-                factor = float(pres_res.data[0]["conversion_factor"])
-
-        total_to_consume = float(line.qty_presentation) * factor
-        
-        # Create issue line
-        line_data = {
-            "issue_id": doc_id,
-            "item_id": str(line.item_id),
-            "qty_base": total_to_consume,
-            "presentation_id": str(line.presentation_id) if line.presentation_id else None,
-            "qty_presentation": float(line.qty_presentation)
-        }
-        db.table("issue_document_lines").insert(line_data).execute()
-
-        # FIFO logic: get oldest non-exhausted lots
-        lots_res = db.table("stock_lots") \
-            .select("*") \
-            .eq("item_id", str(line.item_id)) \
-            .eq("warehouse_id", str(doc.warehouse_id)) \
-            .filter("qty_base", "gt", 0) \
-            .order("received_at", desc=False) \
-            .execute()
-            
-        remaining = total_to_consume
-        for lot in (lots_res.data or []):
-            if remaining <= 0:
-                break
-                
-            lot_qty = float(lot["qty_base"])
-            consume_qty = min(remaining, lot_qty)
-            
-            # Update lot
-            new_lot_qty = lot_qty - consume_qty
-            db.table("stock_lots").update({
-                "qty_base": new_lot_qty,
-                "is_exhausted": new_lot_qty <= 0
-            }).eq("id", lot["id"]).execute()
-            
-            # Log movement
-            movement_data = {
-                "org_id": org_id,
-                "movement_type": "adjustment_out" if reason_db == "adjustment" else "sale",
-                "warehouse_id": str(doc.warehouse_id),
-                "item_id": str(line.item_id),
-                "lot_id": lot["id"],
-                "qty_base": -consume_qty, # Negative for exits
-                "unit_cost_base": float(lot["unit_cost_base"]),
-                "total_cost": -consume_qty * float(lot["unit_cost_base"]),
-                "reference_id": doc_id,
-                "reference_type": "issue_document",
-                "notes": notes_db,
-                "created_by": user.id
-            }
-            db.table("stock_movements").insert(movement_data).execute()
-            
-            remaining -= consume_qty
-            
-        # Update overall stock
-        stock_res = db.table("stock").select("id, qty_base").eq("warehouse_id", str(doc.warehouse_id)).eq("item_id", str(line.item_id)).execute()
-        if stock_res.data:
-            new_qty = max(0, float(stock_res.data[0]["qty_base"]) - total_to_consume)
-            db.table("stock").update({"qty_base": new_qty}).eq("id", stock_res.data[0]["id"]).execute()
-
-    return header_res.data[0]
 
 @router.get("/inventory/kardex", response_model=List[StockMovementResponse], tags=["Inventory"])
 async def get_kardex(
@@ -797,56 +677,76 @@ async def get_low_stock_alerts(
 
 @router.get("/inventory/purchase-receipts", tags=["Inventory"])
 async def list_purchase_receipts(org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
-    res = db.table("purchase_receipts") \
-        .select("*, warehouses(name)") \
+    res = db.table("inventory_documents") \
+        .select("*, warehouses:warehouse_id(name)") \
         .eq("org_id", org_id) \
+        .eq("document_type", "receipt") \
         .order("created_at", desc=True) \
         .execute()
-    return res.data or []
+    data = []
+    for doc in (res.data or []):
+        doc["warehouses"] = doc.get("warehouses")
+        data.append(doc)
+    return data
 
 @router.get("/inventory/issue-documents", tags=["Inventory"])
 async def list_issue_documents(org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
-    res = db.table("issue_documents") \
-        .select("*, warehouses(name)") \
+    res = db.table("inventory_documents") \
+        .select("*, warehouses:warehouse_id(name)") \
         .eq("org_id", org_id) \
+        .eq("document_type", "issue") \
         .order("created_at", desc=True) \
         .execute()
-    return res.data or []
+    data = []
+    for doc in (res.data or []):
+        doc["warehouses"] = doc.get("warehouses")
+        data.append(doc)
+    return data
 
 @router.get("/inventory/purchase-receipts/{receipt_id}", tags=["Inventory"])
 async def get_purchase_receipt_detail(receipt_id: UUID, db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
-    # Get header with warehouse and creator name
-    res_header = db.table("purchase_receipts").select("*, warehouses(name), profiles:created_by(full_name)").eq("id", str(receipt_id)).execute()
+    res_header = db.table("inventory_documents") \
+        .select("*, warehouses:warehouse_id(name), profiles:created_by(full_name)") \
+        .eq("id", str(receipt_id)) \
+        .execute()
     if not res_header.data:
         raise HTTPException(status_code=404, detail="Receipt not found")
+        
+    header = res_header.data[0]
+    header["warehouses"] = header.get("warehouses")
+    header["profiles"] = header.get("profiles")
 
-    # Get lines with item, base UOM and presentation names
-    res_lines = db.table("purchase_receipt_lines") \
+    res_lines = db.table("inventory_document_lines") \
         .select("*, items(name, uom_base(name)), uom_presentations(name)") \
-        .eq("receipt_id", str(receipt_id)) \
+        .eq("document_id", str(receipt_id)) \
         .execute()
 
     return {
-        "header": res_header.data[0],
-        "lines": res_lines.data
+        "header": header,
+        "lines": res_lines.data or []
     }
 
 @router.get("/inventory/issue-documents/{issue_id}", tags=["Inventory"])
 async def get_issue_document_detail(issue_id: UUID, db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
-    # Get header with warehouse and creator name
-    res_header = db.table("issue_documents").select("*, warehouses(name), profiles:created_by(full_name)").eq("id", str(issue_id)).execute()
+    res_header = db.table("inventory_documents") \
+        .select("*, warehouses:warehouse_id(name), profiles:created_by(full_name)") \
+        .eq("id", str(issue_id)) \
+        .execute()
     if not res_header.data:
         raise HTTPException(status_code=404, detail="Issue document not found")
+        
+    header = res_header.data[0]
+    header["warehouses"] = header.get("warehouses")
+    header["profiles"] = header.get("profiles")
 
-    # Get lines with item, base UOM and presentation names
-    res_lines = db.table("issue_document_lines") \
+    res_lines = db.table("inventory_document_lines") \
         .select("*, items(name, uom_base(name)), uom_presentations(name)") \
-        .eq("issue_id", str(issue_id)) \
+        .eq("document_id", str(issue_id)) \
         .execute()
 
     return {
-        "header": res_header.data[0],
-        "lines": res_lines.data
+        "header": header,
+        "lines": res_lines.data or []
     }
 
 @router.get("/inventory/movements/reference/{reference_id}", tags=["Inventory"])

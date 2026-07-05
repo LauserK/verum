@@ -138,3 +138,84 @@ class UpdateCountScheduleRequest(BaseModel):
     next_due: Optional[str] = None
     is_active: Optional[bool] = None
     item_ids: Optional[List[str]] = None
+
+
+# ── Unified Inventory Documents Models ────────────────────
+from typing import Literal
+from uuid import UUID
+from datetime import datetime
+
+class InventoryDocumentLineSchema(BaseModel):
+    item_id: UUID
+    qty_presentation: float
+    presentation_id: Optional[UUID] = None
+    
+    # Required for 'receipt'
+    unit_cost_presentation: Optional[float] = None
+    lot_number: Optional[str] = None
+    expiry_date: Optional[str] = None
+
+class InventoryDocumentCreate(BaseModel):
+    document_type: Literal['receipt', 'issue', 'transfer']
+    warehouse_id: UUID
+    destination_warehouse_id: Optional[UUID] = None
+    supplier: Optional[str] = None
+    reason: Optional[str] = None
+    notes: Optional[str] = None
+    auto_confirm: Optional[bool] = False
+    lines: List[InventoryDocumentLineSchema]
+
+class InventoryDocumentUpdate(BaseModel):
+    warehouse_id: Optional[UUID] = None
+    destination_warehouse_id: Optional[UUID] = None
+    supplier: Optional[str] = None
+    reason: Optional[str] = None
+    notes: Optional[str] = None
+    lines: Optional[List[InventoryDocumentLineSchema]] = None
+
+class InventoryDocumentLineResponse(BaseModel):
+    id: UUID
+    document_id: UUID
+    item_id: UUID
+    item_name: Optional[str] = None
+    qty_presentation: float
+    presentation_id: Optional[UUID] = None
+    presentation_name: Optional[str] = None
+    qty_base: float
+    unit_cost_presentation: Optional[float] = None
+    unit_cost_base: Optional[float] = None
+    lot_number: Optional[str] = None
+    expiry_date: Optional[str] = None
+    qty_received_presentation: Optional[float] = None
+    qty_received_base: Optional[float] = None
+
+class InventoryDocumentResponse(BaseModel):
+    id: UUID
+    org_id: UUID
+    document_type: str
+    document_number: str
+    status: str
+    warehouse_id: UUID
+    warehouse_name: Optional[str] = None
+    destination_warehouse_id: Optional[UUID] = None
+    destination_warehouse_name: Optional[str] = None
+    supplier: Optional[str] = None
+    reason: Optional[str] = None
+    notes: Optional[str] = None
+    created_by: UUID
+    creator_name: Optional[str] = None
+    processed_by: Optional[UUID] = None
+    processor_name: Optional[str] = None
+    processed_at: Optional[datetime] = None
+    cancelled_by: Optional[UUID] = None
+    cancelled_name: Optional[str] = None
+    cancelled_at: Optional[datetime] = None
+    created_at: datetime
+
+class TransferReceiveLineSchema(BaseModel):
+    id: UUID
+    qty_received_presentation: float
+
+class TransferReceiveRequest(BaseModel):
+    notes: Optional[str] = None
+    lines: List[TransferReceiveLineSchema]
