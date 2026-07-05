@@ -265,8 +265,8 @@ export default function InventoryDocumentsPage() {
       (doc.document_number || '').toLowerCase().includes(filterQuery.toLowerCase()) ||
       (doc.supplier || '').toLowerCase().includes(filterQuery.toLowerCase()) ||
       (doc.notes || '').toLowerCase().includes(filterQuery.toLowerCase()) ||
-      (doc.warehouses?.name || '').toLowerCase().includes(filterQuery.toLowerCase()) ||
-      (doc.destinations?.name || '').toLowerCase().includes(filterQuery.toLowerCase());
+      (doc.warehouse_name || doc.warehouse?.name || '').toLowerCase().includes(filterQuery.toLowerCase()) ||
+      (doc.destination_warehouse_name || doc.destination_warehouse?.name || '').toLowerCase().includes(filterQuery.toLowerCase());
       
     return matchesTab && matchesStatus && matchesSearch;
   });
@@ -404,10 +404,10 @@ export default function InventoryDocumentsPage() {
                     )}
                   </td>
                   <td className="p-4 font-semibold text-text-primary">
-                    {doc.warehouses?.name || 'N/A'}
+                    {doc.warehouse_name || doc.warehouse?.name || 'N/A'}
                   </td>
                   <td className="p-4 text-text-secondary">
-                    {doc.document_type === 'transfer' ? (doc.destinations?.name || 'N/A') : '-'}
+                    {doc.document_type === 'transfer' ? (doc.destination_warehouse_name || doc.destination_warehouse?.name || 'N/A') : '-'}
                   </td>
                   <td className="p-4 text-xs text-text-secondary">
                     {format(new Date(doc.created_at), 'dd/MM/yyyy HH:mm', { locale: es })}
@@ -805,13 +805,13 @@ export default function InventoryDocumentsPage() {
 
                 <div>
                   <p className="text-xs font-bold text-text-secondary uppercase">Almacén Origen</p>
-                  <p className="font-semibold text-text-primary mt-0.5">{selectedDoc.warehouses?.name || 'N/A'}</p>
+                  <p className="font-semibold text-text-primary mt-0.5">{selectedDoc.warehouse_name || selectedDoc.warehouse?.name || 'N/A'}</p>
                 </div>
 
                 {selectedDoc.document_type === 'transfer' && (
                   <div>
                     <p className="text-xs font-bold text-text-secondary uppercase">Almacén Destino</p>
-                    <p className="font-semibold text-text-primary mt-0.5">{selectedDoc.destinations?.name || 'N/A'}</p>
+                    <p className="font-semibold text-text-primary mt-0.5">{selectedDoc.destination_warehouse_name || selectedDoc.destination_warehouse?.name || 'N/A'}</p>
                   </div>
                 )}
 
