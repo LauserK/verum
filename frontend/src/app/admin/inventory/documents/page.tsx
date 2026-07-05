@@ -191,7 +191,7 @@ export default function InventoryDocumentsPage() {
     setReceiveLines(lines.map(l => ({
       id: l.id,
       item_name: l.items?.name || 'Artículo',
-      presentation_name: l.uom_presentations?.name || 'Unidad',
+      presentation_name: l.uom_presentations?.name || l.items?.uom_base?.name || 'Unidad',
       qty_sent_presentation: l.qty_presentation,
       qty_received_presentation: l.qty_presentation
     })));
@@ -856,7 +856,7 @@ export default function InventoryDocumentsPage() {
                       {selectedDocLines.map((line, idx) => (
                         <tr key={idx} className="hover:bg-surface-raised/20">
                           <td className="p-3 font-semibold text-text-primary">{line.items?.name || 'Artículo'}</td>
-                          <td className="p-3 text-text-secondary">{line.uom_presentations?.name || 'Unidad Base'}</td>
+                          <td className="p-3 text-text-secondary">{line.uom_presentations?.name || line.items?.uom_base?.name || 'Unidad'}</td>
                           <td className="p-3 text-center font-bold">{line.qty_presentation}</td>
                           {selectedDoc.document_type === 'transfer' && (
                             <td className="p-3 text-center font-bold text-primary">
