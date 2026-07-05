@@ -3,6 +3,7 @@ import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
 export interface DispatchItem {
+  item_id?: string
   item_name: string
   uom_name: string
   qty: number

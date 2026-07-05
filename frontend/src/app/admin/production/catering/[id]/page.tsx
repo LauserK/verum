@@ -21,7 +21,8 @@ import {
     X,
     Search,
     Save,
-    Truck
+    Truck,
+    ArrowRightLeft
 } from 'lucide-react'
 import Link from 'next/link'
 import { adminApi, CateringRequest, MRPResultResponse, RecipeResponse, Warehouse, InventoryItem, getProfile, Profile } from '@/lib/api'
@@ -30,6 +31,7 @@ import { es } from 'date-fns/locale'
 import { useReactToPrint } from 'react-to-print'
 import { MRPPurchaseListPrint } from '@/components/production/MRPPurchaseListPrint'
 import { MRPDispatchListPrint, DispatchItem } from '@/components/production/MRPDispatchListPrint'
+import ConfirmationModal from '@/components/ConfirmationModal'
 
 export default function MRPConsolePage() {
     const { id } = useParams()
@@ -52,6 +54,10 @@ export default function MRPConsolePage() {
     const [tentativeDate, setTentativeDate] = useState('')
     const [bufferPercent, setBufferPercent] = useState(0)
     const [savingConfig, setSavingConfig] = useState(false)
+    const [showTransferModal, setShowTransferModal] = useState(false)
+    const [destWarehouseId, setDestWarehouseId] = useState('')
+    const [generatingTransfer, setGeneratingTransfer] = useState(false)
+    const [errorModal, setErrorModal] = useState<{ isOpen: boolean; message: string }>({ isOpen: false, message: '' })
 
     // Edit Items State
     const [showEditItemsModal, setShowEditItemsModal] = useState(false)
@@ -179,7 +185,7 @@ export default function MRPConsolePage() {
     // (NOT salsa's sub-ingredients). Items without a recipe are shown as-is.
     const computeDispatchList = (): DispatchItem[] => {
         if (!request?.lines) return []
-        const map: Record<string, { item_name: string; uom_name: string; qty: number; source: 'ingredient' }> = {}
+        const map: Record<string, DispatchItem> = {}
 
         for (const line of request.lines) {
             const recipe = recipesMap[line.item_id]
@@ -198,7 +204,7 @@ export default function MRPConsolePage() {
                     if (map[key]) {
                         map[key].qty += ingQty
                     } else {
-                        map[key] = { item_name: ingName, uom_name: ingUom, qty: ingQty, source: 'ingredient' }
+                        map[key] = { item_id: key, item_name: ingName, uom_name: ingUom, qty: ingQty, source: 'ingredient' }
                     }
                 }
             } else {
@@ -209,7 +215,7 @@ export default function MRPConsolePage() {
                 if (map[key]) {
                     map[key].qty += qtyRequested
                 } else {
-                    map[key] = { item_name: itemName, uom_name: itemUom, qty: qtyRequested, source: 'ingredient' }
+                    map[key] = { item_id: key, item_name: itemName, uom_name: itemUom, qty: qtyRequested, source: 'ingredient' }
                 }
             }
         }
@@ -292,6 +298,42 @@ export default function MRPConsolePage() {
             alert('Error al generar órdenes: ' + (err as Error).message)
         } finally {
             setGeneratingOrders(false)
+        }
+    }
+
+    async function handleCreateTransfer() {
+        if (!destWarehouseId || !request) return
+        setGeneratingTransfer(true)
+        try {
+            const dispatchList = computeDispatchList()
+            const lines = dispatchList.map(item => ({
+                item_id: item.item_id || '',
+                qty_presentation: item.qty,
+                presentation_id: undefined
+            })).filter(l => l.item_id)
+
+            await adminApi.createInventoryDocument({
+                document_type: 'transfer',
+                warehouse_id: selectedWarehouseId as any,
+                destination_warehouse_id: destWarehouseId as any,
+                notes: `Traslado generado desde Consola MRP para Catering: ${request.name}`,
+                lines: lines as any
+            })
+
+            setShowTransferModal(false)
+            setDestWarehouseId('')
+            setErrorModal({
+                isOpen: true,
+                message: 'Borrador de traslado creado exitosamente. Puedes revisarlo en la sección de Documentos de Inventario.'
+            })
+        } catch (err: any) {
+            console.error(err)
+            setErrorModal({
+                isOpen: true,
+                message: 'Error al generar el traslado: ' + (err?.message || err)
+            })
+        } finally {
+            setGeneratingTransfer(false)
         }
     }
 
@@ -603,13 +645,26 @@ export default function MRPConsolePage() {
                             <h2 className="font-bold text-text-primary uppercase tracking-wider text-xs">Lista de Despacho</h2>
                         </div>
                         {Object.keys(recipesMap).length > 0 && (
-                            <button 
-                                onClick={() => handleDispatchPrint()}
-                                className="flex items-center gap-1.5 px-2.5 py-1 bg-success text-text-inverse rounded-full text-[9px] font-bold uppercase tracking-wider hover:bg-success/80 transition-all active:scale-95"
-                            >
-                                <Printer className="w-3 h-3" />
-                                Exportar PDF
-                            </button>
+                            <div className="flex gap-2">
+                                <button 
+                                    onClick={() => {
+                                        const otherWh = warehouses.find(w => w.id !== selectedWarehouseId);
+                                        if (otherWh) setDestWarehouseId(otherWh.id);
+                                        setShowTransferModal(true);
+                                    }}
+                                    className="flex items-center gap-1.5 px-2.5 py-1 bg-primary text-text-inverse rounded-full text-[9px] font-bold uppercase tracking-wider hover:bg-primary/80 transition-all active:scale-95"
+                                >
+                                    <ArrowRightLeft className="w-3 h-3" />
+                                    Crear Traslado
+                                </button>
+                                <button 
+                                    onClick={() => handleDispatchPrint()}
+                                    className="flex items-center gap-1.5 px-2.5 py-1 bg-success text-text-inverse rounded-full text-[9px] font-bold uppercase tracking-wider hover:bg-success/80 transition-all active:scale-95"
+                                >
+                                    <Printer className="w-3 h-3" />
+                                    Exportar PDF
+                                </button>
+                            </div>
                         )}
                     </div>
 
@@ -807,6 +862,78 @@ export default function MRPConsolePage() {
                     </div>
                 </div>
             )}
+
+            {/* Modal: Generar Traslado de Despacho */}
+            {showTransferModal && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in">
+                    <div className="bg-surface rounded-3xl p-6 w-full max-w-md shadow-2xl border border-border flex flex-col animate-in zoom-in-95 duration-200">
+                        <div className="flex justify-between items-center mb-4">
+                            <div>
+                                <h3 className="text-base font-bold text-text-primary">Generar Traslado de Despacho</h3>
+                                <p className="text-xs text-text-secondary mt-0.5">Se creará un borrador de traslado con todos los ingredientes calculados</p>
+                            </div>
+                            <button 
+                                onClick={() => setShowTransferModal(false)}
+                                className="p-1.5 hover:bg-surface-raised rounded-full border border-border transition-colors"
+                            >
+                                <X className="w-4 h-4 text-text-secondary" />
+                            </button>
+                        </div>
+
+                        <div className="space-y-4 py-3">
+                            <div className="bg-surface-raised/40 p-3 rounded-xl border border-border text-xs text-text-secondary">
+                                <p><strong>Almacén de Origen (MRP):</strong> {warehouses.find(w => w.id === selectedWarehouseId)?.name || 'N/A'}</p>
+                                <p className="mt-1"><strong>Total de Artículos:</strong> {computeDispatchList().length} ítems</p>
+                            </div>
+
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-[10px] font-bold text-text-secondary uppercase">Almacén de Destino</label>
+                                <select
+                                    value={destWarehouseId}
+                                    onChange={e => setDestWarehouseId(e.target.value)}
+                                    className="bg-surface border border-border rounded-xl px-3 h-10 text-xs font-semibold outline-none focus:border-primary w-full"
+                                >
+                                    <option value="">Seleccionar Almacén de Destino...</option>
+                                    {warehouses.filter(w => w.id !== selectedWarehouseId).map(w => (
+                                        <option key={w.id} value={w.id}>{w.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="border-t border-border pt-4 mt-4 flex justify-end gap-2.5">
+                            <button
+                                type="button"
+                                onClick={() => setShowTransferModal(false)}
+                                className="px-4 h-9 border border-border hover:bg-surface-raised rounded-xl text-xs font-bold uppercase tracking-wider transition-colors text-text-secondary"
+                                disabled={generatingTransfer}
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleCreateTransfer}
+                                className="flex items-center gap-1.5 bg-primary text-text-inverse px-5 h-9 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-primary-hover transition-colors disabled:opacity-50"
+                                disabled={generatingTransfer || !destWarehouseId}
+                            >
+                                {generatingTransfer ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ArrowRightLeft className="w-3.5 h-3.5" />}
+                                Generar Traslado
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Notification Modal */}
+            <ConfirmationModal 
+                isOpen={errorModal.isOpen}
+                title="Consola MRP"
+                message={errorModal.message}
+                confirmLabel="Cerrar"
+                cancelLabel=""
+                onConfirm={() => setErrorModal({ ...errorModal, isOpen: false })}
+                onCancel={() => setErrorModal({ ...errorModal, isOpen: false })}
+            />
         </div>
     )
 }
