@@ -39,8 +39,74 @@ interface ParsedStockRow {
   difference?: number;
 }
 
+interface ParsedPriceRow {
+  id: string;
+  code: string;
+  name: string;
+  uploadedPrice: number;
+  uploadedUom: string;
+  matchedItemId: string | null;
+  matchedItemName: string | null;
+  baseUomCode: string | null;
+  baseUomName: string | null;
+  conversionFactor: number;
+  calculatedPrice: number;
+  status: 'pending' | 'success' | 'error';
+  error?: string;
+}
+
+function getAutomaticConversion(uploadedUomStr: string, baseUomCode: string): { factor: number; matchedName: string } {
+  const cleanUom = uploadedUomStr.trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, ""); // remove accents
+
+  // Base UOM: Grams ('g')
+  if (baseUomCode === 'g') {
+    if (/^(kg|kilogramo|kilogramos|kilo|kilos)$/.test(cleanUom)) {
+      return { factor: 1000, matchedName: 'Kilogramo (kg)' };
+    }
+    if (/^(g|gramo|gramos|gr|grs)$/.test(cleanUom)) {
+      return { factor: 1, matchedName: 'Gramos (g)' };
+    }
+    if (/^(lb|lbs|libra|libras)$/.test(cleanUom)) {
+      return { factor: 453.59, matchedName: 'Libra (lb)' };
+    }
+  }
+
+  // Base UOM: Mililiters ('ml')
+  if (baseUomCode === 'ml') {
+    if (/^(l|lt|lts|litro|litros)$/.test(cleanUom)) {
+      return { factor: 1000, matchedName: 'Litro (L)' };
+    }
+    if (/^(ml|mililitro|mililitros|cc)$/.test(cleanUom)) {
+      return { factor: 1, matchedName: 'Mililitros (ml)' };
+    }
+    if (/^(oz|onza|onzas)$/.test(cleanUom)) {
+      return { factor: 29.57, matchedName: 'Onza (oz)' };
+    }
+  }
+
+  // Base UOM: Units ('unit')
+  if (baseUomCode === 'unit') {
+    if (/^(docena|docenas|dz)$/.test(cleanUom)) {
+      return { factor: 12, matchedName: 'Docena' };
+    }
+    if (/^(media docena)$/.test(cleanUom)) {
+      return { factor: 6, matchedName: 'Media Docena' };
+    }
+    if (/^(six-pack|sixpack|six pack)$/.test(cleanUom)) {
+      return { factor: 6, matchedName: 'Six-Pack' };
+    }
+    if (/^(unit|unidad|unidades|unid|und|ud|uds|pcs|pieza|piezas|pz|pzs)$/.test(cleanUom)) {
+      return { factor: 1, matchedName: 'Unidades (unit)' };
+    }
+  }
+
+  // Default fallback
+  return { factor: 1, matchedName: `${uploadedUomStr} (Asumido 1:1)` };
+}
+
 export default function ImportUtilityPage() {
-  const [activeTab, setActiveTab] = useState<'catalog' | 'stock'>('catalog');
+  const [activeTab, setActiveTab] = useState<'catalog' | 'stock' | 'prices'>('catalog');
   const [categories, setCategories] = useState<ItemCategory[]>([]);
   const [uoms, setUoms] = useState<UOMBase[]>([]);
   const [existingItems, setExistingItems] = useState<InventoryItem[]>([]);
@@ -65,6 +131,21 @@ export default function ImportUtilityPage() {
   const [stockStartRow, setStockStartRow] = useState<number>(2);
   const [stockImporting, setStockImporting] = useState(false);
   const [stockProgress, setStockProgress] = useState({ current: 0, total: 0 });
+
+  // Price Update State
+  const [priceData, setPriceData] = useState<ParsedPriceRow[]>([]);
+  const [priceWorkbook, setPriceWorkbook] = useState<XLSX.WorkBook | null>(null);
+  const [priceSheetNames, setPriceSheetNames] = useState<string[]>([]);
+  const [priceSelectedSheet, setPriceSelectedSheet] = useState<string>('');
+  const [priceStartRow, setPriceStartRow] = useState<number>(2);
+  const [priceImporting, setPriceImporting] = useState(false);
+  const [priceProgress, setPriceProgress] = useState({ current: 0, total: 0 });
+  const [priceColMapping, setPriceColMapping] = useState({
+    code: 0,
+    name: 1,
+    price: 2,
+    uom: 3
+  });
 
   // Stock expected levels cache
   const [warehouseStock, setWarehouseStock] = useState<Record<string, number>>({});
@@ -165,6 +246,22 @@ export default function ImportUtilityPage() {
     reader.readAsBinaryString(file);
   };
 
+  // Price File Upload Handler
+  const handlePriceFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const bstr = evt.target?.result;
+      const wb = XLSX.read(bstr, { type: 'binary' });
+      setPriceWorkbook(wb);
+      setPriceSheetNames(wb.SheetNames);
+      setPriceSelectedSheet(wb.SheetNames[0]);
+    };
+    reader.readAsBinaryString(file);
+  };
+
   // Effect to parse Catalog workbook
   useEffect(() => {
     if (!workbook || !selectedSheet) return;
@@ -252,6 +349,77 @@ export default function ImportUtilityPage() {
 
     setStockData(rows);
   }, [stockWorkbook, stockSelectedSheet, stockStartRow, existingItems]);
+
+  // Effect to parse Price workbook
+  useEffect(() => {
+    if (!priceWorkbook || !priceSelectedSheet) return;
+
+    const ws = priceWorkbook.Sheets[priceSelectedSheet];
+    const json = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+    if (json.length === 0) return;
+
+    // Detect mapping columns from header row (often row 0 or startRow-2)
+    const headerRowIdx = Math.max(0, priceStartRow - 2);
+    const headerRow = json[headerRowIdx] || [];
+    let codeIdx = 0;
+    let nameIdx = 1;
+    let priceIdx = 2;
+    let uomIdx = 3;
+
+    headerRow.forEach((cell, idx) => {
+      const val = String(cell || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      if (val.includes('cod') || val.includes('ref')) codeIdx = idx;
+      else if (val.includes('nom') || val.includes('art') || val.includes('prod') || val.includes('desc')) nameIdx = idx;
+      else if (val.includes('prec') || val.includes('cost') || val.includes('val')) priceIdx = idx;
+      else if (val.includes('und') || val.includes('uni') || val.includes('med') || val.includes('uom') || val.includes('pres')) uomIdx = idx;
+    });
+
+    setPriceColMapping({ code: codeIdx, name: nameIdx, price: priceIdx, uom: uomIdx });
+
+    const rows = json.slice(priceStartRow - 1).map((row) => {
+      const code = String(row[codeIdx] || '').trim();
+      const name = String(row[nameIdx] || '').trim();
+      const uploadedPrice = Number(row[priceIdx]) || 0;
+      const uploadedUom = String(row[uomIdx] || '').trim();
+
+      // Match item
+      let matched = code ? existingItems.find(item => item.code === code) : null;
+      if (!matched && name) {
+        matched = existingItems.find(item => item.name.toLowerCase() === name.toLowerCase());
+      }
+
+      let baseUomCode = '';
+      let baseUomName = '';
+      if (matched) {
+        const uomObj = uoms.find(u => u.id === matched?.base_uom_id);
+        baseUomCode = uomObj?.code || '';
+        baseUomName = uomObj?.name || '';
+      }
+
+      const { factor } = baseUomCode 
+        ? getAutomaticConversion(uploadedUom, baseUomCode)
+        : { factor: 1 };
+
+      const calculatedPrice = factor > 0 ? uploadedPrice / factor : uploadedPrice;
+
+      return {
+        id: Math.random().toString(36).substr(2, 9),
+        code,
+        name,
+        uploadedPrice,
+        uploadedUom,
+        matchedItemId: matched?.id || null,
+        matchedItemName: matched?.name || null,
+        baseUomCode,
+        baseUomName,
+        conversionFactor: factor,
+        calculatedPrice,
+        status: 'pending' as const,
+      };
+    }).filter(r => r.code || r.name);
+
+    setPriceData(rows);
+  }, [priceWorkbook, priceSelectedSheet, priceStartRow, existingItems, uoms]);
 
   // Catalog Import Action
   async function handleImport(mode: 'all' | 'categories_only') {
@@ -391,6 +559,44 @@ export default function ImportUtilityPage() {
     }
   }
 
+  // Price Import Action
+  async function handlePriceImport() {
+    const pending = priceData.filter(r => r.status !== 'success');
+    const unlinked = pending.some(r => !r.matchedItemId);
+    
+    if (unlinked) {
+      if (!confirm('Hay artículos que no están vinculados a la base de datos. Se omitirán de la actualización. ¿Desea continuar?')) {
+        return;
+      }
+    }
+
+    setPriceImporting(true);
+    setPriceProgress({ current: 0, total: priceData.length });
+
+    const currentData = [...priceData];
+
+    for (let i = 0; i < currentData.length; i++) {
+      const row = currentData[i];
+      if (row.status === 'success' || !row.matchedItemId) continue;
+
+      try {
+        await adminApi.updateInventoryItem(row.matchedItemId, {
+          last_purchase_cost: row.calculatedPrice
+        });
+        currentData[i].status = 'success';
+      } catch (err: any) {
+        currentData[i].status = 'error';
+        currentData[i].error = err.message || 'Error al actualizar precio';
+      }
+      setPriceData([...currentData]);
+      setPriceProgress(p => ({ ...p, current: i + 1 }));
+    }
+    setPriceImporting(false);
+
+    const updatedItems = await adminApi.getInventoryItems();
+    setExistingItems(updatedItems);
+  }
+
   if (loading) return <div className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-primary" /></div>;
 
   return (
@@ -423,9 +629,17 @@ export default function ImportUtilityPage() {
         >
           Importar Stock Inicial
         </button>
+        <button
+          onClick={() => setActiveTab('prices')}
+          className={`pb-3 text-sm font-bold border-b-2 transition-all ${
+            activeTab === 'prices' ? 'border-primary text-primary' : 'border-transparent text-text-secondary hover:text-text-primary'
+          }`}
+        >
+          Actualizar Precios
+        </button>
       </div>
 
-      {activeTab === 'catalog' ? (
+      {activeTab === 'catalog' && (
         <>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
             <div className="bg-surface p-6 rounded-3xl border border-border shadow-sm md:col-span-1">
@@ -687,8 +901,9 @@ export default function ImportUtilityPage() {
             </div>
           )}
         </>
-      ) : (
-        // Stock Import Tab Layout
+      )}
+
+      {activeTab === 'stock' && (
         <>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
             <div className="bg-surface p-6 rounded-3xl border border-border shadow-sm md:col-span-2">
@@ -890,6 +1105,252 @@ export default function ImportUtilityPage() {
                         <>
                             <Save className="w-5 h-5" />
                             Ejecutar Carga de Stock
+                        </>
+                        )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {activeTab === 'prices' && (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div className="bg-surface p-6 rounded-3xl border border-border shadow-sm md:col-span-1">
+              <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-3">Paso 1: Archivo y Hoja</label>
+              <div className="space-y-4">
+                <div className="relative group">
+                  <input 
+                    type="file" 
+                    accept=".xlsx, .xls" 
+                    onChange={handlePriceFileUpload}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                  />
+                  <div className="border-2 border-dashed border-border rounded-2xl p-4 flex flex-col items-center justify-center gap-2 group-hover:border-primary group-hover:bg-primary/5 transition-all duration-300">
+                    <FileUp className="w-6 h-6 text-primary" />
+                    <p className="text-xs text-text-primary font-bold">{priceWorkbook ? 'Archivo cargado' : 'Subir Excel de Precios'}</p>
+                  </div>
+                </div>
+
+                {priceWorkbook && (
+                  <div className="grid grid-cols-1 gap-3 animate-in fade-in duration-300">
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-text-secondary uppercase">Hoja</label>
+                      <select 
+                        value={priceSelectedSheet}
+                        onChange={e => setPriceSelectedSheet(e.target.value)}
+                        className="w-full bg-surface-raised border border-border rounded-lg px-2 h-9 text-xs text-text-primary outline-none"
+                      >
+                        {priceSheetNames.map(name => (
+                          <option key={name} value={name}>{name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-text-secondary uppercase">Desde Fila</label>
+                      <input 
+                        type="number"
+                        min="1"
+                        value={priceStartRow}
+                        onChange={e => setPriceStartRow(parseInt(e.target.value) || 1)}
+                        className="w-full bg-surface-raised border border-border rounded-lg px-3 h-9 text-xs text-text-primary outline-none"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-surface p-6 rounded-3xl border border-border shadow-sm md:col-span-3">
+              <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-3">Paso 2: Conversiones e Instrucciones</label>
+              <div className="bg-primary/5 border border-primary/20 rounded-2xl p-6 h-full flex flex-col md:flex-row gap-6 justify-between items-start md:items-center">
+                <div className="space-y-2 max-w-xl">
+                    <p className="text-sm text-text-primary leading-relaxed font-semibold">
+                      Cómo funciona el Actualizador de Precios:
+                    </p>
+                    <ul className="text-xs text-text-secondary space-y-1 list-disc ml-4">
+                        <li><strong>Identificación:</strong> Se busca el producto por código o coincidencia exacta de nombre.</li>
+                        <li><strong>Conversión de Medida:</strong> Si el producto está en Gramos (g) y la fila indica "Kg", se dividirá el precio entre 1000 de forma automática.</li>
+                        <li><strong>Equivalencia Manual:</strong> Puede corregir o ingresar cualquier factor de conversión directamente en la tabla.</li>
+                    </ul>
+                </div>
+                {priceWorkbook && (
+                  <div className="bg-surface p-4 rounded-xl border border-border space-y-2 w-full md:w-auto min-w-[200px]">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-text-secondary">Columnas Detectadas</p>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div><span className="text-text-secondary">Código:</span> <span className="font-mono bg-surface-raised px-1 rounded">Col {String.fromCharCode(65 + priceColMapping.code)}</span></div>
+                      <div><span className="text-text-secondary">Nombre:</span> <span className="font-mono bg-surface-raised px-1 rounded">Col {String.fromCharCode(65 + priceColMapping.name)}</span></div>
+                      <div><span className="text-text-secondary">Precio:</span> <span className="font-mono bg-surface-raised px-1 rounded">Col {String.fromCharCode(65 + priceColMapping.price)}</span></div>
+                      <div><span className="text-text-secondary">Unidad:</span> <span className="font-mono bg-surface-raised px-1 rounded">Col {String.fromCharCode(65 + priceColMapping.uom)}</span></div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {priceData.length > 0 && (
+            <div className="space-y-4 animate-in slide-in-from-bottom-4 duration-500">
+              <div className="flex justify-between items-end px-2">
+                <h2 className="text-lg font-bold text-text-primary flex items-center gap-2">
+                  Vista Previa de Precios a Actualizar
+                  <span className="text-xs font-medium bg-surface-raised px-2 py-0.5 rounded-full text-text-secondary border border-border">
+                    {priceData.length} artículos
+                  </span>
+                </h2>
+              </div>
+              
+              <div className="bg-surface rounded-3xl border border-border overflow-hidden shadow-xl">
+                <div className="overflow-x-auto max-h-[60vh]">
+                  <table className="w-full text-left border-collapse min-w-[1000px]">
+                    <thead className="sticky top-0 z-20 bg-surface-raised">
+                      <tr className="border-b border-border">
+                        <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest w-16 text-center">Status</th>
+                        <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest">Excel (Código / Nombre)</th>
+                        <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest">Artículo Vinculado</th>
+                        <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest text-right">Precio Excel</th>
+                        <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest text-center">Equivalencia de Medida</th>
+                        <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest text-right">Precio DB (Calculado)</th>
+                        <th className="p-4 text-[10px] font-bold text-text-secondary uppercase tracking-widest w-12"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {priceData.map((row, idx) => {
+                        return (
+                          <tr key={row.id} className="hover:bg-surface-raised/40 transition-colors group">
+                            <td className="p-4 text-center">
+                              {row.status === 'pending' && (
+                                <div className={`w-2.5 h-2.5 rounded-full mx-auto animate-pulse ${row.matchedItemId ? 'bg-primary' : 'bg-warning'}`} />
+                              )}
+                              {row.status === 'success' && (
+                                <CheckCircle2 className="w-5 h-5 text-success mx-auto" />
+                              )}
+                              {row.status === 'error' && (
+                                <div className="relative group/error inline-block">
+                                  <AlertCircle className="w-5 h-5 text-error mx-auto cursor-help" />
+                                  <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover/error:block w-48 p-2 bg-error text-white text-[10px] rounded-lg shadow-xl z-30">
+                                    {row.error}
+                                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-error" />
+                                  </div>
+                                </div>
+                              )}
+                            </td>
+                            <td className="p-4">
+                              <div className="flex flex-col gap-1 max-w-[200px] truncate">
+                                <span className="font-mono text-[10px] text-text-secondary">{row.code || '(Sin Código)'}</span>
+                                <span className="text-xs font-bold text-text-primary">{row.name}</span>
+                              </div>
+                            </td>
+                            <td className="p-2">
+                              <select 
+                                value={row.matchedItemId || ''}
+                                onChange={e => {
+                                  const itemId = e.target.value;
+                                  const itemObj = existingItems.find(item => item.id === itemId);
+                                  const newData = [...priceData];
+                                  newData[idx].matchedItemId = itemId || null;
+                                  newData[idx].matchedItemName = itemObj ? itemObj.name : null;
+                                  
+                                  // Recalculate UOM
+                                  const uomObj = itemObj ? uoms.find(u => u.id === itemObj.base_uom_id) : null;
+                                  newData[idx].baseUomCode = uomObj?.code || null;
+                                  newData[idx].baseUomName = uomObj?.name || null;
+                                  
+                                  // Recalculate price
+                                  const { factor } = uomObj ? getAutomaticConversion(row.uploadedUom, uomObj.code) : { factor: 1 };
+                                  newData[idx].conversionFactor = factor;
+                                  newData[idx].calculatedPrice = factor > 0 ? row.uploadedPrice / factor : row.uploadedPrice;
+                                  
+                                  setPriceData(newData);
+                                }}
+                                className={`w-full bg-transparent border rounded-xl px-2 h-10 text-xs outline-none focus:border-primary transition-all ${
+                                  row.matchedItemId ? 'border-transparent text-text-primary font-medium' : 'border-warning bg-warning/5 text-warning font-bold'
+                                }`}
+                              >
+                                <option value="">⚠️ Vincular Artículo...</option>
+                                {existingItems.map(item => (
+                                  <option key={item.id} value={item.id}>
+                                    {item.code ? `[${item.code}] ` : ''}{item.name} ({item.uom_name || 'Sin UOM'})
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+                            <td className="p-4 text-right font-mono text-xs text-text-primary">
+                              ${row.uploadedPrice.toFixed(4)} / {row.uploadedUom || 'Und'}
+                            </td>
+                            <td className="p-2 text-center">
+                              {row.matchedItemId ? (
+                                <div className="flex items-center justify-center gap-2 text-xs text-text-secondary">
+                                  <span>1 {row.uploadedUom || 'Und'} =</span>
+                                  <input 
+                                    type="number"
+                                    step="any"
+                                    value={row.conversionFactor}
+                                    onChange={e => {
+                                      const factor = Number(e.target.value) || 1.0;
+                                      const newData = [...priceData];
+                                      newData[idx].conversionFactor = factor;
+                                      newData[idx].calculatedPrice = factor > 0 ? row.uploadedPrice / factor : row.uploadedPrice;
+                                      setPriceData(newData);
+                                    }}
+                                    className="w-20 bg-surface-raised border border-border focus:border-primary focus:bg-surface rounded-lg px-2 h-8 text-center text-xs text-text-primary font-bold outline-none transition-all"
+                                  />
+                                  <span>{row.baseUomName || 'Base'}</span>
+                                </div>
+                              ) : (
+                                <span className="text-text-disabled text-xs">-</span>
+                              )}
+                            </td>
+                            <td className="p-4 text-right font-mono text-xs text-text-primary font-bold">
+                              {row.matchedItemId ? (
+                                <>
+                                  ${row.calculatedPrice.toFixed(4)} <span className="text-[10px] text-text-secondary">/ {row.baseUomCode}</span>
+                                </>
+                              ) : (
+                                <span className="text-text-disabled">-</span>
+                              )}
+                            </td>
+                            <td className="p-2 text-center">
+                              <button 
+                                onClick={() => setPriceData(priceData.filter(r => r.id !== row.id))} 
+                                className="p-2 text-text-disabled hover:text-error hover:bg-error/5 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                
+                <div className="p-6 bg-surface-raised border-t border-border flex flex-col sm:flex-row justify-between items-center gap-4">
+                  <div className="flex flex-col gap-1">
+                    <p className="text-sm text-text-primary font-bold">Resumen de Actualización de Precios</p>
+                    <p className="text-xs text-text-secondary">
+                      {priceData.filter(r => r.status === 'success').length} de {priceData.length} actualizados
+                    </p>
+                  </div>
+                  
+                  <div className="flex gap-3">
+                    <button 
+                        onClick={handlePriceImport}
+                        disabled={priceImporting || priceData.length === 0}
+                        className="w-full sm:w-auto bg-primary text-text-inverse px-10 h-14 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-primary-hover transition-all disabled:opacity-50 shadow-xl shadow-primary/20 active:scale-95"
+                    >
+                        {priceImporting ? (
+                        <>
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                            Procesando ({priceProgress.current}/{priceProgress.total})
+                        </>
+                        ) : (
+                        <>
+                            <Save className="w-5 h-5" />
+                            Ejecutar Actualización de Precios
                         </>
                         )}
                     </button>
