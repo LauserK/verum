@@ -75,7 +75,8 @@ async def create_recipe(recipe: RecipeCreate, org_id: str = Depends(get_active_o
         "item_id": str(recipe.item_id),
         "yield_qty_base": float(yield_qty_base),
         "yield_presentation_id": str(recipe.yield_presentation_id) if recipe.yield_presentation_id else None,
-        "is_active": True
+        "is_active": True,
+        "auto_calculate_cost": recipe.auto_calculate_cost
     }
     
     res = db.table("recipes").upsert(recipe_data, on_conflict="item_id").execute()
@@ -115,6 +116,25 @@ async def create_recipe(recipe: RecipeCreate, org_id: str = Depends(get_active_o
             "estimated_time_minutes": step.estimated_time_minutes
         }).execute()
         
+    # 5. Recalculate cost if auto_calculate_cost is true
+    if recipe.auto_calculate_cost:
+        ing_res = db.table("recipe_ingredients") \
+            .select("qty_base, items(last_purchase_cost)") \
+            .eq("recipe_id", recipe_id) \
+            .execute()
+            
+        total_cost = Decimal('0.0')
+        for ing in (ing_res.data or []):
+            qty = Decimal(str(ing["qty_base"] or 0))
+            ing_item = ing.get("items")
+            ing_cost = Decimal(str(ing_item.get("last_purchase_cost") or 0)) if ing_item else Decimal('0.0')
+            total_cost += qty * ing_cost
+            
+        final_yield = yield_qty_base if yield_qty_base > 0 else Decimal('1.0')
+        new_cost = total_cost / final_yield
+        
+        await update_item_cost_and_cascade(db, org_id, recipe.item_id, float(new_cost))
+
     return await get_recipe_by_item_id(recipe.item_id, db)
 
 @router.get("/production/recipes/{item_id}", response_model=RecipeResponse)
@@ -948,3 +968,106 @@ async def generate_mrp_orders(
     db.table("catering_requests").update({"status": "confirmed"}).eq("id", str(req_id)).execute()
 
     return {"ok": True, "generated_count": len(generated_order_ids)}
+
+# Helper to update item cost and recursively update parent recipes (cascade bottom-up)
+async def update_item_cost_and_cascade(db, org_id: str, item_id: UUID, new_cost: float, visited_recipes: set = None):
+    if visited_recipes is None:
+        visited_recipes = set()
+
+    # 1. Update last_purchase_cost for the item itself
+    db.table("items").update({
+        "last_purchase_cost": float(new_cost),
+        "last_purchase_cost_updated_at": datetime.now(CARACAS_TZ).isoformat()
+    }).eq("id", str(item_id)).execute()
+
+    # 2. Find parent recipes where this item is used as an ingredient
+    parent_res = db.table("recipe_ingredients") \
+        .select("recipe_id, recipes(id, item_id, yield_qty_base, auto_calculate_cost, is_active)") \
+        .eq("item_id", str(item_id)) \
+        .execute()
+
+    for row in (parent_res.data or []):
+        recipe = row.get("recipes")
+        if not recipe or not recipe.get("is_active", True) or not recipe.get("auto_calculate_cost", True):
+            continue
+
+        recipe_id = recipe["id"]
+        if recipe_id in visited_recipes:
+            continue
+        visited_recipes.add(recipe_id)
+
+        # 3. Calculate new cost for parent recipe
+        ing_res = db.table("recipe_ingredients") \
+            .select("item_id, qty_base, items(last_purchase_cost)") \
+            .eq("recipe_id", recipe_id) \
+            .execute()
+
+        total_cost = Decimal('0.0')
+        for ing in (ing_res.data or []):
+            qty = Decimal(str(ing["qty_base"] or 0))
+            ing_item = ing.get("items")
+            ing_cost = Decimal(str(ing_item.get("last_purchase_cost") or 0)) if ing_item else Decimal('0.0')
+            total_cost += qty * ing_cost
+
+        yield_qty = Decimal(str(recipe["yield_qty_base"] or 1))
+        if yield_qty <= 0:
+            yield_qty = Decimal('1.0')
+
+        new_parent_cost = total_cost / yield_qty
+
+        # 4. Recursively update parent item cost
+        parent_item_id = recipe["item_id"]
+        await update_item_cost_and_cascade(db, org_id, parent_item_id, float(new_parent_cost), visited_recipes)
+
+async def recalculate_recipe_by_id(db, org_id: str, recipe_id: UUID, visited: set = None):
+    if visited is None:
+        visited = set()
+    if recipe_id in visited:
+        return
+    visited.add(recipe_id)
+
+    # 1. Get recipe details
+    res = db.table("recipes").select("id, item_id, yield_qty_base, auto_calculate_cost").eq("id", str(recipe_id)).execute()
+    if not res.data:
+        return
+    recipe = res.data[0]
+
+    # 2. First, ensure all sub-recipes (ingredients that are themselves manufactured items with active recipes) are calculated first
+    ing_res = db.table("recipe_ingredients").select("item_id").eq("recipe_id", str(recipe_id)).execute()
+    for ing in (ing_res.data or []):
+        sub_res = db.table("recipes").select("id").eq("item_id", ing["item_id"]).eq("is_active", True).execute()
+        if sub_res.data:
+            await recalculate_recipe_by_id(db, org_id, sub_res.data[0]["id"], visited)
+
+    # 3. Now calculate cost for this recipe
+    if recipe.get("auto_calculate_cost", True):
+        # Fetch current ingredients costs
+        ing_costs_res = db.table("recipe_ingredients") \
+            .select("qty_base, items(last_purchase_cost)") \
+            .eq("recipe_id", str(recipe_id)) \
+            .execute()
+
+        total_cost = Decimal('0.0')
+        for ing in (ing_costs_res.data or []):
+            qty = Decimal(str(ing["qty_base"] or 0))
+            ing_item = ing.get("items")
+            ing_cost = Decimal(str(ing_item.get("last_purchase_cost") or 0)) if ing_item else Decimal('0.0')
+            total_cost += qty * ing_cost
+
+        yield_qty = Decimal(str(recipe["yield_qty_base"] or 1))
+        if yield_qty <= 0:
+            yield_qty = Decimal('1.0')
+
+        new_cost = total_cost / yield_qty
+
+        # Update last_purchase_cost of the finished product
+        db.table("items").update({
+            "last_purchase_cost": float(new_cost),
+            "last_purchase_cost_updated_at": datetime.now(CARACAS_TZ).isoformat()
+        }).eq("id", recipe["item_id"]).execute()
+
+async def recalculate_all_recipes(db, org_id: str):
+    res = db.table("recipes").select("id").eq("org_id", org_id).eq("is_active", True).execute()
+    visited = set()
+    for r in (res.data or []):
+        await recalculate_recipe_by_id(db, org_id, r["id"], visited)

@@ -934,6 +934,7 @@ export interface RecipeCreate {
     yield_presentation_id: string | null
     ingredients: RecipeIngredient[]
     steps: RecipeStep[]
+    auto_calculate_cost?: boolean
 }
 
 export interface RecipeResponse {
@@ -944,6 +945,7 @@ export interface RecipeResponse {
     ingredients: any[]
     steps: any[]
     is_active: boolean
+    auto_calculate_cost: boolean
     created_at: string
 }
 

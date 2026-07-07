@@ -1139,11 +1139,10 @@ async def process_inventory_document(
                 "created_by": user.id
             }).execute()
             
-            # Update last purchase cost on items
-            db.table("items").update({
-                "last_purchase_cost": float(line["unit_cost_base"] or 0),
-                "last_purchase_cost_updated_at": datetime.now(CARACAS_TZ).isoformat()
-            }).eq("id", line["item_id"]).execute()
+            # Update last purchase cost on items and cascade to parent recipes
+            from app.catering.router import update_item_cost_and_cascade
+            item_uuid = UUID(str(line["item_id"]))
+            await update_item_cost_and_cascade(db, org_id, item_uuid, float(line["unit_cost_base"] or 0))
             
         # Update status
         db.table("inventory_documents").update({

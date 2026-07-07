@@ -1278,4 +1278,11 @@ async def bulk_adjust_stock(
                 difference=difference
             ))
             
+    # Recalculate all recipe costs after bulk adjust (Excel import / audit)
+    try:
+        from app.catering.router import recalculate_all_recipes
+        await recalculate_all_recipes(db, org_id)
+    except Exception as ex:
+        print(f"Error recalculating recipe costs after bulk adjust: {ex}")
+
     return BulkStockAdjustResponse(results=results)

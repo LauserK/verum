@@ -21,6 +21,7 @@ export default function RecipeEditor({ itemId, initialData, itemName }: RecipeEd
   // Yield state
   const [yieldQty, setYieldQty] = useState(initialData?.yield_qty_base || 1)
   const [yieldPresentationId, setYieldPresentationId] = useState(initialData?.yield_presentation_id || '')
+  const [autoCalculateCost, setAutoCalculateCost] = useState(initialData?.auto_calculate_cost ?? true)
   
   // Ingredients and Steps state
   const [ingredients, setIngredients] = useState<RecipeIngredient[]>(initialData?.ingredients || [])
@@ -161,6 +162,7 @@ export default function RecipeEditor({ itemId, initialData, itemName }: RecipeEd
         item_id: itemId,
         yield_qty_base: yieldQty,
         yield_presentation_id: yieldPresentationId || null,
+        auto_calculate_cost: autoCalculateCost,
         ingredients: ingredients
           .filter(ing => ing.item_id && ing.qty_base > 0)
           .map((ing, idx) => ({
@@ -258,6 +260,23 @@ export default function RecipeEditor({ itemId, initialData, itemName }: RecipeEd
                   ))}
                 </select>
               </div>
+            </div>
+            
+            {/* Auto Calculate Cost Toggle */}
+            <div className="mt-4 pt-4 border-t border-border flex items-center justify-between">
+              <div>
+                <label className="text-xs font-semibold text-text-primary">Calcular costo automáticamente</label>
+                <p className="text-[11px] text-text-secondary">El costo de compra del artículo se actualizará automáticamente a partir de la receta.</p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={autoCalculateCost}
+                  onChange={(e) => setAutoCalculateCost(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+              </label>
             </div>
           </div>
 

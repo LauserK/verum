@@ -24,6 +24,7 @@ class RecipeCreate(BaseModel):
     yield_presentation_id: Optional[UUID] = None
     ingredients: List[RecipeIngredientBase]
     steps: List[RecipeStepBase]
+    auto_calculate_cost: bool = True
 
 class RecipeResponse(BaseModel):
     id: UUID
@@ -34,6 +35,7 @@ class RecipeResponse(BaseModel):
     ingredients: List[Dict]
     steps: List[Dict]
     is_active: bool
+    auto_calculate_cost: bool = True
     created_at: datetime
 
 class RecipeBriefResponse(BaseModel):
