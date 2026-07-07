@@ -204,6 +204,7 @@ class StockSnapshotItem(BaseModel):
 
 class StockSnapshotResponse(BaseModel):
     date: str
+    valuation_method: str
     items: List[StockSnapshotItem]
     total_valuation: float
 

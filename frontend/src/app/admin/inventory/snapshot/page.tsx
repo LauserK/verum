@@ -21,6 +21,7 @@ export default function InventorySnapshotPage() {
   const [groupBy, setGroupBy] = useState<GroupByOption>('none')
   const [sortField, setSortField] = useState<SortField>('item_name')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
+  const [valuationMethod, setValuationMethod] = useState<'peps' | 'last_cost'>('peps')
   
   useEffect(() => {
     // Load warehouses
@@ -31,13 +32,13 @@ export default function InventorySnapshotPage() {
 
   useEffect(() => {
     loadSnapshot()
-  }, [date, selectedWarehouseId])
+  }, [date, selectedWarehouseId, valuationMethod])
 
   async function loadSnapshot() {
     if (!date) return
     setLoading(true)
     try {
-      const res = await adminApi.getInventorySnapshot(date, selectedWarehouseId || undefined)
+      const res = await adminApi.getInventorySnapshot(date, selectedWarehouseId || undefined, valuationMethod)
       setSnapshotItems(res.items || [])
     } catch (err) {
       console.error('Error loading inventory snapshot:', err)
@@ -221,7 +222,7 @@ export default function InventorySnapshotPage() {
     
     // Header
     const csvRows = [
-      ['Código', 'Artículo', 'Almacén', 'Cantidad en Mano', 'U.M.', 'Valoración ($)'].join(',')
+      ['Código', 'Artículo', 'Almacén', 'Cantidad en Mano', 'U.M.', valuationMethod === 'peps' ? 'Valoración PEPS ($)' : 'Val. Último Costo ($)'].join(',')
     ]
     
     // Body rows
@@ -370,7 +371,7 @@ export default function InventorySnapshotPage() {
             <DollarSign className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-[10px] font-bold text-text-secondary uppercase tracking-wider">Valoración Histórica (PEPS)</p>
+            <p className="text-[10px] font-bold text-text-secondary uppercase tracking-wider">{valuationMethod === 'peps' ? 'Valoración Histórica (PEPS)' : 'Valoración a Último Costo'}</p>
             <p className="text-xl font-black text-success mt-0.5">
               {loading ? '...' : `$${filteredTotalValuation.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
             </p>
@@ -416,6 +417,25 @@ export default function InventorySnapshotPage() {
             </button>
           </div>
         </div>
+
+        {/* Valuation Method */}
+        <div className="flex items-center gap-3 w-full md:w-auto justify-end">
+          <span className="text-xs font-bold text-text-secondary uppercase tracking-wider whitespace-nowrap">Valoración:</span>
+          <div className="flex bg-surface-raised border border-border p-0.5 rounded-xl">
+            <button
+              onClick={() => setValuationMethod('peps')}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${valuationMethod === 'peps' ? 'bg-surface text-primary shadow-sm' : 'text-text-secondary hover:text-text-primary'}`}
+            >
+              PEPS
+            </button>
+            <button
+              onClick={() => setValuationMethod('last_cost')}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${valuationMethod === 'last_cost' ? 'bg-surface text-primary shadow-sm' : 'text-text-secondary hover:text-text-primary'}`}
+            >
+              Último Costo
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Table view */}
@@ -444,7 +464,7 @@ export default function InventorySnapshotPage() {
                   {renderSortableHeader('warehouse_name', 'Almacén')}
                   {renderSortableHeader('qty_on_hand', 'Cantidad en Mano', 'right')}
                   {renderSortableHeader('uom_name', 'U.M.', 'center', 'w-20')}
-                  {renderSortableHeader('valuation', 'Valoración ($)', 'right', 'w-36')}
+                  {renderSortableHeader('valuation', valuationMethod === 'peps' ? 'Valoración ($)' : 'Val. Últ. Costo ($)', 'right', 'w-36')}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">

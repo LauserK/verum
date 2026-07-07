@@ -675,9 +675,10 @@ export const adminApi = {
         return fetchWithAuth(`/inventory/kardex${qs ? `?${qs}` : ''}`)
     },
 
-    getInventorySnapshot: (date: string, warehouse_id?: string): Promise<StockSnapshotResponse> => {
+    getInventorySnapshot: (date: string, warehouse_id?: string, valuation_method?: string): Promise<StockSnapshotResponse> => {
         const params = new URLSearchParams({ date })
         if (warehouse_id) params.set('warehouse_id', warehouse_id)
+        if (valuation_method) params.set('valuation_method', valuation_method)
         return fetchWithAuth(`/inventory/snapshot?${params.toString()}`)
     },
 
@@ -1310,6 +1311,7 @@ export interface StockSnapshotItem {
 
 export interface StockSnapshotResponse {
     date: string
+    valuation_method: string
     items: StockSnapshotItem[]
     total_valuation: number
 }

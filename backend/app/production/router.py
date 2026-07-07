@@ -467,14 +467,17 @@ async def get_kardex(
 async def get_inventory_snapshot(
     date: str,
     warehouse_id: Optional[UUID] = None,
+    valuation_method: str = "peps",
     org_id: str = Depends(get_active_org_id),
     db=Depends(get_db),
     _=Depends(require_permission("inventory.view"))
 ):
+    if valuation_method not in ("peps", "last_cost"):
+        valuation_method = "peps"
     target_timestamp = f"{date}T23:59:59.999999-04:00"
     
     # Initialize all active items and warehouses of this organization to 0.0 stock and valuation
-    items_res = db.table("items").select("id, name, code, uom_base(name)").eq("org_id", org_id).eq("is_active", True).execute()
+    items_res = db.table("items").select("id, name, code, last_purchase_cost, uom_base(name)").eq("org_id", org_id).eq("is_active", True).execute()
     active_items = items_res.data or []
     
     if warehouse_id:
@@ -497,7 +500,8 @@ async def get_inventory_snapshot(
                 "warehouse_id": wh["id"],
                 "warehouse_name": wh.get("name") or "Unknown",
                 "qty_on_hand": 0.0,
-                "valuation": 0.0
+                "valuation": 0.0,
+                "_last_purchase_cost": float(item.get("last_purchase_cost") or 0)
             }
 
     query = db.table("stock_movements") \
@@ -527,7 +531,8 @@ async def get_inventory_snapshot(
                 "warehouse_id": mv["warehouse_id"],
                 "warehouse_name": wh.get("name") or "Unknown",
                 "qty_on_hand": 0.0,
-                "valuation": 0.0
+                "valuation": 0.0,
+                "_last_purchase_cost": 0.0
             }
             
         grouped[key]["qty_on_hand"] += float(mv["qty_base"])
@@ -537,12 +542,17 @@ async def get_inventory_snapshot(
     total_val = 0.0
     for key, data in grouped.items():
         data["qty_on_hand"] = round(data["qty_on_hand"], 4)
-        data["valuation"] = round(data["valuation"], 2)
+        if valuation_method == "last_cost":
+            data["valuation"] = round(data["qty_on_hand"] * data["_last_purchase_cost"], 2)
+        else:
+            data["valuation"] = round(data["valuation"], 2)
+        del data["_last_purchase_cost"]
         items_list.append(data)
         total_val += data["valuation"]
         
     return {
         "date": date,
+        "valuation_method": valuation_method,
         "items": items_list,
         "total_valuation": round(total_val, 2)
     }
