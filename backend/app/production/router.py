@@ -167,7 +167,13 @@ async def resolve_lot_number(lot_number: str, org_id: str = Depends(get_active_o
     }
 
 @router.patch("/inventory/items/{item_id}", response_model=ItemResponse, tags=["Inventory"])
-async def update_item(item_id: UUID, item: ItemUpdate, db=Depends(get_db), _=Depends(require_permission("inventory.manage_items"))):
+async def update_item(
+    item_id: UUID, 
+    item: ItemUpdate, 
+    org_id: str = Depends(get_active_org_id),
+    db=Depends(get_db), 
+    _=Depends(require_permission("inventory.manage_items"))
+):
     # Convert model to dict and handle UUID serialization
     full_data = item.dict(exclude_none=True)
     
@@ -178,15 +184,22 @@ async def update_item(item_id: UUID, item: ItemUpdate, db=Depends(get_db), _=Dep
     update_data = {k: (str(v) if isinstance(v, UUID) else v) 
                    for k, v in full_data.items()}
     
+    last_purchase_cost_val = None
     if "last_purchase_cost" in update_data:
-        update_data["last_purchase_cost_updated_at"] = datetime.now(CARACAS_TZ).isoformat()
+        last_purchase_cost_val = update_data.pop("last_purchase_cost")
+        if "last_purchase_cost_updated_at" in update_data:
+            del update_data["last_purchase_cost_updated_at"]
         
-    if not update_data:
+    if update_data:
+        res = db.table("items").update(update_data).eq("id", str(item_id)).execute()
+        if not res.data:
+            raise HTTPException(status_code=404, detail="Item not found")
+    elif last_purchase_cost_val is None:
         raise HTTPException(status_code=400, detail="No data to update")
 
-    res = db.table("items").update(update_data).eq("id", str(item_id)).execute()
-    if not res.data:
-        raise HTTPException(status_code=404, detail="Item not found")
+    if last_purchase_cost_val is not None:
+        from app.catering.router import update_item_cost_and_cascade
+        await update_item_cost_and_cascade(db, org_id, item_id, float(last_purchase_cost_val or 0))
         
     # Fetch with uom_name join
     item_res = db.table("items") \
