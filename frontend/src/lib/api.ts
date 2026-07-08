@@ -869,6 +869,12 @@ export const adminApi = {
             body: JSON.stringify(data)
         }),
 
+    updateCateringStatus: (id: string, status: string): Promise<any> =>
+        fetchWithAuth(`/production/catering/${id}/status`, {
+            method: 'PATCH',
+            body: JSON.stringify({ status })
+        }),
+
     generateMRPPlan: (reqId: string, warehouseId: string): Promise<MRPResultResponse> =>
         fetchWithAuth(`/production/catering/${reqId}/plan`, {
             method: 'POST',
@@ -1270,7 +1276,7 @@ export interface CateringRequest {
     id: string
     name: string
     event_date: string | null
-    status: 'planning' | 'confirmed' | 'cancelled'
+    status: 'planning' | 'confirmed' | 'completed' | 'cancelled'
     notes: string | null
     tentative_production_date: string | null
     buffer_percentage: number | null

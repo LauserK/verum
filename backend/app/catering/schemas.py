@@ -168,3 +168,6 @@ class GenerateOrdersRequest(BaseModel):
     warehouse_id: UUID
     target_warehouse_id: UUID
     scheduled_date: str
+
+class CateringStatusUpdate(BaseModel):
+    status: str

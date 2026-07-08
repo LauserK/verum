@@ -44,6 +44,7 @@ export default function MRPConsolePage() {
     const [loading, setLoading] = useState(true)
     const [calculating, setCalculating] = useState(false)
     const [generatingOrders, setGeneratingOrders] = useState(false)
+    const [markingCompleted, setMarkingCompleted] = useState(false)
     const [mrpResult, setMrpResult] = useState<MRPResultResponse | null>(null)
     const [profile, setProfile] = useState<Profile | null>(null)
     // Map of item_id -> RecipeResponse for the catering request lines
@@ -301,6 +302,20 @@ export default function MRPConsolePage() {
         }
     }
 
+    async function handleMarkCompleted() {
+        if (!request) return
+        setMarkingCompleted(true)
+        try {
+            await adminApi.updateCateringStatus(id as string, 'completed')
+            await loadData()
+        } catch (err) {
+            console.error('Error marking catering request completed:', err)
+            alert('Error al marcar como realizado: ' + (err as Error).message)
+        } finally {
+            setMarkingCompleted(false)
+        }
+    }
+
     async function handleCreateTransfer() {
         if (!destWarehouseId || !request) return
         setGeneratingTransfer(true)
@@ -367,11 +382,14 @@ export default function MRPConsolePage() {
                         <div className="flex items-center gap-3">
                             <h1 className="text-2xl font-bold text-text-primary tracking-tight">{request.name}</h1>
                             <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
-                                request.status === 'confirmed' ? 'bg-success/10 text-success' :
+                                request.status === 'confirmed' ? 'bg-info/10 text-info' :
+                                request.status === 'completed' ? 'bg-success/10 text-success' :
                                 request.status === 'cancelled' ? 'bg-error/10 text-error' :
                                 'bg-primary/10 text-primary'
                             }`}>
-                                {request.status}
+                                {request.status === 'planning' ? 'Planificación' :
+                                 request.status === 'confirmed' ? 'Confirmado' :
+                                 request.status === 'completed' ? 'Realizado' : 'Cancelado'}
                             </span>
                         </div>
                         <div className="flex items-center gap-3 mt-1 text-text-secondary text-xs font-medium">
@@ -405,6 +423,16 @@ export default function MRPConsolePage() {
                         {calculating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
                         Correr MRP
                     </button>
+                    {request.status !== 'completed' && (
+                        <button 
+                            onClick={handleMarkCompleted}
+                            disabled={markingCompleted}
+                            className="px-5 h-10 bg-success hover:opacity-90 text-text-inverse rounded-lg font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-md shadow-success/10 transition-all disabled:opacity-50 active:scale-[0.98]"
+                        >
+                            {markingCompleted ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                            Marcar Realizado
+                        </button>
+                    )}
                 </div>
             </div>
 

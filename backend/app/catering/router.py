@@ -31,7 +31,8 @@ from app.catering.schemas import (
     MRPProductionPlan,
     MRPPurchaseList,
     MRPResultResponse,
-    GenerateOrdersRequest
+    GenerateOrdersRequest,
+    CateringStatusUpdate
 )
 
 router = APIRouter(prefix="", tags=["Catering"])
@@ -676,6 +677,23 @@ async def list_catering_requests(
         .order("created_at", desc=True) \
         .execute()
     return res.data or []
+
+@router.patch("/production/catering/{req_id}/status")
+async def update_catering_request_status(
+    req_id: UUID,
+    status_data: CateringStatusUpdate,
+    org_id: str = Depends(get_active_org_id),
+    db=Depends(get_db),
+    _=Depends(require_permission("production.manage_catering"))
+):
+    status = status_data.status
+    if status not in ['planning', 'confirmed', 'completed', 'cancelled']:
+        raise HTTPException(status_code=400, detail="Invalid status")
+    
+    res = db.table("catering_requests").update({"status": status}).eq("id", str(req_id)).eq("org_id", org_id).execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Catering request not found")
+    return res.data[0]
 
 @router.get("/production/catering/{req_id}")
 async def get_catering_request(
