@@ -88,7 +88,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             icon: ChefHat,
             items: [
                 { href: '/admin/production', labelEs: 'Dashboard', labelEn: 'Dashboard' },
-                { href: '/production/kds', labelEs: 'Tablero KDS', labelEn: 'KDS Board' },
+                { href: '/production/kds?from=admin', labelEs: 'Tablero KDS', labelEn: 'KDS Board' },
                 { href: '/admin/production/recipes', labelEs: 'Recetas', labelEn: 'Recipes' },
                 { href: '/admin/production/orders', labelEs: 'Órdenes', labelEn: 'Orders' },
                 { href: '/admin/production/catering', labelEs: 'Catering & MRP', labelEn: 'Catering & MRP' },

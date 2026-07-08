@@ -16,6 +16,16 @@ export default function KDSPage() {
     const [productionWarehouse, setProductionWarehouse] = useState<Warehouse | null>(null)
     const [saving, setSaving] = useState(false)
     const [showVenueDropdown, setShowVenueDropdown] = useState(false)
+    const [backUrl, setBackUrl] = useState('/')
+
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            const isFromAdmin = window.location.search.includes('from=admin') || document.referrer.includes('/admin')
+            if (isFromAdmin) {
+                setBackUrl('/admin/production')
+            }
+        }
+    }, [])
 
     // Detail Modal State
     const [selectedOrder, setSelectedOrder] = useState<any>(null)
@@ -225,7 +235,7 @@ export default function KDSPage() {
             {/* KDS Header */}
             <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-6 border-b border-border mb-6">
                 <div className="flex items-center gap-3">
-                    <Link href="/" className="p-3 bg-surface hover:bg-surface-raised border border-border text-text-secondary hover:text-primary rounded-2xl transition-all shadow-sm">
+                    <Link href={backUrl} className="p-3 bg-surface hover:bg-surface-raised border border-border text-text-secondary hover:text-primary rounded-2xl transition-all shadow-sm">
                         <Home className="w-6 h-6" />
                     </Link>
                     <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center">
