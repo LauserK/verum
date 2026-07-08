@@ -22,7 +22,7 @@ interface AttendanceReportRow {
 
 export default function AttendanceReportsPage() {
     const { availableVenues, activeOrgId } = useVenue()
-    const { t } = useTranslations('admin' as any)
+    const { t } = useTranslations('admin.attendance' as any)
     const [venueId, setVenueId] = useState('')
     const [reportType, setReportType] = useState('daily')
     const [dateFrom, setDateFrom] = useState(format(subDays(new Date(), 7), 'yyyy-MM-dd'))
