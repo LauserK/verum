@@ -2,13 +2,15 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { adminApi, getProfile, type UtensilCategory } from '@/lib/api'
+import { adminApi, type UtensilCategory } from '@/lib/api'
+import { useProfile } from '@/components/ProfileContext'
 import { Plus, Edit3, Save, X, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { useTranslations } from '@/components/I18nProvider'
 
 export default function UtensilCategoriesPage() {
   const { t } = useTranslations()
+  const profile = useProfile()
   const [categories, setCategories] = useState<UtensilCategory[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
@@ -37,7 +39,6 @@ export default function UtensilCategoriesPage() {
   const fetchCategories = useCallback(async () => {
     setLoading(true)
     try {
-      const profile = await getProfile()
       if (profile.organization_id) {
         const data = await adminApi.getUtensilCategories(profile.organization_id)
         setCategories(data)
@@ -47,7 +48,7 @@ export default function UtensilCategoriesPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [profile.organization_id])
 
   useEffect(() => {
     fetchCategories()
@@ -62,7 +63,6 @@ export default function UtensilCategoriesPage() {
 
     setSaving(true)
     try {
-      const profile = await getProfile()
       if (!profile.organization_id) throw new Error('No organization found')
       
       const payload = {

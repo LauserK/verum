@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { adminApi, getProfile, type Profile, type ComplianceReport, type AdminSummary } from '@/lib/api'
+import { adminApi, type Profile, type ComplianceReport, type AdminSummary } from '@/lib/api'
 import { useVenue } from '@/components/VenueContext'
+import { useProfile } from '@/components/ProfileContext'
 import {
     ClipboardCheck, Box, 
     AlertTriangle, ArrowRight, Loader2, Users,
@@ -15,17 +16,11 @@ import { es } from 'date-fns/locale'
 
 export default function GeneralAdminDashboard() {
     const { availableVenues, activeOrgId } = useVenue()
-    const [profile, setProfile] = useState<Profile | null>(null)
+    const profile = useProfile()
     const [summary, setSummary] = useState<AdminSummary | null>(null)
     const [compliance, setCompliance] = useState<ComplianceReport | null>(null)
     const [loading, setLoading] = useState(true)
     const [venueId, setVenueId] = useState<string>('')
-
-    useEffect(() => {
-        getProfile().then(p => {
-            setProfile(p)
-        })
-    }, [])
 
     useEffect(() => {
         if (availableVenues.length > 0 && !venueId) {
@@ -83,7 +78,7 @@ export default function GeneralAdminDashboard() {
         return 'text-error'
     }
 
-    if (loading || !profile) {
+    if (loading) {
         return (
             <div className="flex items-center justify-center py-20">
                 <Loader2 className="w-8 h-8 text-primary animate-spin" />

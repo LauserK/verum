@@ -2,11 +2,13 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { adminApi, getProfile, type VenueInfo, type Asset } from '@/lib/api'
+import { adminApi, type VenueInfo, type Asset } from '@/lib/api'
 import { Plus, QrCode, Edit3, Save, X, Loader2, Search, Filter, ChevronUp, ChevronDown } from 'lucide-react'
 import { useReactToPrint } from 'react-to-print'
-import { QRCodePrint } from '@/components/inventory/QRCodePrint'
-import { BulkQRCodePrint } from '@/components/inventory/BulkQRCodePrint'
+import dynamic from 'next/dynamic'
+
+const QRCodePrint = dynamic(() => import('@/components/inventory/QRCodePrint').then(mod => mod.QRCodePrint), { ssr: false })
+const BulkQRCodePrint = dynamic(() => import('@/components/inventory/BulkQRCodePrint').then(mod => mod.BulkQRCodePrint), { ssr: false })
 import { PrintConfigModal } from '@/components/inventory/PrintConfigModal'
 import { v4 as uuidv4 } from 'uuid'
 import Link from 'next/link'

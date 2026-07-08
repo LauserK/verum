@@ -2,10 +2,11 @@
 
 import { useEffect, useState, useRef } from 'react'
 import {
-    adminApi, getProfile,
+    adminApi,
     type Profile, type TemplateDetail, type Question
 } from '@/lib/api'
 import { useVenue } from '@/components/VenueContext'
+import { useProfile } from '@/components/ProfileContext'
 import {
     Plus, Trash2, Edit3, ChevronRight, Save, X, Loader2,
     Clock
@@ -33,7 +34,7 @@ const QUESTION_TYPES = [
 export default function TemplatesPage() {
     const { t } = useTranslations()
     const { availableVenues, activeOrgId } = useVenue()
-    const [profile, setProfile] = useState<Profile | null>(null)
+    const profile = useProfile()
     const [venueId, setVenueId] = useState('')
     const [templates, setTemplates] = useState<TemplateDetail[]>([])
     const [selectedTemplate, setSelectedTemplate] = useState<TemplateDetail | null>(null)
@@ -116,15 +117,7 @@ export default function TemplatesPage() {
         }
     };
 
-    useEffect(() => {
-        async function load() {
-            try {
-                const p = await getProfile()
-                setProfile(p)
-            } catch { }
-        }
-        load()
-    }, [])
+
 
     useEffect(() => {
         if (availableVenues.length > 0 && !venueId) {

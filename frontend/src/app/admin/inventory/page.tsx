@@ -2,7 +2,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { adminApi, getProfile, type VenueInfo, type InventoryDashboardSummary, type LowStockAlertItem } from '@/lib/api'
+import { adminApi, type VenueInfo, type InventoryDashboardSummary, type LowStockAlertItem } from '@/lib/api'
 import { useVenue } from '@/components/VenueContext'
 import { Box, Wrench, AlertTriangle, ClipboardList, Clock, ArrowRight, Archive, Warehouse, History } from 'lucide-react'
 import Link from 'next/link'

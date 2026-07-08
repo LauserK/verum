@@ -2,7 +2,8 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { adminApi, type UtensilCount, getProfile } from '@/lib/api'
+import { adminApi, type UtensilCount } from '@/lib/api'
+import { useProfile } from '@/components/ProfileContext'
 import { Loader2, Calendar, User, ChevronRight, ClipboardCheck, History } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'
@@ -11,13 +12,13 @@ import { useTranslations } from '@/components/I18nProvider'
 
 export default function UtensilCountsPage() {
   const { t } = useTranslations()
+  const profile = useProfile()
   const [counts, setCounts] = useState<UtensilCount[]>([])
   const [loading, setLoading] = useState(true)
 
   const fetchCounts = useCallback(async () => {
     setLoading(true)
     try {
-      const profile = await getProfile()
       if (profile.organization_id) {
         // List counts for the organization (currently backend list_utensil_counts lists all, but filtered by venue if provided)
         const data = await adminApi.getUtensilsCounts()
@@ -28,7 +29,7 @@ export default function UtensilCountsPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [profile.organization_id])
 
   useEffect(() => {
     fetchCounts()

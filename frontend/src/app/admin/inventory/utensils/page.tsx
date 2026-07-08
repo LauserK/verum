@@ -2,7 +2,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { adminApi, getProfile, type Utensil, type UtensilCategory, type VenueInfo } from '@/lib/api'
+import { adminApi, type Utensil, type UtensilCategory, type VenueInfo } from '@/lib/api'
 import { useVenue } from '@/components/VenueContext'
 import { Plus, Edit3, Save, X, Loader2, Search, Filter, ArrowRightLeft } from 'lucide-react'
 import Link from 'next/link'

@@ -13,7 +13,6 @@ import {
   RefreshCw
 } from 'lucide-react';
 import Link from 'next/link';
-import * as XLSX from 'xlsx';
 
 interface ParsedRow {
   id: string;
@@ -113,9 +112,17 @@ export default function ImportUtilityPage() {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const [xlsxModule, setXlsxModule] = useState<any>(null);
+
+  useEffect(() => {
+    import('xlsx').then((m) => {
+      setXlsxModule(m);
+    });
+  }, []);
+
   // Catalog Import State
   const [data, setData] = useState<ParsedRow[]>([]);
-  const [workbook, setWorkbook] = useState<XLSX.WorkBook | null>(null);
+  const [workbook, setWorkbook] = useState<any | null>(null);
   const [sheetNames, setSheetNames] = useState<string[]>([]);
   const [selectedSheet, setSelectedSheet] = useState<string>('');
   const [startRow, setStartRow] = useState<number>(2); 
@@ -125,7 +132,8 @@ export default function ImportUtilityPage() {
   // Stock Import State
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>('');
   const [stockData, setStockData] = useState<ParsedStockRow[]>([]);
-  const [stockWorkbook, setStockWorkbook] = useState<XLSX.WorkBook | null>(null);
+  const [stockWorkbook, setStockWorkbook] = useState<any | null>(null);
+  const [sheetNamesStock, setSheetNamesStock] = useState<string[]>([]); // renamed slightly or kept as stockSheetNames
   const [stockSheetNames, setStockSheetNames] = useState<string[]>([]);
   const [stockSelectedSheet, setStockSelectedSheet] = useState<string>('');
   const [stockStartRow, setStockStartRow] = useState<number>(2);
@@ -134,7 +142,7 @@ export default function ImportUtilityPage() {
 
   // Price Update State
   const [priceData, setPriceData] = useState<ParsedPriceRow[]>([]);
-  const [priceWorkbook, setPriceWorkbook] = useState<XLSX.WorkBook | null>(null);
+  const [priceWorkbook, setPriceWorkbook] = useState<any | null>(null);
   const [priceSheetNames, setPriceSheetNames] = useState<string[]>([]);
   const [priceSelectedSheet, setPriceSelectedSheet] = useState<string>('');
   const [priceStartRow, setPriceStartRow] = useState<number>(2);
@@ -216,13 +224,14 @@ export default function ImportUtilityPage() {
 
   // Catalog File Upload Handler
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!xlsxModule) return;
     const file = e.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
     reader.onload = (evt) => {
       const bstr = evt.target?.result;
-      const wb = XLSX.read(bstr, { type: 'binary' });
+      const wb = xlsxModule.read(bstr, { type: 'binary' });
       setWorkbook(wb);
       setSheetNames(wb.SheetNames);
       setSelectedSheet(wb.SheetNames[0]);
@@ -232,13 +241,14 @@ export default function ImportUtilityPage() {
 
   // Stock File Upload Handler
   const handleStockFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!xlsxModule) return;
     const file = e.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
     reader.onload = (evt) => {
       const bstr = evt.target?.result;
-      const wb = XLSX.read(bstr, { type: 'binary' });
+      const wb = xlsxModule.read(bstr, { type: 'binary' });
       setStockWorkbook(wb);
       setStockSheetNames(wb.SheetNames);
       setStockSelectedSheet(wb.SheetNames[0]);
@@ -248,13 +258,14 @@ export default function ImportUtilityPage() {
 
   // Price File Upload Handler
   const handlePriceFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!xlsxModule) return;
     const file = e.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
     reader.onload = (evt) => {
       const bstr = evt.target?.result;
-      const wb = XLSX.read(bstr, { type: 'binary' });
+      const wb = xlsxModule.read(bstr, { type: 'binary' });
       setPriceWorkbook(wb);
       setPriceSheetNames(wb.SheetNames);
       setPriceSelectedSheet(wb.SheetNames[0]);
@@ -264,10 +275,10 @@ export default function ImportUtilityPage() {
 
   // Effect to parse Catalog workbook
   useEffect(() => {
-    if (!workbook || !selectedSheet) return;
+    if (!xlsxModule || !workbook || !selectedSheet) return;
 
     const ws = workbook.Sheets[selectedSheet];
-    const json = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+    const json = xlsxModule.utils.sheet_to_json(ws, { header: 1 }) as any[][];
 
     const rows = json.slice(startRow - 1).map((row) => {
       const rawCatName = String(row[1] || '').trim();
@@ -315,14 +326,14 @@ export default function ImportUtilityPage() {
     }).filter(r => r.name); 
 
     setData(rows);
-  }, [workbook, selectedSheet, startRow, categories, uoms]);
+  }, [xlsxModule, workbook, selectedSheet, startRow, categories, uoms]);
 
   // Effect to parse Stock workbook
   useEffect(() => {
-    if (!stockWorkbook || !stockSelectedSheet) return;
+    if (!xlsxModule || !stockWorkbook || !stockSelectedSheet) return;
 
     const ws = stockWorkbook.Sheets[stockSelectedSheet];
-    const json = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+    const json = xlsxModule.utils.sheet_to_json(ws, { header: 1 }) as any[][];
 
     const rows = json.slice(stockStartRow - 1).map((row) => {
       const code = String(row[0] || '').trim();
@@ -348,14 +359,14 @@ export default function ImportUtilityPage() {
     }).filter(r => r.item_code);
 
     setStockData(rows);
-  }, [stockWorkbook, stockSelectedSheet, stockStartRow, existingItems]);
+  }, [xlsxModule, stockWorkbook, stockSelectedSheet, stockStartRow, existingItems]);
 
   // Effect to parse Price workbook
   useEffect(() => {
-    if (!priceWorkbook || !priceSelectedSheet) return;
+    if (!xlsxModule || !priceWorkbook || !priceSelectedSheet) return;
 
     const ws = priceWorkbook.Sheets[priceSelectedSheet];
-    const json = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+    const json = xlsxModule.utils.sheet_to_json(ws, { header: 1 }) as any[][];
     if (json.length === 0) return;
 
     // Detect mapping columns from header row (often row 0 or startRow-2)
@@ -419,7 +430,7 @@ export default function ImportUtilityPage() {
     }).filter(r => r.code || r.name);
 
     setPriceData(rows);
-  }, [priceWorkbook, priceSelectedSheet, priceStartRow, existingItems, uoms]);
+  }, [xlsxModule, priceWorkbook, priceSelectedSheet, priceStartRow, existingItems, uoms]);
 
   // Catalog Import Action
   async function handleImport(mode: 'all' | 'categories_only') {

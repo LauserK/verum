@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { adminApi, getProfile, type Profile, type AdminSubmission } from '@/lib/api'
+import { adminApi, type Profile, type AdminSubmission } from '@/lib/api'
 import { useVenue } from '@/components/VenueContext'
+import { useProfile } from '@/components/ProfileContext'
 import { Loader2, Eye, Clock } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -12,21 +13,11 @@ export default function SubmissionsPage() {
     const { t } = useTranslations()
     const router = useRouter()
     const { availableVenues, activeOrgId } = useVenue()
-    const [profile, setProfile] = useState<Profile | null>(null)
+    const profile = useProfile()
     const [submissions, setSubmissions] = useState<AdminSubmission[]>([])
     const [loading, setLoading] = useState(true)
     const [venueId, setVenueId] = useState('')
     const [statusFilter, setStatusFilter] = useState('')
-
-    useEffect(() => {
-        async function load() {
-            try {
-                const p = await getProfile()
-                setProfile(p)
-            } catch { }
-        }
-        load()
-    }, [])
 
     useEffect(() => {
         if (availableVenues.length > 0 && !venueId) {

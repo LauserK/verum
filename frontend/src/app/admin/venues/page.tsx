@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import {
-    adminApi, getProfile,
+    adminApi,
     type Profile, type Venue, type Shift
 } from '@/lib/api'
 import { useVenue } from '@/components/VenueContext'
+import { useProfile } from '@/components/ProfileContext'
 import {
     Plus, Trash2, Edit3, Save, X, Loader2, Clock,
     Building2, ChevronRight, MapPin
@@ -13,7 +14,7 @@ import {
 
 export default function VenuesPage() {
     const { activeOrgId, isLoading: venueContextLoading } = useVenue()
-    const [profile, setProfile] = useState<Profile | null>(null)
+    const profile = useProfile()
     const [venues, setVenues] = useState<Venue[]>([])
     const [loading, setLoading] = useState(true)
 
@@ -48,13 +49,10 @@ export default function VenuesPage() {
     useEffect(() => {
         async function load() {
             try {
-                const p = await getProfile()
-                setProfile(p)
-                
                 // Determine the correct organization ID
                 // Prefer context, then localStorage, then profile (as last resort)
                 const savedOrgId = localStorage.getItem('activeOrgId')
-                const orgId = activeOrgId || savedOrgId || p.organization_id
+                const orgId = activeOrgId || savedOrgId || profile.organization_id
                 
                 if (orgId) {
                     const v = await adminApi.getVenues(orgId)

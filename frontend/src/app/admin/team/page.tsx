@@ -3,19 +3,20 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-    adminApi, getProfile,
+    adminApi,
     type Profile, type AdminUser, type Shift
 } from '@/lib/api'
 import { Plus, Trash2, Edit3, Save, X, Loader2, Shield, User, KeyRound, Fingerprint } from 'lucide-react'
 import { useTranslations } from '@/components/I18nProvider'
 import { useVenue } from '@/components/VenueContext'
+import { useProfile } from '@/components/ProfileContext'
 import Link from 'next/link'
 
 export default function TeamPage() {
     const { t } = useTranslations('admin')
     const { activeOrgId, availableVenues } = useVenue()
     const router = useRouter()
-    const [profile, setProfile] = useState<Profile | null>(null)
+    const profile = useProfile()
     const [users, setUsers] = useState<AdminUser[]>([])
     const [roles, setRoles] = useState<{id: string, name: string}[]>([])
     const [loading, setLoading] = useState(true)
@@ -55,8 +56,6 @@ export default function TeamPage() {
             if (!activeOrgId) return
             setLoading(true)
             try {
-                const p = await getProfile()
-                setProfile(p)
                 const u = await adminApi.getUsers()
                 setUsers(u)
                 

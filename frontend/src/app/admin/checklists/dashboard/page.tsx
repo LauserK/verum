@@ -2,15 +2,17 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { adminApi, getProfile, type ComplianceReport, type Profile } from '@/lib/api'
+import { adminApi, type ComplianceReport, type Profile } from '@/lib/api'
 import { useVenue } from '@/components/VenueContext'
+import { useProfile } from '@/components/ProfileContext'
 import {
     CheckCircle2, AlertTriangle, XCircle, Clock, TrendingUp,
     Loader2
 } from 'lucide-react'
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 
-import DatePicker from 'react-datepicker'
+const DatePicker = dynamic(() => import('react-datepicker') as any, { ssr: false }) as any
 import 'react-datepicker/dist/react-datepicker.css'
 import { es } from 'date-fns/locale/es'
 import { useTranslations } from '@/components/I18nProvider'
@@ -18,23 +20,13 @@ import { useTranslations } from '@/components/I18nProvider'
 export default function ChecklistDashboard() {
     const { t } = useTranslations()
     const { availableVenues, activeOrgId } = useVenue()
-    const [profile, setProfile] = useState<Profile | null>(null)
+    const profile = useProfile()
     const [report, setReport] = useState<ComplianceReport | null>(null)
     const [loading, setLoading] = useState(true)
     const [venueId, setVenueId] = useState<string>('')
     const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | 'custom'>('today')
     const [customFrom, setCustomFrom] = useState<Date | null>(new Date())
     const [customTo, setCustomTo] = useState<Date | null>(new Date())
-
-    useEffect(() => {
-        async function load() {
-            try {
-                const p = await getProfile()
-                setProfile(p)
-            } catch { }
-        }
-        load()
-    }, [])
 
     useEffect(() => {
         if (availableVenues.length > 0 && !venueId) {

@@ -2,7 +2,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { adminApi, getProfile, type CountSchedule, type VenueInfo, type UtensilCategory, type Utensil } from '@/lib/api'
+import { adminApi, type CountSchedule, type VenueInfo, type UtensilCategory, type Utensil } from '@/lib/api'
 import { Plus, Save, X, Loader2, Calendar, Clock, MapPin, User, Search, Trash2, Edit3 } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'

@@ -9,6 +9,7 @@ import { useTranslations } from '@/components/I18nProvider'
 import { useTheme } from '@/components/ThemeProvider'
 import { useVenue } from '@/components/VenueContext'
 import { VenueSelector } from '@/components/VenueSelector'
+import { ProfileProvider } from '@/components/ProfileContext'
 
 interface SubnavItem {
     href: string;
@@ -429,7 +430,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
             {/* Content */}
             <main className="max-w-5xl mx-auto px-4 py-6">
-                {children}
+                <ProfileProvider value={profile}>
+                    {children}
+                </ProfileProvider>
             </main>
         </div>
     )

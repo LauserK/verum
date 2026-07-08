@@ -2,8 +2,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { adminApi, getProfile, type Profile, type AdminUser } from '@/lib/api'
+import { adminApi, type Profile, type AdminUser } from '@/lib/api'
 import { useVenue } from '@/components/VenueContext'
+import { useProfile } from '@/components/ProfileContext'
 import { 
     ArrowLeft, CheckCircle2, XCircle, Clock, 
     Calendar, User, FileText, Loader2, Search,
@@ -30,7 +31,7 @@ interface LeaveRequest {
 export default function AdminAbsencesPage() {
     const router = useRouter()
     const { availableVenues, activeOrgId } = useVenue()
-    const [profile, setProfile] = useState<Profile | null>(null)
+    const profile = useProfile()
     const [users, setUsers] = useState<AdminUser[]>([])
     const [requests, setRequests] = useState<LeaveRequest[]>([])
     const [history, setHistory] = useState<LeaveRequest[]>([])
@@ -51,9 +52,6 @@ export default function AdminAbsencesPage() {
     const [submitting, setSubmitting] = useState(false)
 
     useEffect(() => {
-        getProfile().then(p => {
-            setProfile(p)
-        })
         adminApi.getUsers().then(setUsers)
     }, [])
 
