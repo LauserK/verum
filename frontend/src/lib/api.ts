@@ -915,6 +915,7 @@ export interface RecipeBriefResponse {
     item_type: string
     uom_name?: string | null
     yield_qty_base: number
+    safety_margin?: number
     created_at: string
 }
 
@@ -942,6 +943,7 @@ export interface RecipeCreate {
     ingredients: RecipeIngredient[]
     steps: RecipeStep[]
     auto_calculate_cost?: boolean
+    safety_margin?: number
 }
 
 export interface RecipeResponse {
@@ -953,6 +955,7 @@ export interface RecipeResponse {
     steps: any[]
     is_active: boolean
     auto_calculate_cost: boolean
+    safety_margin?: number
     created_at: string
 }
 

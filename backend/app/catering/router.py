@@ -57,6 +57,7 @@ async def list_recipes(org_id: str = Depends(get_active_org_id), db=Depends(get_
             "item_type": r["items"]["type"],
             "uom_name": r["items"]["uom_base"]["name"] if r.get("items") and r["items"].get("uom_base") else None,
             "yield_qty_base": r["yield_qty_base"],
+            "safety_margin": Decimal(str(r.get("safety_margin") if r.get("safety_margin") is not None else 1.00)),
             "created_at": r["created_at"]
         })
     return results
@@ -78,7 +79,8 @@ async def create_recipe(recipe: RecipeCreate, org_id: str = Depends(get_active_o
         "yield_qty_base": float(yield_qty_base),
         "yield_presentation_id": str(recipe.yield_presentation_id) if recipe.yield_presentation_id else None,
         "is_active": True,
-        "auto_calculate_cost": recipe.auto_calculate_cost
+        "auto_calculate_cost": recipe.auto_calculate_cost,
+        "safety_margin": float(recipe.safety_margin) if recipe.safety_margin is not None else 1.00
     }
     
     res = db.table("recipes").upsert(recipe_data, on_conflict="item_id").execute()
@@ -133,7 +135,7 @@ async def create_recipe(recipe: RecipeCreate, org_id: str = Depends(get_active_o
             total_cost += qty * ing_cost
             
         final_yield = yield_qty_base if yield_qty_base > 0 else Decimal('1.0')
-        new_cost = total_cost / final_yield
+        new_cost = (total_cost / final_yield) * Decimal(str(recipe.safety_margin or 1.00))
         
         await update_item_cost_and_cascade(db, org_id, recipe.item_id, float(new_cost))
 
@@ -1017,7 +1019,7 @@ async def cascade_from_production_cost(db, org_id: str, item_id: UUID, visited_r
 
     # Find parent recipes where this item is used as an ingredient
     parent_res = db.table("recipe_ingredients") \
-        .select("recipe_id, recipes(id, item_id, yield_qty_base, auto_calculate_cost, is_active)") \
+        .select("recipe_id, recipes(id, item_id, yield_qty_base, safety_margin, auto_calculate_cost, is_active)") \
         .eq("item_id", str(item_id)) \
         .execute()
 
@@ -1048,7 +1050,8 @@ async def cascade_from_production_cost(db, org_id: str, item_id: UUID, visited_r
         if yield_qty <= 0:
             yield_qty = Decimal('1.0')
 
-        new_parent_cost = total_cost / yield_qty
+        margin_factor = Decimal(str(recipe.get("safety_margin") if recipe.get("safety_margin") is not None else 1.00))
+        new_parent_cost = (total_cost / yield_qty) * margin_factor
 
         # Recursively update parent item cost (which updates parent's last_purchase_cost and production_cost and cascades)
         parent_item_id = recipe["item_id"]
@@ -1062,7 +1065,7 @@ async def recalculate_recipe_by_id(db, org_id: str, recipe_id: UUID, visited: se
     visited.add(recipe_id)
 
     # 1. Get recipe details
-    res = db.table("recipes").select("id, item_id, yield_qty_base, auto_calculate_cost").eq("id", str(recipe_id)).execute()
+    res = db.table("recipes").select("id, item_id, yield_qty_base, safety_margin, auto_calculate_cost").eq("id", str(recipe_id)).execute()
     if not res.data:
         return
     recipe = res.data[0]
@@ -1093,7 +1096,8 @@ async def recalculate_recipe_by_id(db, org_id: str, recipe_id: UUID, visited: se
         if yield_qty <= 0:
             yield_qty = Decimal('1.0')
 
-        new_cost = total_cost / yield_qty
+        margin_factor = Decimal(str(recipe.get("safety_margin") if recipe.get("safety_margin") is not None else 1.00))
+        new_cost = (total_cost / yield_qty) * margin_factor
 
         # Get finished product margin/yield to update production_cost
         item_res = db.table("items").select("margin_multiplier, yield_factor").eq("id", recipe["item_id"]).execute()

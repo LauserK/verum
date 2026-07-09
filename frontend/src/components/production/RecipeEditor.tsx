@@ -31,6 +31,7 @@ export default function RecipeEditor({ itemId, initialData, itemName }: RecipeEd
   const [yieldQty, setYieldQty] = useState(initialData?.yield_qty_base || 1)
   const [yieldPresentationId, setYieldPresentationId] = useState(initialData?.yield_presentation_id || '')
   const [autoCalculateCost, setAutoCalculateCost] = useState(initialData?.auto_calculate_cost ?? true)
+  const [safetyMargin, setSafetyMargin] = useState(initialData?.safety_margin ?? 1.00)
   
   // Ingredients and Steps state
   const [ingredients, setIngredients] = useState<RecipeIngredient[]>(initialData?.ingredients || [])
@@ -76,6 +77,22 @@ export default function RecipeEditor({ itemId, initialData, itemName }: RecipeEd
     const item = allItems.find(i => i.id === itemId)
     return item?.uom_name || 'un'
   }, [yieldPresentationId, mainItemPresentations, allItems, itemId])
+
+  const yieldInBase = useMemo(() => {
+    if (yieldPresentationId) {
+      const pres = mainItemPresentations.find(p => p.id === yieldPresentationId)
+      if (pres) return yieldQty * pres.conversion_factor
+    }
+    return yieldQty
+  }, [yieldQty, yieldPresentationId, mainItemPresentations])
+
+  const baseUnitCost = useMemo(() => {
+    return yieldInBase > 0 ? recipeCost / yieldInBase : 0
+  }, [recipeCost, yieldInBase])
+
+  const finalUnitCost = useMemo(() => {
+    return baseUnitCost * safetyMargin
+  }, [baseUnitCost, safetyMargin])
 
   const switchToSearchMode = (index: number) => {
     const currentIng = ingredients[index]
@@ -221,6 +238,7 @@ export default function RecipeEditor({ itemId, initialData, itemName }: RecipeEd
         yield_qty_base: yieldQty,
         yield_presentation_id: yieldPresentationId || null,
         auto_calculate_cost: autoCalculateCost,
+        safety_margin: safetyMargin,
         ingredients: ingredients
           .filter(ing => ing.item_id && ing.qty_base > 0)
           .map((ing, idx) => ({
@@ -328,6 +346,18 @@ export default function RecipeEditor({ itemId, initialData, itemName }: RecipeEd
                     <option key={p.id} value={p.id}>{p.name}</option>
                   ))}
                 </select>
+              </div>
+              <div className="flex-1 space-y-1.5">
+                <label className="text-[10px] font-bold text-text-secondary uppercase tracking-wider">Margen Seguridad (Mult.)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="1.00"
+                  value={safetyMargin}
+                  onChange={(e) => setSafetyMargin(parseFloat(e.target.value) || 1.00)}
+                  className="w-full p-2.5 h-11 bg-surface border border-border rounded-xl focus:border-primary outline-none transition-all text-text-primary text-sm font-medium"
+                  placeholder="1.00"
+                />
               </div>
             </div>
             
@@ -526,18 +556,35 @@ export default function RecipeEditor({ itemId, initialData, itemName }: RecipeEd
 
               {/* Cost Total Footer */}
               {ingredients.some(ing => ing.item_id) && (
-                <div className="mt-4 pt-4 border-t border-border flex items-center justify-between flex-wrap gap-2">
-                  <div className="flex items-center gap-2">
-                    {itemsWithoutPrice > 0 && (
+                <div className="mt-4 pt-4 border-t border-border space-y-2">
+                  <div className="flex justify-between items-center text-xs text-text-secondary">
+                    <span>Costo total ingredientes:</span>
+                    <span className="font-bold text-text-primary">${recipeCost.toFixed(2)}</span>
+                  </div>
+                  {yieldInBase > 0 && (
+                    <>
+                      <div className="flex justify-between items-center text-xs text-text-secondary">
+                        <span>Costo unitario base (por {allItems.find(i => i.id === itemId)?.uom_name || 'un'}):</span>
+                        <span className="font-bold text-text-primary">${baseUnitCost.toFixed(4)}</span>
+                      </div>
+                      <div className="flex justify-between items-center border-t border-dashed border-border/50 pt-2">
+                        <div>
+                          <span className="text-xs text-text-secondary uppercase font-bold tracking-wider mr-2">Costo Final con Margen de Seguridad:</span>
+                          {safetyMargin > 1.0 && (
+                            <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-extrabold">+{Math.round((safetyMargin - 1) * 100)}%</span>
+                          )}
+                        </div>
+                        <span className="text-xl font-black text-primary">${finalUnitCost.toFixed(2)}</span>
+                      </div>
+                    </>
+                  )}
+                  {itemsWithoutPrice > 0 && (
+                    <div className="pt-2 flex justify-start">
                       <span className="inline-flex items-center gap-1 text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/20 dark:text-amber-400 px-2.5 py-1 rounded-lg font-medium border border-amber-200 dark:border-amber-900/30">
                         ⚠ {itemsWithoutPrice} {itemsWithoutPrice === 1 ? 'ingrediente sin precio' : 'ingredientes sin precio'}
                       </span>
-                    )}
-                  </div>
-                  <div className="text-right">
-                    <span className="text-xs text-text-secondary uppercase font-bold tracking-wider mr-2">Costo Total Receta:</span>
-                    <span className="text-xl font-black text-primary">${recipeCost.toFixed(2)}</span>
-                  </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

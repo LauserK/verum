@@ -25,6 +25,7 @@ class RecipeCreate(BaseModel):
     ingredients: List[RecipeIngredientBase]
     steps: List[RecipeStepBase]
     auto_calculate_cost: bool = True
+    safety_margin: Decimal = Decimal('1.00')
 
 class RecipeResponse(BaseModel):
     id: UUID
@@ -36,6 +37,7 @@ class RecipeResponse(BaseModel):
     steps: List[Dict]
     is_active: bool
     auto_calculate_cost: bool = True
+    safety_margin: Decimal = Decimal('1.00')
     created_at: datetime
 
 class RecipeBriefResponse(BaseModel):
@@ -46,6 +48,7 @@ class RecipeBriefResponse(BaseModel):
     item_type: str
     uom_name: Optional[str] = None
     yield_qty_base: Decimal
+    safety_margin: Decimal = Decimal('1.00')
     created_at: datetime
 
 class CalculateProductionNeedsRequest(BaseModel):
