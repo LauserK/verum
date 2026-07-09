@@ -94,6 +94,10 @@ export default function RecipeEditor({ itemId, initialData, itemName }: RecipeEd
     return baseUnitCost * safetyMargin
   }, [baseUnitCost, safetyMargin])
 
+  const totalCostWithSafety = useMemo(() => {
+    return recipeCost * safetyMargin
+  }, [recipeCost, safetyMargin])
+
   const switchToSearchMode = (index: number) => {
     const currentIng = ingredients[index]
     setSearchQueries(prev => ({ ...prev, [index]: currentIng.item_name || '' }))
@@ -564,17 +568,17 @@ export default function RecipeEditor({ itemId, initialData, itemName }: RecipeEd
                   {yieldInBase > 0 && (
                     <>
                       <div className="flex justify-between items-center text-xs text-text-secondary">
-                        <span>Costo unitario base (por {allItems.find(i => i.id === itemId)?.uom_name || 'un'}):</span>
-                        <span className="font-bold text-text-primary">${baseUnitCost.toFixed(4)}</span>
+                        <span>Costo unitario con seguridad (por {allItems.find(i => i.id === itemId)?.uom_name || 'un'}):</span>
+                        <span className="font-bold text-text-primary">${finalUnitCost.toFixed(4)}</span>
                       </div>
                       <div className="flex justify-between items-center border-t border-dashed border-border/50 pt-2">
                         <div>
-                          <span className="text-xs text-text-secondary uppercase font-bold tracking-wider mr-2">Costo Final con Margen de Seguridad:</span>
+                          <span className="text-xs text-text-secondary uppercase font-bold tracking-wider mr-2">Costo Total con Seguridad:</span>
                           {safetyMargin > 1.0 && (
                             <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-extrabold">+{Math.round((safetyMargin - 1) * 100)}%</span>
                           )}
                         </div>
-                        <span className="text-xl font-black text-primary">${finalUnitCost.toFixed(2)}</span>
+                        <span className="text-xl font-black text-primary">${totalCostWithSafety.toFixed(2)}</span>
                       </div>
                     </>
                   )}
