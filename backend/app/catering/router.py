@@ -123,7 +123,7 @@ async def create_recipe(recipe: RecipeCreate, org_id: str = Depends(get_active_o
     # 5. Recalculate cost if auto_calculate_cost is true
     if recipe.auto_calculate_cost:
         ing_res = db.table("recipe_ingredients") \
-            .select("qty_base, items(last_purchase_cost)") \
+            .select("qty_base, items(production_cost)") \
             .eq("recipe_id", recipe_id) \
             .execute()
             
@@ -131,7 +131,7 @@ async def create_recipe(recipe: RecipeCreate, org_id: str = Depends(get_active_o
         for ing in (ing_res.data or []):
             qty = Decimal(str(ing["qty_base"] or 0))
             ing_item = ing.get("items")
-            ing_cost = Decimal(str(ing_item.get("last_purchase_cost") or 0)) if ing_item else Decimal('0.0')
+            ing_cost = Decimal(str(ing_item.get("production_cost") or 0)) if ing_item else Decimal('0.0')
             total_cost += qty * ing_cost
             
         final_yield = yield_qty_base if yield_qty_base > 0 else Decimal('1.0')

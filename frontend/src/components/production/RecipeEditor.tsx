@@ -260,7 +260,13 @@ export default function RecipeEditor({ itemId, initialData, itemName }: RecipeEd
       }
       
       await adminApi.saveRecipe(recipeData)
-      router.back()
+      
+      const referrer = typeof document !== 'undefined' ? document.referrer : ''
+      if (referrer.includes(`/inventory/items/${itemId}`)) {
+        window.location.href = `/admin/inventory/items/${itemId}`
+      } else {
+        router.back()
+      }
     } catch (error: any) {
       console.error('Error saving recipe:', error)
       setErrorModal({ isOpen: true, message: error?.message || 'Error al guardar la receta' })
