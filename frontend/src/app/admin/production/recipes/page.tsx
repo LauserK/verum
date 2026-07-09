@@ -39,7 +39,17 @@ export default function RecipesPage() {
 
             // Fetch detailed recipes in parallel
             const fullRecipes = await Promise.all(
-                recipes.map(r => adminApi.getRecipe(r.item_id))
+                recipes.map(async r => {
+                    const full = await adminApi.getRecipe(r.item_id)
+                    return {
+                        ...full,
+                        items: {
+                            name: r.item_name,
+                            code: r.item_code,
+                            type: r.item_type
+                        }
+                    }
+                })
             )
             
             setBundleRecipes(fullRecipes)
