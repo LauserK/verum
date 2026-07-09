@@ -43,6 +43,12 @@ export const RecipeTechnicalSheetPrint = forwardRef<HTMLDivElement, Props>(({
     ? `${window.location.origin}/admin/production/recipes/${itemId}`
     : ''
 
+  const formatQuantity = (qty: number): string => {
+    const val = Number(qty)
+    if (isNaN(val)) return '0'
+    return val % 1 === 0 ? val.toString() : val.toFixed(2)
+  }
+
   return (
     <div ref={ref} className="p-6 text-black bg-white min-h-screen font-sans relative flex flex-col print:p-4 print:text-xs">
       {/* Header */}
@@ -68,7 +74,7 @@ export const RecipeTechnicalSheetPrint = forwardRef<HTMLDivElement, Props>(({
         <div>
           <p className="text-[9px] font-bold uppercase tracking-wider text-gray-500">Rendimiento Base</p>
           <p className="text-sm font-extrabold text-gray-900 mt-0.5">
-            {Number(yieldQty).toFixed(2)} <span className="text-[10px] font-medium text-gray-600 uppercase">{yieldUnitName}</span>
+            {formatQuantity(yieldQty)} <span className="text-[10px] font-medium text-gray-600 uppercase">{yieldUnitName}</span>
           </p>
         </div>
         <div className="text-right">
@@ -113,7 +119,7 @@ export const RecipeTechnicalSheetPrint = forwardRef<HTMLDivElement, Props>(({
                       {ing.notes && <span className="block text-[9px] text-gray-400 italic mt-0.5">{ing.notes}</span>}
                     </td>
                     <td className="py-1.5 px-0.5 text-right font-semibold text-gray-800">
-                      {Number(ing.qty_base).toFixed(3)}
+                      {formatQuantity(ing.qty_base)}
                     </td>
                     <td className="py-1.5 px-0.5 text-center text-[10px] font-bold text-gray-500 uppercase">
                       {unitName}
