@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useMemo } from 'react'
-import { Plus, Trash2, Save, ChevronLeft, Search, Loader2, Package } from 'lucide-react'
+import { Plus, Trash2, Save, ChevronLeft, Search, Loader2, Package, Pencil } from 'lucide-react'
 import { adminApi, InventoryItem, UOMPresentation, RecipeIngredient, RecipeStep, RecipeCreate, RecipeResponse } from '@/lib/api'
 import { useRouter } from 'next/navigation'
 import ConfirmationModal from '@/components/ConfirmationModal'
@@ -36,6 +36,41 @@ export default function RecipeEditor({ itemId, initialData, itemName }: RecipeEd
   const [focusedLineIndex, setFocusedLineIndex] = useState<number | null>(null)
   const [searchQueries, setSearchQueries] = useState<Record<number, string>>({})
 
+
+  // Cost calculation
+  const { recipeCost, itemsWithoutPrice } = useMemo(() => {
+    let total = 0
+    let withoutPriceCount = 0
+    ingredients.forEach(ing => {
+      if (!ing.item_id) return
+      const item = allItems.find(it => it.id === ing.item_id)
+      if (item) {
+        const cost = item.last_purchase_cost
+        if (cost !== null && cost !== undefined) {
+          const pres = ingredientPresentations[ing.item_id] || []
+          const selectedPres = pres.find(p => p.id === ing.presentation_id)
+          const factor = selectedPres ? selectedPres.conversion_factor : 1
+          total += cost * (ing.qty_base || 0) * factor
+        } else {
+          withoutPriceCount++
+        }
+      }
+    })
+    return { recipeCost: total, itemsWithoutPrice: withoutPriceCount }
+  }, [ingredients, allItems, ingredientPresentations])
+
+  const switchToSearchMode = (index: number) => {
+    const currentIng = ingredients[index]
+    setSearchQueries(prev => ({ ...prev, [index]: currentIng.item_name || '' }))
+    updateIngredient(index, {
+      item_id: '',
+      item_name: '',
+      presentation_id: '',
+      presentation_name: ''
+    })
+    setFocusedLineIndex(index)
+  }
+
   useEffect(() => {
     fetchCatalogs()
   }, [])
@@ -67,11 +102,16 @@ export default function RecipeEditor({ itemId, initialData, itemName }: RecipeEd
         setIngredientPresentations(newPresMap)
 
         setIngredients(prev => prev.map(ing => {
-          if (!ing.item_name) {
-            const foundItem = items.find(it => it.id === ing.item_id)
-            return { ...ing, item_name: foundItem?.name }
+          let qty = ing.qty_base
+          if (ing.presentation_id) {
+            const pres = newPresMap[ing.item_id] || []
+            const selectedPres = pres.find(p => p.id === ing.presentation_id)
+            if (selectedPres && selectedPres.conversion_factor > 0) {
+              qty = qty / selectedPres.conversion_factor
+            }
           }
-          return ing
+          const foundItem = items.find(it => it.id === ing.item_id)
+          return { ...ing, qty_base: qty, item_name: foundItem?.name || ing.item_name }
         }))
       }
     } catch (error) {
@@ -300,93 +340,175 @@ export default function RecipeEditor({ itemId, initialData, itemName }: RecipeEd
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {ingredients.map((ing, idx) => (
-                    <div key={idx} className="grid grid-cols-1 md:grid-cols-12 gap-3 p-4 bg-surface-raised rounded-2xl border border-border relative group">
-                      {/* Búsqueda de Artículo */}
-                      <div className="md:col-span-6 relative">
-                        <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1 tracking-wider">Artículo</label>
-                        <div className="relative">
-                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary" />
-                          <input 
-                            type="text"
-                            value={(searchQueries[idx] ?? ing.item_name) || ''}
-                            onFocus={() => setFocusedLineIndex(idx)}
-                            onChange={e => {
-                                setSearchQueries(prev => ({ ...prev, [idx]: e.target.value }))
-                                setFocusedLineIndex(idx)
-                                if (!e.target.value) updateIngredient(idx, { item_id: '', item_name: '' })
-                            }}
-                            placeholder="Buscar artículo..."
-                            className="w-full bg-surface border border-border rounded-xl pl-10 pr-4 h-11 text-sm text-text-primary outline-none focus:border-primary"
-                          />
+                  {ingredients.map((ing, idx) => {
+                    const isSelected = !!ing.item_id;
+                    const item = isSelected ? allItems.find(it => it.id === ing.item_id) : null;
+                    const itemCost = item?.last_purchase_cost;
+                    const hasCost = itemCost !== null && itemCost !== undefined;
+                    
+                    const pres = ingredientPresentations[ing.item_id] || [];
+                    const selectedPres = pres.find(p => p.id === ing.presentation_id);
+                    const factor = selectedPres ? selectedPres.conversion_factor : 1;
+                    const lineSubtotal = hasCost ? (itemCost * (ing.qty_base || 0) * factor) : 0;
+
+                    return (
+                      <div 
+                        key={idx} 
+                        className={`grid grid-cols-1 md:grid-cols-12 gap-3 p-4 rounded-2xl border transition-all duration-200 relative group ${
+                          isSelected 
+                            ? 'border-border bg-surface-raised border-l-4 border-l-primary' 
+                            : 'border-dashed border-border bg-surface/50'
+                        }`}
+                      >
+                        {/* LEFT AREA: Search or Item Info */}
+                        <div className="md:col-span-4 relative flex flex-col justify-center">
+                          {!isSelected ? (
+                            <>
+                              <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1 tracking-wider">Artículo</label>
+                              <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary" />
+                                <input 
+                                  type="text"
+                                  value={(searchQueries[idx] ?? ing.item_name) || ''}
+                                  onFocus={() => setFocusedLineIndex(idx)}
+                                  onChange={e => {
+                                      setSearchQueries(prev => ({ ...prev, [idx]: e.target.value }))
+                                      setFocusedLineIndex(idx)
+                                      if (!e.target.value) updateIngredient(idx, { item_id: '', item_name: '' })
+                                  }}
+                                  placeholder="Buscar artículo..."
+                                  className="w-full bg-surface border border-border rounded-xl pl-10 pr-4 h-11 text-sm text-text-primary outline-none focus:border-primary"
+                                />
+                              </div>
+
+                              {focusedLineIndex === idx && (searchQueries[idx] || '').length > 0 && (
+                                <div className="absolute z-50 w-full mt-1 bg-surface border border-border rounded-xl shadow-xl max-h-60 overflow-y-auto">
+                                    {allItems
+                                        .filter(item => 
+                                            item.id !== itemId &&
+                                            (item.name.toLowerCase().includes((searchQueries[idx] || '').toLowerCase()) ||
+                                            item.code?.toLowerCase().includes((searchQueries[idx] || '').toLowerCase()))
+                                        )
+                                        .slice(0, 8)
+                                        .map(item => (
+                                            <button
+                                                key={item.id}
+                                                onClick={() => handleItemSelect(idx, item)}
+                                                className="w-full text-left px-4 py-3 hover:bg-surface-raised border-b border-border last:border-0 flex items-center gap-3"
+                                            >
+                                                <Package className="w-4 h-4 text-primary" />
+                                                <div>
+                                                    <p className="text-sm font-medium text-text-primary">{item.name}</p>
+                                                    <p className="text-[10px] text-text-secondary uppercase">{item.code} • {item.uom_name}</p>
+                                                </div>
+                                            </button>
+                                        ))
+                                    }
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <div className="flex flex-col justify-center min-h-[44px]">
+                              <p className="text-sm font-bold text-text-primary">{ing.item_name}</p>
+                              <div className="flex gap-2 items-center mt-0.5">
+                                {item?.code && (
+                                  <span className="text-[10px] bg-surface border border-border px-1.5 py-0.5 rounded text-text-secondary font-mono">
+                                    {item.code}
+                                  </span>
+                                )}
+                                <span className="text-[10px] text-text-secondary uppercase">
+                                  Base: {item?.uom_name || 'U.M.'}
+                                </span>
+                              </div>
+                            </div>
+                          )}
                         </div>
 
-                        {focusedLineIndex === idx && (searchQueries[idx] || '').length > 0 && (
-                          <div className="absolute z-50 w-full mt-1 bg-surface border border-border rounded-xl shadow-xl max-h-60 overflow-y-auto">
-                              {allItems
-                                  .filter(item => 
-                                      item.id !== itemId &&
-                                      (item.name.toLowerCase().includes((searchQueries[idx] || '').toLowerCase()) ||
-                                      item.code?.toLowerCase().includes((searchQueries[idx] || '').toLowerCase()))
-                                  )
-                                  .slice(0, 8)
-                                  .map(item => (
-                                      <button
-                                          key={item.id}
-                                          onClick={() => handleItemSelect(idx, item)}
-                                          className="w-full text-left px-4 py-3 hover:bg-surface-raised border-b border-border last:border-0 flex items-center gap-3"
-                                      >
-                                          <Package className="w-4 h-4 text-primary" />
-                                          <div>
-                                              <p className="text-sm font-medium text-text-primary">{item.name}</p>
-                                              <p className="text-[10px] text-text-secondary uppercase">{item.code} • {item.uom_name}</p>
-                                          </div>
-                                      </button>
-                                  ))
-                              }
+                        {/* MIDDLE AREA: Qty and Presentation (Always editable but visual representation changes when not selected) */}
+                        <div className={`md:col-span-5 flex gap-2 transition-opacity duration-200 ${!isSelected ? 'opacity-40 pointer-events-none' : ''}`}>
+                          <div className="flex-1">
+                              <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1 tracking-wider">Cantidad</label>
+                              <input 
+                                  type="number"
+                                  value={ing.qty_base || ''}
+                                  onChange={e => updateIngredient(idx, { qty_base: parseFloat(e.target.value) || 0 })}
+                                  className="w-full bg-surface border border-border rounded-xl px-3 h-11 text-sm outline-none focus:border-primary text-text-primary font-medium"
+                                  placeholder="0"
+                                  disabled={!isSelected}
+                              />
                           </div>
-                        )}
-                      </div>
-
-                      {/* Cantidad y Unidad Lado a Lado */}
-                      <div className="md:col-span-5 flex gap-2">
-                        <div className="flex-[2]">
-                            <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1 tracking-wider">Cantidad</label>
-                            <input 
-                                type="number"
-                                value={ing.qty_base || ''}
-                                onChange={e => updateIngredient(idx, { qty_base: parseFloat(e.target.value) || 0 })}
-                                className="w-full bg-surface border border-border rounded-xl px-3 h-11 text-sm outline-none focus:border-primary text-text-primary font-medium"
-                                placeholder="0"
-                            />
+                          <div className="flex-1">
+                              <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1 tracking-wider">Unidad</label>
+                              <select 
+                                  value={ing.presentation_id || ''}
+                                  onChange={e => updateIngredient(idx, { presentation_id: e.target.value })}
+                                  className="w-full bg-surface border border-border rounded-xl px-3 h-11 text-sm outline-none focus:border-primary text-text-primary appearance-none cursor-pointer"
+                                  disabled={!isSelected}
+                              >
+                                  <option value="">{allItems.find(it => it.id === ing.item_id)?.uom_name || 'Unidad Base'}</option>
+                                  {(ingredientPresentations[ing.item_id] || []).map(p => (
+                                      <option key={p.id} value={p.id}>{p.name}</option>
+                                  ))}
+                              </select>
+                          </div>
                         </div>
-                        <div className="flex-[3]">
-                            <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1 tracking-wider">Unidad</label>
-                            <select 
-                                value={ing.presentation_id || ''}
-                                onChange={e => updateIngredient(idx, { presentation_id: e.target.value })}
-                                className="w-full bg-surface border border-border rounded-xl px-3 h-11 text-sm outline-none focus:border-primary text-text-primary appearance-none cursor-pointer"
-                                disabled={!ing.item_id}
+
+                        {/* RIGHT AREA: Prices/Costs (Only shown when selected) */}
+                        <div className="md:col-span-2 flex flex-col justify-center items-end px-2 min-h-[44px]">
+                          {isSelected && (
+                            <div className="text-right">
+                              <span className="block text-[10px] font-bold text-text-secondary uppercase tracking-wider mb-0.5">Subtotal</span>
+                              <div className="flex flex-col items-end">
+                                <span className="text-sm font-bold text-primary">
+                                  {hasCost ? `$${lineSubtotal.toFixed(2)}` : '—'}
+                                </span>
+                                <span className="text-[10px] text-text-secondary mt-0.5">
+                                  {hasCost ? `$${itemCost.toFixed(2)} / ${item?.uom_name || 'U.M.'}` : 'Sin precio'}
+                                </span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* ACTIONS AREA: Change Item (Pencil) & Delete */}
+                        <div className="md:col-span-1 flex items-end justify-center gap-1 pb-0.5">
+                          {isSelected && (
+                            <button 
+                                onClick={() => switchToSearchMode(idx)}
+                                title="Cambiar artículo"
+                                className="h-11 w-11 flex items-center justify-center text-text-secondary hover:bg-surface-raised hover:text-text-primary rounded-xl transition-colors"
                             >
-                                <option value="">{allItems.find(it => it.id === ing.item_id)?.uom_name || 'Unidad Base'}</option>
-                                {(ingredientPresentations[ing.item_id] || []).map(p => (
-                                    <option key={p.id} value={p.id}>{p.name}</option>
-                                ))}
-                            </select>
+                                <Pencil className="w-4 h-4" />
+                            </button>
+                          )}
+                          <button 
+                              onClick={() => removeIngredient(idx)}
+                              title="Eliminar ingrediente"
+                              className="h-11 w-11 flex items-center justify-center text-error hover:bg-error/10 rounded-xl transition-colors"
+                          >
+                              <Trash2 className="w-5 h-5" />
+                          </button>
                         </div>
                       </div>
+                    );
+                  })}
+                </div>
+              )}
 
-                      {/* Eliminar */}
-                      <div className="md:col-span-1 flex flex-col justify-end pb-0.5">
-                        <button 
-                            onClick={() => removeIngredient(idx)}
-                            className="h-11 w-11 flex items-center justify-center text-error hover:bg-error/10 rounded-xl transition-colors mx-auto"
-                        >
-                            <Trash2 className="w-5 h-5" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+              {/* Cost Total Footer */}
+              {ingredients.some(ing => ing.item_id) && (
+                <div className="mt-4 pt-4 border-t border-border flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    {itemsWithoutPrice > 0 && (
+                      <span className="inline-flex items-center gap-1 text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/20 dark:text-amber-400 px-2.5 py-1 rounded-lg font-medium border border-amber-200 dark:border-amber-900/30">
+                        ⚠ {itemsWithoutPrice} {itemsWithoutPrice === 1 ? 'ingrediente sin precio' : 'ingredientes sin precio'}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xs text-text-secondary uppercase font-bold tracking-wider mr-2">Costo Total Receta:</span>
+                    <span className="text-xl font-black text-primary">${recipeCost.toFixed(2)}</span>
+                  </div>
                 </div>
               )}
             </div>
