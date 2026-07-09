@@ -46,13 +46,16 @@ def require_permission(permission_key: str):
     async def _check(current_user=Depends(get_current_user), db=Depends(get_db), org_id: str = Depends(get_active_org_id)):
         profile_id = current_user.id
         
+        get_user_permission_context_fn = _get_helper("get_user_permission_context", "permissions", "get_user_permission_context")
+        perm_context = await get_user_permission_context_fn(profile_id, db, org_id)
+
         # 1. Check if user is forced to clock-in before other actions
         is_attendance_action = permission_key.startswith("attendance.")
         is_admin_action = permission_key.startswith("admin.")
         
         if not is_attendance_action and not is_admin_action:
             check_restriction_fn = _get_helper("check_restriction", "permissions", "check_restriction")
-            force_check = await check_restriction_fn(profile_id, "attendance.force_clock_in", db, org_id=org_id)
+            force_check = await check_restriction_fn(profile_id, "attendance.force_clock_in", db, org_id=org_id, perm_context=perm_context)
             if force_check:
                 is_clocked_in_fn = _get_helper("is_clocked_in", "attendance_utils", "is_clocked_in")
                 clocked_in = await is_clocked_in_fn(profile_id, db)
@@ -64,7 +67,7 @@ def require_permission(permission_key: str):
 
         # 2. Standard permission check
         resolve_permission_fn = _get_helper("resolve_permission", "permissions", "resolve_permission")
-        has_perm = await resolve_permission_fn(profile_id, permission_key, db, org_id=org_id)
+        has_perm = await resolve_permission_fn(profile_id, permission_key, db, org_id=org_id, perm_context=perm_context)
         if not has_perm:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

@@ -16,11 +16,17 @@ async def get_super_admin(current_user=Depends(get_current_user), db=Depends(get
         )
     return current_user
 
-async def resolve_permission(profile_id: str, permission_key: str, db, org_id: str = None) -> bool:
+async def get_user_permission_context(profile_id: str, db, org_id: str = None) -> dict:
+    """
+    Fetches user's permission context in minimal queries.
+    Returns: { "is_superadmin": bool, "role_id": str|None, "is_admin": bool }
+    """
     # 0. Check global super admin
     profile_res = db.table('profiles').select('is_superadmin').eq('id', profile_id).execute()
-    if profile_res.data and profile_res.data[0].get('is_superadmin'):
-        return True
+    is_superadmin = profile_res.data[0].get('is_superadmin', False) if profile_res.data else False
+
+    if is_superadmin:
+        return {"is_superadmin": True, "role_id": None, "is_admin": True}
 
     # 1. Fetch user's organization-specific role
     role_id = None
@@ -30,18 +36,33 @@ async def resolve_permission(profile_id: str, permission_key: str, db, org_id: s
         po_res = db.table('profile_organizations').select('role_id, custom_roles(is_admin)').eq('profile_id', profile_id).eq('organization_id', org_id).execute()
         if po_res.data:
             role_id = po_res.data[0].get('role_id')
-            is_admin = po_res.data[0].get('custom_roles', {}).get('is_admin') is True
+            custom_roles = po_res.data[0].get('custom_roles')
+            if custom_roles:
+                is_admin = custom_roles.get('is_admin') is True
     
     # Fallback to legacy profile_roles if no org_id or no record in profile_organizations
     if not role_id:
         role_res = db.table('profile_roles').select('role_id, custom_roles(is_admin)').eq('profile_id', profile_id).execute()
         if role_res.data:
             role_id = role_res.data[0].get('role_id')
-            is_admin = role_res.data[0].get('custom_roles', {}).get('is_admin') is True
+            custom_roles = role_res.data[0].get('custom_roles')
+            if custom_roles:
+                is_admin = custom_roles.get('is_admin') is True
 
-    # Check admin bypass
-    if is_admin:
+    return {
+        "is_superadmin": False,
+        "role_id": role_id,
+        "is_admin": is_admin
+    }
+
+async def resolve_permission(profile_id: str, permission_key: str, db, org_id: str = None, perm_context: dict = None) -> bool:
+    if perm_context is None:
+        perm_context = await get_user_permission_context(profile_id, db, org_id)
+
+    if perm_context["is_superadmin"] or perm_context["is_admin"]:
         return True
+
+    role_id = perm_context["role_id"]
 
     # Fetch permission id
     perm_res = db.table('permissions').select('id').eq('key', permission_key).execute()
@@ -63,21 +84,12 @@ async def resolve_permission(profile_id: str, permission_key: str, db, org_id: s
     return False
 
 
-async def check_restriction(profile_id: str, permission_key: str, db, org_id: str = None) -> bool:
+async def check_restriction(profile_id: str, permission_key: str, db, org_id: str = None, perm_context: dict = None) -> bool:
     """ Checks for a permission without admin bypass. Useful for toggleable restrictions. """
-    # Fetch user's organization-specific role
-    role_id = None
+    if perm_context is None:
+        perm_context = await get_user_permission_context(profile_id, db, org_id)
 
-    if org_id:
-        po_res = db.table('profile_organizations').select('role_id').eq('profile_id', profile_id).eq('organization_id', org_id).execute()
-        if po_res.data:
-            role_id = po_res.data[0].get('role_id')
-    
-    # Fallback to legacy profile_roles
-    if not role_id:
-        role_res = db.table('profile_roles').select('role_id').eq('profile_id', profile_id).execute()
-        if role_res.data:
-            role_id = role_res.data[0].get('role_id')
+    role_id = perm_context["role_id"]
 
     # Fetch permission id
     perm_res = db.table('permissions').select('id').eq('key', permission_key).execute()

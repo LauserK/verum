@@ -76,34 +76,17 @@ async def get_profile(x_org_id: Optional[str] = Header(None), user=Depends(get_c
         user_role = profile.get("role", "staff")
         is_superadmin = profile.get("is_superadmin", False)
         
-        # If organization header is present, try to get the specific role for that org
-        if x_org_id:
-            po_res = db.table("profile_organizations") \
-                .select("role_id, custom_roles(name, is_admin)") \
-                .eq("profile_id", user.id) \
-                .eq("organization_id", x_org_id) \
-                .execute()
-            
-            if po_res.data:
-                item = po_res.data[0]
-                if item.get("custom_roles"):
-                    user_role = item["custom_roles"]["name"]
-                    # If the custom role is an admin role, ensure user_role is 'admin' for frontend consistency
-                    if item["custom_roles"].get("is_admin"):
-                        user_role = "admin"
-                else:
-                    # No custom role, default to staff for this org UNLESS they are global admin
-                    if user_role != "admin":
-                        user_role = "staff"
-
-        # 1. Fetch user's organizations
-        orgs_res = db.table("profile_organizations") \
-            .select("organization_id, organizations!profile_organizations_organization_id_fkey(name, is_active)") \
-            .eq("profile_id", user.id).execute()
+        # Fetch all user's organizations with their roles and organization details in ONE query
+        po_res = db.table("profile_organizations") \
+            .select("organization_id, role_id, custom_roles(name, is_admin), organizations!profile_organizations_organization_id_fkey(name, is_active)") \
+            .eq("profile_id", user.id) \
+            .execute()
             
         user_orgs = []
-        if orgs_res.data:
-            for po in orgs_res.data:
+        role_for_selected_org = None
+        
+        if po_res.data:
+            for po in po_res.data:
                 o_data = po.get("organizations")
                 if o_data:
                     user_orgs.append({
@@ -111,6 +94,25 @@ async def get_profile(x_org_id: Optional[str] = Header(None), user=Depends(get_c
                         "name": o_data.get("name", "Unknown"),
                         "is_active": o_data.get("is_active", True)
                     })
+                
+                # If this matches the requested x_org_id, extract the role info
+                if x_org_id and po["organization_id"] == x_org_id:
+                    role_for_selected_org = po
+        
+        # If organization header is present, determine the role
+        if x_org_id:
+            if role_for_selected_org:
+                custom_role = role_for_selected_org.get("custom_roles")
+                if custom_role:
+                    user_role = custom_role.get("name")
+                    if custom_role.get("is_admin"):
+                        user_role = "admin"
+                else:
+                    if user_role != "admin":
+                        user_role = "staff"
+            else:
+                if user_role != "admin":
+                    user_role = "staff"
 
         # 2. Fetch venues based on role
         # We'll build a map of org_id -> List[VenueInfo]

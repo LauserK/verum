@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import { logout } from '@/app/login/actions'
-import { getProfile, getChecklists, getLibraryTemplates, createSubmission, type Profile, type ChecklistItem, type LibraryTemplate } from '@/lib/api'
+import { getChecklists, getLibraryTemplates, createSubmission, type Profile, type ChecklistItem, type LibraryTemplate } from '@/lib/api'
+import { useProfile } from '@/hooks/useProfile'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import ChecklistCard from '@/components/ChecklistCard'
 import BottomNav from '@/components/BottomNav'
 import { VenueSelector } from '@/components/VenueSelector'
@@ -176,21 +178,23 @@ export default function DashboardPage() {
     const { theme, toggleTheme } = useTheme()
     const router = useRouter()
     const { selectedVenueId, isLoading: isVenueLoading, isMultiOrg, activeOrgName } = useVenue()
-    const [profile, setProfile] = useState<Profile | null>(null)
-    const [checklists, setChecklists] = useState<ChecklistItem[]>([])
-    const [loading, setLoading] = useState(true)
-    const [error, setError] = useState<string | null>(null)
+    const { data: profile } = useProfile()
+    const queryClient = useQueryClient()
+
+    const { data: checklists = [], isLoading: isChecklistsLoading, error: checklistsError } = useQuery<ChecklistItem[]>({
+        queryKey: ['checklists', selectedVenueId],
+        queryFn: () => getChecklists(selectedVenueId!),
+        enabled: !!selectedVenueId && !isVenueLoading,
+        staleTime: 10_000,
+    })
+
     const [mounted, setMounted] = useState(false)
     const [pendingChecklist, setPendingChecklist] = useState<ChecklistItem | null>(null)
     const [showLibrary, setShowLibrary] = useState(false)
     
-    const refreshChecklists = async () => {
-        if (!selectedVenueId) return
-        try {
-            const checklistData = await getChecklists(selectedVenueId)
-            setChecklists(checklistData)
-        } catch (err) {
-            console.error(err)
+    const refreshChecklists = () => {
+        if (selectedVenueId) {
+            queryClient.invalidateQueries({ queryKey: ['checklists', selectedVenueId] })
         }
     }
 
@@ -198,50 +202,21 @@ export default function DashboardPage() {
     const shiftLabel = profile?.shift_name || fallbackShiftInfo.label
     const ShiftIcon = fallbackShiftInfo.icon
 
+    const loading = isVenueLoading || isChecklistsLoading
+    
+    let error: string | null = null
+    if (checklistsError) {
+        const errorMessage = (checklistsError as Error).message || ''
+        if (errorMessage.includes('no_shift_assigned')) {
+            error = 'no_shift_assigned'
+        } else {
+            error = errorMessage || 'Error loading checklists'
+        }
+    }
+
     useEffect(() => {
         setMounted(true)
     }, [])
-
-    useEffect(() => {
-        if (isVenueLoading) return;
-
-        async function loadData() {
-            try {
-                setLoading(true)
-                const profileData = await getProfile()
-                setProfile(profileData)
-
-                // STRIKT: Only use selectedVenueId which is already filtered by active organization in VenueContext
-                if (selectedVenueId) {
-                    try {
-                        const checklistData = await getChecklists(selectedVenueId)
-                        setChecklists(checklistData)
-                    } catch (err: unknown) {
-                        const errorMessage = (err as Error).message || ''
-                        if (errorMessage.includes('no_shift_assigned')) {
-                            setError('no_shift_assigned')
-                        } else {
-                            setError(errorMessage || 'Error loading checklists')
-                            setChecklists([])
-                        }
-                    }
-                } else {
-                    // No venue selected or available for this organization
-                    setChecklists([])
-                }
-            } catch (err: unknown) {
-                const errorMessage = (err as Error).message || ''
-                if (errorMessage.includes('no_shift_assigned')) {
-                    setError('no_shift_assigned')
-                } else {
-                    setError(errorMessage || 'Failed to load data')
-                }
-            } finally {
-                setLoading(false)
-            }
-        }
-        loadData()
-    }, [selectedVenueId, isVenueLoading])
 
     const handleChecklistClick = (checklist: ChecklistItem) => {
         if (checklist.status === 'pending') {

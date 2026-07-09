@@ -26,7 +26,7 @@ from datetime import datetime, timezone, timedelta
 from database import supabase, get_db
 from config import settings
 from auth_deps import security, get_current_user
-from permissions import get_super_admin, resolve_permission, check_restriction
+from permissions import get_super_admin, resolve_permission, check_restriction, get_user_permission_context
 from attendance_utils import is_clocked_in
 
 # Re-export helpers so existing test patches (e.g. mock.patch("main.resolve_permission"))

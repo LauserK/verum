@@ -5,6 +5,7 @@ import { I18nProvider } from "@/components/I18nProvider";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import AttendanceGuard from "@/components/AttendanceGuard";
 import { VenueProvider } from "@/components/VenueContext";
+import { QueryProvider } from "@/components/QueryProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -33,11 +34,13 @@ export default function RootLayout({
       >
         <ThemeProvider>
           <I18nProvider>
-            <VenueProvider>
-              <AttendanceGuard>
-                {children}
-              </AttendanceGuard>
-            </VenueProvider>
+            <QueryProvider>
+              <VenueProvider>
+                <AttendanceGuard>
+                  {children}
+                </AttendanceGuard>
+              </VenueProvider>
+            </QueryProvider>
           </I18nProvider>
         </ThemeProvider>
       </body>
