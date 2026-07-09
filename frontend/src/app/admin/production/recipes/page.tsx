@@ -104,6 +104,7 @@ export default function RecipesPage() {
                             <tr className="bg-surface-raised border-b border-border">
                                 <th className="p-4 text-[10px] font-black text-text-secondary uppercase tracking-widest">Producto</th>
                                 <th className="p-4 text-[10px] font-black text-text-secondary uppercase tracking-widest text-center">Tipo</th>
+                                <th className="p-4 text-[10px] font-black text-text-secondary uppercase tracking-widest text-center">U.M.</th>
                                 <th className="p-4 text-[10px] font-black text-text-secondary uppercase tracking-widest text-center">Rendimiento Base</th>
                                 <th className="p-4 text-[10px] font-black text-text-secondary uppercase tracking-widest text-right">Acciones</th>
                             </tr>
@@ -127,6 +128,11 @@ export default function RecipesPage() {
                                         </span>
                                     </td>
                                     <td className="p-4 text-center">
+                                        <span className="text-sm font-semibold text-text-secondary">
+                                            {recipe.uom_name || '—'}
+                                        </span>
+                                    </td>
+                                    <td className="p-4 text-center">
                                         <span className="text-sm font-mono font-bold text-text-primary">
                                             {Number(recipe.yield_qty_base).toFixed(2)}
                                         </span>
@@ -144,7 +150,7 @@ export default function RecipesPage() {
                             ))}
                             {filteredRecipes.length === 0 && (
                                 <tr>
-                                    <td colSpan={4} className="p-20 text-center">
+                                    <td colSpan={5} className="p-20 text-center">
                                         <div className="flex flex-col items-center gap-3">
                                             <div className="w-16 h-16 rounded-full bg-surface-raised flex items-center justify-center">
                                                 <BookPlus className="w-8 h-8 text-text-disabled" />

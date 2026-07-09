@@ -913,6 +913,7 @@ export interface RecipeBriefResponse {
     item_name: string
     item_code: string | null
     item_type: string
+    uom_name?: string | null
     yield_qty_base: number
     created_at: string
 }

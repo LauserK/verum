@@ -136,17 +136,25 @@ def test_get_recipe_by_item_id(client, mock_supabase, authenticated_user_mock):
     with patch("main.resolve_permission", return_value=True), \
          patch("main.check_restriction", return_value=False):
         
-        mock_table = MagicMock()
-        mock_supabase.table.return_value = mock_table
-        
-        # Setup the mock for the GET sequence
-        mock_table.select.return_value.eq.return_value.execute.side_effect = [
-            MagicMock(data=mock_recipe_data), # recipes
-        ]
-        mock_table.select.return_value.eq.return_value.order.return_value.execute.side_effect = [
-            MagicMock(data=mock_ingredients_data), # ingredients
-            MagicMock(data=mock_steps_data)       # steps
-        ]
+        mock_recipes_table = MagicMock()
+        mock_recipes_table.select.return_value.eq.return_value.execute.return_value = MagicMock(data=mock_recipe_data)
+
+        mock_ingredients_table = MagicMock()
+        mock_ingredients_table.select.return_value.eq.return_value.order.return_value.execute.return_value = MagicMock(data=mock_ingredients_data)
+
+        mock_steps_table = MagicMock()
+        mock_steps_table.select.return_value.eq.return_value.order.return_value.execute.return_value = MagicMock(data=mock_steps_data)
+
+        def get_mock_table(table_name):
+            if table_name == "recipes":
+                return mock_recipes_table
+            elif table_name == "recipe_ingredients":
+                return mock_ingredients_table
+            elif table_name == "recipe_steps":
+                return mock_steps_table
+            return MagicMock()
+
+        mock_supabase.table.side_effect = get_mock_table
 
         response = client.get(f"/production/recipes/{item_id}")
 

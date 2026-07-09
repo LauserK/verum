@@ -44,6 +44,7 @@ class RecipeBriefResponse(BaseModel):
     item_name: str
     item_code: Optional[str] = None
     item_type: str
+    uom_name: Optional[str] = None
     yield_qty_base: Decimal
     created_at: datetime
 

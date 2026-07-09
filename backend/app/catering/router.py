@@ -42,7 +42,7 @@ CARACAS_TZ = pytz.timezone("America/Caracas")
 @router.get("/production/recipes", response_model=List[RecipeBriefResponse])
 async def list_recipes(org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("production.view"))):
     res = db.table("recipes") \
-        .select("*, items(name, code, type)") \
+        .select("*, items(name, code, type, uom_base(name))") \
         .eq("org_id", org_id) \
         .eq("is_active", True) \
         .execute()
@@ -55,6 +55,7 @@ async def list_recipes(org_id: str = Depends(get_active_org_id), db=Depends(get_
             "item_name": r["items"]["name"],
             "item_code": r["items"]["code"],
             "item_type": r["items"]["type"],
+            "uom_name": r["items"]["uom_base"]["name"] if r.get("items") and r["items"].get("uom_base") else None,
             "yield_qty_base": r["yield_qty_base"],
             "created_at": r["created_at"]
         })
