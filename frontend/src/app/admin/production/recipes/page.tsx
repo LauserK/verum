@@ -1,16 +1,59 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useTranslations } from '@/components/I18nProvider'
 import { adminApi, RecipeBriefResponse, InventoryItem } from '@/lib/api'
-import { BookOpen, Search, Loader2, Plus, ArrowRight, BookPlus, X } from 'lucide-react'
+import { BookOpen, Search, Loader2, Plus, ArrowRight, BookPlus, X, Printer } from 'lucide-react'
 import Link from 'next/link'
+import { useReactToPrint } from 'react-to-print'
+import { RecipeBundlePrint } from '@/components/production/RecipeBundlePrint'
 
 export default function RecipesPage() {
     const { t } = useTranslations('production.recipes')
     const [recipes, setRecipes] = useState<RecipeBriefResponse[]>([])
     const [loading, setLoading] = useState(true)
     const [searchTerm, setSearchTerm] = useState('')
+
+    // Bundle print states
+    const [exporting, setExporting] = useState(false)
+    const [bundleRecipes, setBundleRecipes] = useState<any[]>([])
+    const [categories, setCategories] = useState<any[]>([])
+    const bundlePrintRef = useRef<HTMLDivElement>(null)
+    const handleBundlePrint = useReactToPrint({
+        contentRef: bundlePrintRef,
+        documentTitle: 'Libro-Recetas-VERUM'
+    })
+
+    async function handleExportBundle() {
+        setExporting(true)
+        try {
+            let cats = categories
+            if (cats.length === 0) {
+                try {
+                    cats = await adminApi.getItemCategories()
+                    setCategories(cats)
+                } catch (err) {
+                    console.error('Error fetching categories:', err)
+                }
+            }
+
+            // Fetch detailed recipes in parallel
+            const fullRecipes = await Promise.all(
+                recipes.map(r => adminApi.getRecipe(r.item_id))
+            )
+            
+            setBundleRecipes(fullRecipes)
+            
+            // Allow state to propagate and DOM to render, then print
+            setTimeout(() => {
+                handleBundlePrint()
+                setExporting(false)
+            }, 600)
+        } catch (error) {
+            console.error('Error exporting recipe bundle:', error)
+            setExporting(false)
+        }
+    }
     
     // Create flow state
     const [showCreateModal, setShowCreateModal] = useState(false)
@@ -77,13 +120,29 @@ export default function RecipesPage() {
                         Gestión de ingredientes y pasos de producción por producto
                     </p>
                 </div>
-                <button 
-                    onClick={openCreateModal}
-                    className="flex items-center gap-2 bg-primary text-text-inverse px-5 h-11 rounded-xl text-sm font-bold hover:bg-primary-hover transition-all shadow-lg shadow-primary/20 active:scale-95"
-                >
-                    <Plus className="w-4 h-4" />
-                    Nueva Receta
-                </button>
+                <div className="flex items-center gap-3 w-full sm:w-auto">
+                    {recipes.length > 0 && (
+                        <button 
+                            onClick={handleExportBundle}
+                            disabled={exporting}
+                            className="flex items-center justify-center gap-2 bg-surface border border-border text-text-primary px-5 h-11 rounded-xl text-sm font-bold hover:bg-surface-raised transition-all disabled:opacity-50 w-full sm:w-auto active:scale-95"
+                        >
+                            {exporting ? (
+                                <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                            ) : (
+                                <Printer className="w-4 h-4" />
+                            )}
+                            Descargar Libro (PDF)
+                        </button>
+                    )}
+                    <button 
+                        onClick={openCreateModal}
+                        className="flex items-center justify-center gap-2 bg-primary text-text-inverse px-5 h-11 rounded-xl text-sm font-bold hover:bg-primary-hover transition-all shadow-lg shadow-primary/20 w-full sm:w-auto active:scale-95"
+                    >
+                        <Plus className="w-4 h-4" />
+                        Nueva Receta
+                    </button>
+                </div>
             </div>
 
             <div className="relative group max-w-md">
@@ -225,6 +284,16 @@ export default function RecipesPage() {
                     </div>
                 </div>
             )}
+            {/* Hidden Print Container for Recipe Bundle */}
+            <div className="hidden">
+                {bundleRecipes.length > 0 && (
+                    <RecipeBundlePrint
+                        ref={bundlePrintRef}
+                        recipes={bundleRecipes}
+                        categories={categories}
+                    />
+                )}
+            </div>
         </div>
     )
 }

@@ -1,10 +1,12 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
-import { Plus, Trash2, Save, ChevronLeft, Search, Loader2, Package, Pencil } from 'lucide-react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
+import { Plus, Trash2, Save, ChevronLeft, Search, Loader2, Package, Pencil, Printer } from 'lucide-react'
 import { adminApi, InventoryItem, UOMPresentation, RecipeIngredient, RecipeStep, RecipeCreate, RecipeResponse } from '@/lib/api'
 import { useRouter } from 'next/navigation'
 import ConfirmationModal from '@/components/ConfirmationModal'
+import { useReactToPrint } from 'react-to-print'
+import { RecipeTechnicalSheetPrint } from './RecipeTechnicalSheetPrint'
 
 interface RecipeEditorProps {
   itemId: string
@@ -17,6 +19,13 @@ export default function RecipeEditor({ itemId, initialData, itemName }: RecipeEd
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [errorModal, setErrorModal] = useState({ isOpen: false, message: '' })
+  
+  // Print references
+  const printRef = useRef<HTMLDivElement>(null)
+  const handlePrint = useReactToPrint({
+    contentRef: printRef,
+    documentTitle: `Ficha-${itemName || 'Receta'}`
+  })
   
   // Yield state
   const [yieldQty, setYieldQty] = useState(initialData?.yield_qty_base || 1)
@@ -58,6 +67,15 @@ export default function RecipeEditor({ itemId, initialData, itemName }: RecipeEd
     })
     return { recipeCost: total, itemsWithoutPrice: withoutPriceCount }
   }, [ingredients, allItems, ingredientPresentations])
+
+  const yieldUnitName = useMemo(() => {
+    if (yieldPresentationId) {
+      const pres = mainItemPresentations.find(p => p.id === yieldPresentationId)
+      if (pres) return pres.name
+    }
+    const item = allItems.find(i => i.id === itemId)
+    return item?.uom_name || 'un'
+  }, [yieldPresentationId, mainItemPresentations, allItems, itemId])
 
   const switchToSearchMode = (index: number) => {
     const currentIng = ingredients[index]
@@ -262,14 +280,25 @@ export default function RecipeEditor({ itemId, initialData, itemName }: RecipeEd
             <p className="text-sm text-text-secondary">Configure los ingredientes y pasos de producción</p>
           </div>
         </div>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="px-8 h-11 bg-primary text-text-inverse rounded-xl font-bold text-sm hover:bg-primary-hover transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-primary/20"
-        >
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-          Guardar Receta
-        </button>
+        <div className="flex items-center gap-3">
+          {initialData && (
+            <button
+              onClick={() => handlePrint()}
+              className="px-5 h-11 bg-surface border border-border text-text-primary rounded-xl font-bold text-sm hover:bg-surface-raised transition-all flex items-center justify-center gap-2"
+            >
+              <Printer className="w-4 h-4" />
+              Exportar PDF
+            </button>
+          )}
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="px-8 h-11 bg-primary text-text-inverse rounded-xl font-bold text-sm hover:bg-primary-hover transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-primary/20"
+          >
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            Guardar Receta
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -569,6 +598,24 @@ export default function RecipeEditor({ itemId, initialData, itemName }: RecipeEd
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Hidden Print Component */}
+      <div className="hidden">
+        {initialData && (
+          <RecipeTechnicalSheetPrint
+            ref={printRef}
+            itemId={itemId}
+            itemName={itemName}
+            itemCode={allItems.find(i => i.id === itemId)?.code || null}
+            yieldQty={yieldQty}
+            yieldUnitName={yieldUnitName}
+            ingredients={ingredients}
+            steps={steps}
+            allItems={allItems}
+            ingredientPresentations={ingredientPresentations}
+          />
+        )}
       </div>
     </div>
   )
