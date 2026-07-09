@@ -63,9 +63,8 @@ export const RecipeTechnicalSheetPrint = forwardRef<HTMLDivElement, Props>(({
         </div>
         <div className="text-right flex flex-col items-end gap-1">
           <div className="border border-gray-200 p-1 bg-white rounded-lg">
-            {recipeUrl && <QRCodeSVG value={recipeUrl} size={55} />}
+            {recipeUrl && <QRCodeSVG value={recipeUrl} size={85} />}
           </div>
-          <p className="text-[10px] font-semibold text-gray-700 mt-1">Fecha: {currentDateStr}</p>
         </div>
       </div>
 
@@ -163,6 +162,7 @@ export const RecipeTechnicalSheetPrint = forwardRef<HTMLDivElement, Props>(({
       {/* Print Footer */}
       <div className="mt-auto border-t border-gray-200 pt-3 flex justify-between items-center text-[9px] text-gray-400">
         <p>VERUM ERP - Módulo de Producción</p>
+        <p className="font-bold">Fecha: {currentDateStr}</p>
         <p className="font-medium">Ficha Técnica Oficial para Uso Interno</p>
       </div>
     </div>
