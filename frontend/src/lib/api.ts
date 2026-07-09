@@ -1190,6 +1190,9 @@ export interface InventoryItem {
     yield_alert_enabled?: boolean
     yield_alert_threshold_pct?: number | null
     min_stock?: number
+    margin_multiplier?: number
+    yield_factor?: number
+    production_cost?: number | null
 }
 
 export interface LowStockAlertItem {

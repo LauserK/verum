@@ -45,7 +45,7 @@ export default function RecipeEditor({ itemId, initialData, itemName }: RecipeEd
       if (!ing.item_id) return
       const item = allItems.find(it => it.id === ing.item_id)
       if (item) {
-        const cost = item.last_purchase_cost
+        const cost = item.production_cost !== null && item.production_cost !== undefined ? item.production_cost : item.last_purchase_cost
         if (cost !== null && cost !== undefined) {
           const pres = ingredientPresentations[ing.item_id] || []
           const selectedPres = pres.find(p => p.id === ing.presentation_id)
@@ -343,7 +343,7 @@ export default function RecipeEditor({ itemId, initialData, itemName }: RecipeEd
                   {ingredients.map((ing, idx) => {
                     const isSelected = !!ing.item_id;
                     const item = isSelected ? allItems.find(it => it.id === ing.item_id) : null;
-                    const itemCost = item?.last_purchase_cost;
+                    const itemCost = item?.production_cost !== null && item?.production_cost !== undefined ? item.production_cost : item?.last_purchase_cost;
                     const hasCost = itemCost !== null && itemCost !== undefined;
                     
                     const pres = ingredientPresentations[ing.item_id] || [];

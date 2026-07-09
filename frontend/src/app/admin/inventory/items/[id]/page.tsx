@@ -262,6 +262,67 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
                           </div>
                       )}
                   </div>
+
+                  <h3 className="text-lg font-bold text-text-primary mt-10 mb-6 flex items-center gap-2">
+                      <DollarSign className="w-5 h-5 text-primary" />
+                      Cálculo de Costos y Margen
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 bg-surface-raised p-6 rounded-2xl border border-border">
+                      <div>
+                          <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Costo de Compra Base ($)</label>
+                          <div className="relative">
+                              <input 
+                                type="number" 
+                                step="0.000001"
+                                min="0.0"
+                                defaultValue={item.last_purchase_cost || 0}
+                                onBlur={(e) => handleUpdateItem({ last_purchase_cost: parseFloat(e.target.value) || 0 })}
+                                className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm outline-none focus:border-primary font-bold text-text-primary"
+                              />
+                          </div>
+                          <p className="text-[10px] text-text-secondary mt-2 px-1">Costo de compra original por unidad de medida base (sin inflación ni mermas).</p>
+                      </div>
+                      
+                      <div>
+                          <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Costo de Producción ($ - Calculado)</label>
+                          <div className="relative">
+                              <div className="w-full bg-primary/5 border border-primary/20 rounded-xl px-4 h-11 text-sm flex items-center font-black text-primary">
+                                  ${item.production_cost !== null && item.production_cost !== undefined ? Number(item.production_cost).toFixed(4) : '0.0000'}
+                              </div>
+                          </div>
+                          <p className="text-[10px] text-primary mt-2 px-1 font-medium">Costo real utilizado en el módulo de producción y recetas.</p>
+                      </div>
+
+                      <div>
+                          <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Margen de Inflación</label>
+                          <div className="relative">
+                              <input 
+                                type="number" 
+                                step="0.01"
+                                min="1.0"
+                                defaultValue={item.margin_multiplier || 1.0}
+                                onBlur={(e) => handleUpdateItem({ margin_multiplier: parseFloat(e.target.value) || 1.0 })}
+                                className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm outline-none focus:border-primary font-bold text-primary"
+                              />
+                          </div>
+                          <p className="text-[10px] text-text-secondary mt-2 px-1">Factor multiplicador sobre el costo de compra (ej: 1.10 = +10%).</p>
+                      </div>
+                      <div>
+                          <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Factor de Rendimiento</label>
+                          <div className="relative">
+                              <input 
+                                type="number" 
+                                step="0.01"
+                                min="0.01"
+                                max="1.0"
+                                defaultValue={item.yield_factor || 1.0}
+                                onBlur={(e) => handleUpdateItem({ yield_factor: parseFloat(e.target.value) || 1.0 })}
+                                className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm outline-none focus:border-primary font-bold text-primary"
+                              />
+                          </div>
+                          <p className="text-[10px] text-text-secondary mt-2 px-1">Rendimiento esperado del producto (ej: 0.50 = 50% utilizable).</p>
+                      </div>
+                  </div>
               </div>
           )}
 

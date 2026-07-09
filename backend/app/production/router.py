@@ -86,7 +86,10 @@ async def create_item(item: ItemCreate, org_id: str = Depends(get_active_org_id)
         "yield_alert_threshold_pct": item.yield_alert_threshold_pct,
         "shelf_life_days": item.shelf_life_days,
         "last_purchase_cost": item.last_purchase_cost,
-        "last_purchase_cost_updated_at": datetime.now(CARACAS_TZ).isoformat() if item.last_purchase_cost is not None else None
+        "last_purchase_cost_updated_at": datetime.now(CARACAS_TZ).isoformat() if item.last_purchase_cost is not None else None,
+        "margin_multiplier": item.margin_multiplier,
+        "yield_factor": item.yield_factor,
+        "production_cost": (item.last_purchase_cost * item.margin_multiplier) / (item.yield_factor if item.yield_factor > 0 else 1.0) if item.last_purchase_cost is not None else None
     }
     
     res = db.table("items").insert(data).execute()
@@ -174,6 +177,17 @@ async def update_item(
     db=Depends(get_db), 
     _=Depends(require_permission("inventory.manage_items"))
 ):
+    # 1. Fetch current item state to calculate cost updates if margin/yield changes
+    old_res = db.table("items").select("last_purchase_cost, margin_multiplier, yield_factor, production_cost").eq("id", str(item_id)).execute()
+    if not old_res.data:
+        raise HTTPException(status_code=404, detail="Item not found")
+    old_item = old_res.data[0]
+    
+    old_cost = old_item.get("last_purchase_cost")
+    old_margin = old_item.get("margin_multiplier") if old_item.get("margin_multiplier") is not None else 1.0
+    old_yield = old_item.get("yield_factor") if old_item.get("yield_factor") is not None else 1.0
+    old_prod_cost = old_item.get("production_cost")
+
     # Convert model to dict and handle UUID serialization
     full_data = item.dict(exclude_none=True)
     
@@ -181,14 +195,37 @@ async def update_item(
     if "presentations" in full_data:
         del full_data["presentations"]
         
+    cost_changed = "last_purchase_cost" in full_data
+    margin_changed = "margin_multiplier" in full_data
+    yield_changed = "yield_factor" in full_data
+
+    new_cost = full_data.get("last_purchase_cost") if cost_changed else old_cost
+    new_margin = full_data.get("margin_multiplier") if margin_changed else old_margin
+    new_yield = full_data.get("yield_factor") if yield_changed else old_yield
+
+    prod_cost_changed = False
+    if new_cost is not None:
+        divisor = float(new_yield) if float(new_yield) > 0 else 1.0
+        new_prod_cost = (float(new_cost) * float(new_margin)) / divisor
+        full_data["production_cost"] = new_prod_cost
+        
+        if old_prod_cost is None or abs(float(old_prod_cost) - float(new_prod_cost)) > 1e-6:
+            prod_cost_changed = True
+    else:
+        full_data["production_cost"] = None
+
     update_data = {k: (str(v) if isinstance(v, UUID) else v) 
                    for k, v in full_data.items()}
     
+    # If cost is changing directly, we pop it because update_item_cost_and_cascade will update it
     last_purchase_cost_val = None
-    if "last_purchase_cost" in update_data:
+    if cost_changed:
         last_purchase_cost_val = update_data.pop("last_purchase_cost")
         if "last_purchase_cost_updated_at" in update_data:
             del update_data["last_purchase_cost_updated_at"]
+        # Since last_purchase_cost is popped, we also pop production_cost as update_item_cost_and_cascade sets it
+        if "production_cost" in update_data:
+            update_data.pop("production_cost")
         
     if update_data:
         res = db.table("items").update(update_data).eq("id", str(item_id)).execute()
@@ -197,9 +234,12 @@ async def update_item(
     elif last_purchase_cost_val is None:
         raise HTTPException(status_code=400, detail="No data to update")
 
-    if last_purchase_cost_val is not None:
+    if cost_changed and last_purchase_cost_val is not None:
         from app.catering.router import update_item_cost_and_cascade
         await update_item_cost_and_cascade(db, org_id, item_id, float(last_purchase_cost_val or 0))
+    elif prod_cost_changed:
+        from app.catering.router import cascade_from_production_cost
+        await cascade_from_production_cost(db, org_id, item_id)
         
     # Fetch with uom_name join
     item_res = db.table("items") \

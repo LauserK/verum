@@ -41,6 +41,9 @@ class ItemCreate(BaseModel):
     last_purchase_cost: Optional[float] = None
     min_stock: float = 0.0
     presentations: List[UOMPresentationCreate] = []
+    margin_multiplier: float = 1.0
+    yield_factor: float = 1.0
+    production_cost: Optional[float] = None
 
 class ItemResponse(BaseModel):
     id: UUID
@@ -56,6 +59,9 @@ class ItemResponse(BaseModel):
     min_stock: float = 0.0
     is_active: bool
     created_at: datetime
+    margin_multiplier: float = 1.0
+    yield_factor: float = 1.0
+    production_cost: Optional[float] = None
 
 class ItemUpdate(BaseModel):
     code: Optional[str] = None
@@ -68,6 +74,9 @@ class ItemUpdate(BaseModel):
     shelf_life_days: Optional[int] = None
     last_purchase_cost: Optional[float] = None
     min_stock: Optional[float] = None
+    margin_multiplier: Optional[float] = None
+    yield_factor: Optional[float] = None
+    production_cost: Optional[float] = None
 
 class WarehouseCreate(BaseModel):
     name: str
