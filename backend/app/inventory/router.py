@@ -290,6 +290,35 @@ async def list_asset_tickets(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/tickets")
+async def list_tickets(
+    venue_id: Optional[str] = None,
+    status: Optional[str] = None,
+    priority: Optional[str] = None,
+    db=Depends(get_db),
+    _=Depends(require_permission("inventory_assets.view")),
+    org_id: str = Depends(get_active_org_id),
+):
+    query = (
+        db.table("repair_tickets")
+        .select("*, assets!inner(id, name, venue_id, org_id), profiles!repair_tickets_opened_by_fkey(full_name)")
+        .eq("assets.org_id", org_id)
+        .order("opened_at", desc=True)
+    )
+    if venue_id:
+        query = query.eq("assets.venue_id", venue_id)
+    if status:
+        if status == "active":
+            query = query.neq("status", "resuelto")
+        else:
+            query = query.eq("status", status)
+    if priority:
+        query = query.eq("priority", priority)
+    
+    res = query.execute()
+    return res.data or []
+
+
 @router.get("/tickets/{ticket_id}")
 async def get_ticket_detail(
     ticket_id: str,

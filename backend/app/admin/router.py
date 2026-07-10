@@ -693,6 +693,12 @@ async def create_role(role: RoleCreate, db=Depends(get_db), _=Depends(require_pe
     return res.data[0]
 
 
+@router.get("/roles/{role_id}/permissions")
+async def list_role_permissions(role_id: str, db=Depends(get_db), _=Depends(require_permission("admin.manage_roles"))):
+    res = db.table("role_permissions").select("permission_id").eq("role_id", role_id).execute()
+    return [item["permission_id"] for item in res.data] if res.data else []
+
+
 @router.post("/roles/{role_id}/permissions")
 async def assign_role_permissions(role_id: str, permission_ids: List[str], db=Depends(get_db), _=Depends(require_permission("admin.manage_roles"))):
     # delete old permissions
