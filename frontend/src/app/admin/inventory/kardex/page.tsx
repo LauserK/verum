@@ -173,7 +173,7 @@ export default function KardexPage() {
     
     try {
         if (referenceType === 'purchase_receipt') {
-            const detail = await adminApi.getPurchaseReceipt(referenceId);
+            const detail = (await adminApi.getPurchaseReceipt(referenceId)) as any;
             return {
                 type: 'receipt',
                 id: detail.header.id,
@@ -193,7 +193,7 @@ export default function KardexPage() {
                 }))
             };
         } else if (referenceType === 'transfer_document' || movement.movement_type?.includes('transfer')) {
-            const detail = await adminApi.getTransferDetail(referenceId);
+            const detail = (await adminApi.getTransferDetail(referenceId)) as any;
             return {
                 type: 'transfer',
                 id: detail.header.id,
@@ -238,7 +238,7 @@ export default function KardexPage() {
                     }))
             };
         } else {
-            const detail = await adminApi.getIssueDocument(referenceId);
+            const detail = (await adminApi.getIssueDocument(referenceId)) as any;
             return {
                 type: 'issue',
                 id: detail.header.id,

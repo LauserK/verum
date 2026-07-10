@@ -2,10 +2,10 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { createClient } from '@/utils/supabase/client'
 import { Plus, Edit3, Save, X, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { useTranslations } from '@/components/I18nProvider'
+import { inventoryApi, getProfile } from '@/lib/api'
 
 interface Category {
   id: string
@@ -27,8 +27,6 @@ export default function CategoriesPage() {
   const [newName, setNewName] = useState('')
   const [newInterval, setNewInterval] = useState('30')
 
-  const supabase = createClient()
-
   const resetForm = () => {
     setNewName('')
     setNewInterval('30')
@@ -45,26 +43,17 @@ export default function CategoriesPage() {
 
   const fetchCategories = useCallback(async () => {
     setLoading(true)
-    const { data: userRes } = await supabase.auth.getUser()
-    if (!userRes.user) return
-    
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('organization_id')
-      .eq('id', userRes.user.id)
-      .single()
-      
-    if (profile?.organization_id) {
-      const { data } = await supabase
-        .from('asset_categories')
-        .select('*')
-        .eq('org_id', profile.organization_id)
-        .order('name')
-      
-      if (data) setCategories(data as Category[])
+    try {
+      const data = await inventoryApi.getAssetCategories()
+      if (data) {
+        setCategories(data as Category[])
+      }
+    } catch (err) {
+      console.error("Error fetching categories:", err)
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
-  }, [supabase])
+  }, [])
 
   useEffect(() => {
     fetchCategories()
@@ -79,33 +68,26 @@ export default function CategoriesPage() {
 
     setSaving(true)
     try {
-      const { data: userRes } = await supabase.auth.getUser()
-      const { data: profile } = await supabase.from('profiles').select('organization_id').eq('id', userRes.user?.id).single()
+      const profile = await getProfile()
       
-      const payload = {
-        org_id: profile?.organization_id,
-        name: newName,
-        review_interval_days: parseInt(newInterval) || 30
-      }
-
       if (editingCategory) {
-        const { data, error: err } = await supabase
-          .from('asset_categories')
-          .update(payload)
-          .eq('id', editingCategory.id)
-          .select()
-          .single()
-        
-        if (err) throw err
+        const payload = {
+          name: newName,
+          review_interval_days: parseInt(newInterval) || 30
+        }
+        const data = await inventoryApi.updateAssetCategory(editingCategory.id, payload)
         if (data) {
           setCategories(prev => prev.map(c => c.id === editingCategory.id ? (data as Category) : c).sort((a, b) => a.name.localeCompare(b.name)))
           setShowCreate(false)
           resetForm()
         }
       } else {
-        const { data, error: err } = await supabase.from('asset_categories').insert(payload).select().single()
-
-        if (err) throw err
+        const payload = {
+          org_id: profile.organization_id || '',
+          name: newName,
+          review_interval_days: parseInt(newInterval) || 30
+        }
+        const data = await inventoryApi.createAssetCategory(payload)
         if (data) {
           setCategories(prev => [...prev, data as Category].sort((a, b) => a.name.localeCompare(b.name)))
           setShowCreate(false)

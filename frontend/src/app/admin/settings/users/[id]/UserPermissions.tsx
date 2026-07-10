@@ -1,7 +1,7 @@
 // frontend/src/app/admin/settings/users/[id]/UserPermissions.tsx
 'use client';
 import { useState, useEffect } from 'react';
-import { createClient } from '@/utils/supabase/client';
+import { settingsApi } from '@/lib/api';
 import { useTranslations } from '@/components/I18nProvider';
 import { useVenue } from '@/components/VenueContext';
 import { Loader2, Check, AlertCircle } from 'lucide-react';
@@ -14,7 +14,6 @@ interface CustomRole {
 export function UserPermissions({ userId }: { userId: string }) {
   const { t } = useTranslations('admin');
   const { activeOrgId } = useVenue();
-  const supabase = createClient();
   
   const [roles, setRoles] = useState<CustomRole[]>([]);
   const [selectedRoleId, setSelectedRoleId] = useState<string>('');
@@ -28,42 +27,22 @@ export function UserPermissions({ userId }: { userId: string }) {
       if (!userId || !activeOrgId) return;
       setLoading(true);
       try {
-        // 1. Fetch user profile
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('full_name')
-          .eq('id', userId)
-          .single();
-        if (profile) setUserName(profile.full_name);
-
-        // 2. Fetch available roles for the active organization
-        const { data: allRoles } = await supabase
-          .from('custom_roles')
-          .select('id, name')
-          .eq('org_id', activeOrgId)
-          .order('name');
-        if (allRoles) setRoles(allRoles);
-
-        // 3. Fetch current user role in THIS organization
-        const { data: orgRole } = await supabase
-          .from('profile_organizations')
-          .select('role_id')
-          .eq('profile_id', userId)
-          .eq('organization_id', activeOrgId)
-          .single();
-        
-        if (orgRole) {
-            setSelectedRoleId(orgRole.role_id || '');
-        } else {
-            // Fallback: check legacy profile_roles if no org-specific role yet
-            const { data: legacyRole } = await supabase
-              .from('profile_roles')
-              .select('role_id')
-              .eq('profile_id', userId)
-              .single();
-            if (legacyRole) setSelectedRoleId(legacyRole.role_id);
+        // Fetch all users to find this user
+        const allUsers = await settingsApi.getUsers();
+        const user = allUsers.find(u => u.id === userId);
+        if (user) {
+          setUserName(user.full_name);
         }
 
+        // Fetch custom roles for active organization
+        const allRoles = await settingsApi.getRoles(activeOrgId);
+        setRoles(allRoles);
+
+        // Find the selected role ID from user's current role name
+        if (user) {
+          const matchingRole = allRoles.find(r => r.name === user.role);
+          setSelectedRoleId(matchingRole ? matchingRole.id : '');
+        }
       } catch (err) {
         console.error('Error fetching permissions data:', err);
       } finally {
@@ -72,7 +51,7 @@ export function UserPermissions({ userId }: { userId: string }) {
     }
 
     fetchData();
-  }, [userId, activeOrgId, supabase]);
+  }, [userId, activeOrgId]);
 
   const handleRoleChange = async (roleId: string) => {
     if (!activeOrgId) return;
@@ -82,25 +61,11 @@ export function UserPermissions({ userId }: { userId: string }) {
     setSaveStatus('idle');
 
     try {
-      // Upsert the role in the multi-tenant table
-      const { error } = await supabase
-        .from('profile_organizations')
-        .upsert({ 
-            profile_id: userId, 
-            organization_id: activeOrgId,
-            role_id: roleId || null 
-        }, { onConflict: 'profile_id,organization_id' });
+      const selectedRole = roles.find(r => r.id === roleId);
+      const roleName = selectedRole ? selectedRole.name : 'staff';
+
+      await settingsApi.updateUser(userId, { role: roleName });
       
-      if (error) throw error;
-
-      // For backward compatibility, also update legacy profile_roles if this is the only/default org
-      if (roleId) {
-          await supabase.from('profile_roles').upsert({
-              profile_id: userId,
-              role_id: roleId
-          });
-      }
-
       setSaveStatus('success');
       setTimeout(() => setSaveStatus('idle'), 3000);
     } catch (err) {

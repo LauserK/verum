@@ -4,7 +4,7 @@
 import { use } from 'react'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/utils/supabase/client'
+import { inventoryApi } from '@/lib/api'
 import {
   ArrowLeft, Loader2, AlertTriangle, Eye, FileText, ShoppingCart,
   StickyNote, CheckCircle2, Clock, DollarSign, Send, X, Plus, User
@@ -65,7 +65,6 @@ const entryLabels: Record<string, string> = {
 export default function TicketDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
-  const supabase = createClient()
 
   const [ticket, setTicket] = useState<TicketDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -90,16 +89,7 @@ export default function TicketDetailPage({ params }: { params: Promise<{ id: str
 
   const fetchTicket = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) { router.push('/login'); return }
-
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/tickets/${id}`, {
-        headers: { 'Authorization': `Bearer ${session.access_token}` },
-      })
-
-      if (!res.ok) throw new Error('Ticket no encontrado')
-
-      const data = await res.json()
+      const data = await inventoryApi.getTicket(id)
       setTicket(data as TicketDetail)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error inesperado')
@@ -121,9 +111,6 @@ export default function TicketDetailPage({ params }: { params: Promise<{ id: str
     setSubmitting(true)
     setSubmitError('')
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) throw new Error('No session')
-
       const body: Record<string, unknown> = {
         type: entryType,
         description: entryDesc,
@@ -133,19 +120,7 @@ export default function TicketDetailPage({ params }: { params: Promise<{ id: str
       if (entryNextAction) body.next_action = entryNextAction
       if (entryStatusAfter) body.status_after = entryStatusAfter
 
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/tickets/${id}/entries`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify(body),
-      })
-
-      if (!res.ok) {
-        const err = await res.json()
-        throw new Error(typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail))
-      }
+      await inventoryApi.createTicketEntry(id, body)
 
       // Reset form & reload
       setShowAddEntry(false)
@@ -166,25 +141,10 @@ export default function TicketDetailPage({ params }: { params: Promise<{ id: str
   const handleCloseTicket = async () => {
     setClosing(true)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) throw new Error('No session')
-
       const body: Record<string, unknown> = { description: closeDesc }
       if (closeCost) body.cost = parseFloat(closeCost)
 
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/tickets/${id}/close`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify(body),
-      })
-
-      if (!res.ok) {
-        const err = await res.json()
-        throw new Error(typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail))
-      }
+      await inventoryApi.closeTicket(id, body)
 
       setShowCloseForm(false)
       setLoading(true)

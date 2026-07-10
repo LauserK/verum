@@ -2,7 +2,7 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { adminApi, type VenueInfo, type Asset } from '@/lib/api'
+import { adminApi, inventoryApi, getProfile, type VenueInfo, type Asset } from '@/lib/api'
 import { Plus, QrCode, Edit3, Save, X, Loader2, Search, Filter, ChevronUp, ChevronDown } from 'lucide-react'
 import { useReactToPrint } from 'react-to-print'
 import dynamic from 'next/dynamic'
@@ -13,7 +13,6 @@ import { PrintConfigModal } from '@/components/inventory/PrintConfigModal'
 import { v4 as uuidv4 } from 'uuid'
 import Link from 'next/link'
 import { useTranslations } from '@/components/I18nProvider'
-import { createClient } from '@/utils/supabase/client'
 
 interface Category {
   id: string
@@ -72,7 +71,6 @@ export default function AssetsPage() {
   const bulkPrintRef = useRef<HTMLDivElement>(null)
 
   const printRef = useRef<HTMLDivElement>(null)
-  const supabase = createClient()
 
   const handleBulkPrintTrigger = useReactToPrint({
     contentRef: bulkPrintRef,
@@ -114,32 +112,28 @@ export default function AssetsPage() {
     
     const fetchData = async () => {
       setLoading(true)
-      
-      const { data: userRes } = await supabase.auth.getUser()
-      if (!userRes.user) return
-      
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('organization_id')
-        .eq('id', userRes.user.id)
-        .single()
-        
-      const orgId = profile?.organization_id
+      try {
+        const profile = await getProfile()
+        const orgId = profile.organization_id
 
-      const [assetsRes, catsRes, venuesRes] = await Promise.all([
-        supabase.from('assets').select('*, asset_categories(name)').neq('status', 'baja').order('created_at', { ascending: false }),
-        orgId ? supabase.from('asset_categories').select('id, name').eq('org_id', orgId).order('name') : Promise.resolve({ data: [] }),
-        orgId ? supabase.from('venues').select('id, name, org_id').eq('org_id', orgId).order('name') : Promise.resolve({ data: [] })
-      ])
-      
-      if (isMounted) {
-        if (assetsRes.data) setAssets(assetsRes.data as Asset[])
-        if (catsRes.data) setCategories(catsRes.data)
-        if (venuesRes.data) {
-          setVenues(venuesRes.data)
-          if (venuesRes.data.length > 0) setNewVenueId(venuesRes.data[0].id)
+        const [assetsData, catsData, venuesData] = await Promise.all([
+          inventoryApi.getAssets({ include_archived: false }),
+          inventoryApi.getAssetCategories(),
+          orgId ? adminApi.getVenues(orgId) : Promise.resolve([])
+        ])
+        
+        if (isMounted) {
+          setAssets(assetsData)
+          setCategories(catsData as Category[])
+          setVenues(venuesData)
+          if (venuesData.length > 0) {
+            setNewVenueId(venuesData[0].id)
+          }
+          setLoading(false)
         }
-        setLoading(false)
+      } catch (err) {
+        console.error("Error fetching assets data:", err)
+        if (isMounted) setLoading(false)
       }
     }
 
@@ -148,7 +142,7 @@ export default function AssetsPage() {
     return () => {
       isMounted = false
     }
-  }, [supabase])
+  }, [])
 
   const handlePrintTrigger = useReactToPrint({
     contentRef: printRef,
@@ -156,11 +150,14 @@ export default function AssetsPage() {
     onAfterPrint: () => setAssetToPrint(null)
   })
 
+  useEffect(() => {
+    if (assetToPrint && printRef.current) {
+      handlePrintTrigger()
+    }
+  }, [assetToPrint])
+
   const handlePrint = (asset: Asset) => {
     setAssetToPrint(asset)
-    setTimeout(() => {
-      handlePrintTrigger()
-    }, 100)
   }
 
   const handleSave = async () => {
@@ -183,37 +180,33 @@ export default function AssetsPage() {
         model: newModel || null,
       }
 
-      if (editingAsset) {
-        const { data, error: err } = await supabase
-          .from('assets')
-          .update(payload)
-          .eq('id', editingAsset.id)
-          .select('*, asset_categories(name)')
-          .single()
+      const categoryName = categories.find(c => c.id === newCategoryId)?.name || ''
+      const populatedCategory = { name: categoryName }
 
-        if (err) throw err
+      if (editingAsset) {
+        const data = await inventoryApi.updateAsset(editingAsset.id, payload)
         if (data) {
-          setAssets(prev => prev.map(a => a.id === editingAsset.id ? (data as Asset) : a))
+          const updatedAsset = {
+            ...data,
+            asset_categories: populatedCategory
+          }
+          setAssets(prev => prev.map(a => a.id === editingAsset.id ? (updatedAsset as Asset) : a))
           setShowCreate(false)
           resetForm()
         }
       } else {
         const insertPayload = {
           ...payload,
-          org_id: selectedVenue?.org_id,
-          status: 'operativo',
-          qr_code: uuidv4()
+          org_id: selectedVenue?.org_id || '',
         }
 
-        const { data, error: err } = await supabase
-          .from('assets')
-          .insert(insertPayload)
-          .select('*, asset_categories(name)')
-          .single()
-
-        if (err) throw err
+        const data = await inventoryApi.createAsset(insertPayload)
         if (data) {
-          setAssets(prev => [data as Asset, ...prev])
+          const createdAsset = {
+            ...data,
+            asset_categories: populatedCategory
+          }
+          setAssets(prev => [createdAsset as Asset, ...prev])
           setShowCreate(false)
           resetForm()
         }

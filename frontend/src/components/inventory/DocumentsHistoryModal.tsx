@@ -33,10 +33,10 @@ export default function DocumentsHistoryModal({ isOpen, onClose, onViewDetail, o
       ]);
 
       const combined = [
-        ...receipts.map(r => ({ ...r, type: 'receipt', docType: 'Ingreso' })),
-        ...issues.map(i => ({ ...i, type: 'issue', docType: 'Egreso' })),
-        ...transfers.map(t => ({ ...t, type: 'transfer', docType: 'Traslado' }))
-      ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        ...receipts.map((r: any) => ({ ...r, type: 'receipt', docType: 'Ingreso' })),
+        ...issues.map((i: any) => ({ ...i, type: 'issue', docType: 'Egreso' })),
+        ...transfers.map((t: any) => ({ ...t, type: 'transfer', docType: 'Traslado' }))
+      ].sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
       setDocs(combined);
     } catch (error) {

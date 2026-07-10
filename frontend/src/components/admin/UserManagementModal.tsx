@@ -36,7 +36,7 @@ export default function UserManagementModal({ userId, onClose }: Props) {
                 superAdminApi.getOrganizations()
             ])
             setUser(u)
-            setOrganizations(orgs)
+            setOrganizations(orgs as Organization[])
             
             // Load roles/venues for each associated org sequentially or limited parallel
             // to avoid hitting request limits or confusing state

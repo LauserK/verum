@@ -125,7 +125,7 @@ export default function InventoryDocumentsPage() {
 
   async function handleViewDetail(id: string) {
     try {
-      const doc = await adminApi.getInventoryDocument(id);
+      const doc = (await adminApi.getInventoryDocument(id)) as { header: any; lines: any[] };
       setSelectedDoc(doc.header);
       setSelectedDocLines(doc.lines);
       setShowDetailModal(true);

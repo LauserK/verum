@@ -1,12 +1,11 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { adminApi, Warehouse, InventoryItem, UOMPresentation } from '@/lib/api';
+import { adminApi, inventoryApi, Warehouse, InventoryItem, UOMPresentation } from '@/lib/api';
 import { Plus, Trash2, Save, Loader2, ArrowLeft, ClipboardList, ArrowRightLeft, Search, Package, Calendar } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import ConfirmationModal from '@/components/ConfirmationModal';
-import { createClient } from '@/utils/supabase/client';
 import { useTranslations } from '@/components/I18nProvider';
 import { useReactToPrint } from 'react-to-print';
 import { MovementPrint } from '@/components/inventory/MovementPrint';
@@ -88,10 +87,10 @@ export default function CreateTransferPage() {
     
     if (!itemPresentations[item.id]) {
         try {
-            const supabase = createClient();
-            const { data } = await supabase.from('uom_presentations').select('*').eq('base_uom_id', item.base_uom_id);
-            if (data && data.length > 0) {
-                setItemPresentations(prev => ({ ...prev, [item.id]: data as UOMPresentation[] }));
+            const data = await inventoryApi.getUOMPresentations();
+            const filtered = data.filter(p => p.base_uom_id === item.base_uom_id);
+            if (filtered && filtered.length > 0) {
+                setItemPresentations(prev => ({ ...prev, [item.id]: filtered as UOMPresentation[] }));
             }
         } catch (e) {
             console.error('Error fetching presentations:', e);
@@ -140,7 +139,7 @@ export default function CreateTransferPage() {
         }))
       };
 
-      const res = await adminApi.createTransfer(payload);
+      const res = (await adminApi.createTransfer(payload)) as any;
       
       // Setup print data
       const origin = warehouses.find(w => w.id === originWarehouseId);

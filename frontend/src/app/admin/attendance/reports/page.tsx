@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { adminApi } from '@/lib/api'
+import { adminApi, getSessionToken } from '@/lib/api'
 import { useVenue } from '@/components/VenueContext'
 import { useTranslations } from '@/components/I18nProvider'
 import { Download, Loader2, Pencil, X } from 'lucide-react'
@@ -95,13 +95,11 @@ export default function AttendanceReportsPage() {
         try {
             const url = adminApi.exportAttendanceCSV(venueId, reportType, dateFrom, dateTo)
             
-            // To download protected file, we fetch it with Auth headers then create an object URL
-            const supabase = (await import('@/utils/supabase/client')).createClient()
-            const { data: { session } } = await supabase.auth.getSession()
+            const token = await getSessionToken()
 
             const response = await fetch(url, {
                 headers: {
-                    'Authorization': `Bearer ${session?.access_token}`
+                    'Authorization': `Bearer ${token}`
                 }
             })
 

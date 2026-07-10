@@ -4,7 +4,7 @@
 import { use } from 'react';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/utils/supabase/client';
+import { inventoryApi } from '@/lib/api';
 import { 
   ArrowLeft, Box, Calendar, Wrench, ShieldCheck, Activity, 
   MapPin, Hash, Loader2, AlertTriangle, ChevronDown, ChevronUp,
@@ -52,7 +52,6 @@ interface TicketEntry {
 export default function AssetPublicView({ params }: { params: Promise<{ qr_code: string }> }) {
   const { qr_code } = use(params);
   const router = useRouter();
-  const supabase = createClient();
 
   const [asset, setAsset] = useState<AssetDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -82,20 +81,9 @@ export default function AssetPublicView({ params }: { params: Promise<{ qr_code:
     const fetchData = async () => {
       setLoading(true);
       try {
-        const { data: { user }, error: authErr } = await supabase.auth.getUser();
-        if (authErr || !user) {
-          router.push('/login');
-          return;
-        }
-
-        // Fetch asset
-        const { data, error: dbErr } = await supabase
-          .from('assets')
-          .select('*, asset_categories(name, review_interval_days)')
-          .eq('qr_code', qr_code)
-          .single();
-
-        if (dbErr || !data) {
+        // Fetch asset by QR code
+        const data = await inventoryApi.getAssetByQR(qr_code);
+        if (!data) {
           setError('No se pudo encontrar este activo o fue eliminado.');
           return;
         }
@@ -114,11 +102,7 @@ export default function AssetPublicView({ params }: { params: Promise<{ qr_code:
         }
 
         // Fetch tickets for this asset
-        const { data: tickets } = await supabase
-          .from('repair_tickets')
-          .select('*, profiles!repair_tickets_opened_by_fkey(full_name)')
-          .eq('asset_id', assetData.id)
-          .order('opened_at', { ascending: false });
+        const tickets = await inventoryApi.getAssetTickets(assetData.id) as Ticket[];
 
         if (tickets && tickets.length > 0) {
           const active = tickets.find((t: Ticket) => t.status !== 'resuelto');
@@ -126,14 +110,11 @@ export default function AssetPublicView({ params }: { params: Promise<{ qr_code:
             setActiveTicket(active as Ticket);
             
             // Fetch last 3 entries for the active ticket
-            const { data: entries } = await supabase
-              .from('repair_ticket_entries')
-              .select('id, type, description, next_action, created_at')
-              .eq('ticket_id', active.id)
-              .order('created_at', { ascending: false })
-              .limit(3);
-            
-            if (entries) setLastEntries(entries as TicketEntry[]);
+            const ticketDetail = await inventoryApi.getTicket(active.id) as { entries?: TicketEntry[] };
+            if (ticketDetail.entries) {
+              const sortedEntries = [...ticketDetail.entries].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+              setLastEntries(sortedEntries.slice(0, 3));
+            }
           }
           
           const closed = tickets.filter((t: Ticket) => t.status === 'resuelto');
@@ -142,14 +123,14 @@ export default function AssetPublicView({ params }: { params: Promise<{ qr_code:
 
       } catch (err) {
         console.error(err);
-        setError('Ocurrió un error inesperado.');
+        setError('Ocurrió un error inesperado al buscar el activo.');
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
-  }, [qr_code, supabase, router]);
+  }, [qr_code, router]);
 
 
   const handleReportFault = async () => {
@@ -161,26 +142,11 @@ export default function AssetPublicView({ params }: { params: Promise<{ qr_code:
     setSubmitting(true);
     setSubmitError('');
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('No session');
-
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/assets/${asset.id}/tickets`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          title: reportTitle,
-          priority: reportPriority,
-          description: reportDesc,
-        }),
+      await inventoryApi.createAssetTicket(asset.id, {
+        title: reportTitle,
+        priority: reportPriority,
+        description: reportDesc,
       });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || 'Error al crear el ticket');
-      }
 
       // Reload the page to show the new ticket
       window.location.reload();
@@ -196,31 +162,16 @@ export default function AssetPublicView({ params }: { params: Promise<{ qr_code:
 
     setSubmittingReview(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('No session');
-
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/assets/${asset.id}/review`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          notes: reviewNotes || 'Revisión preventiva registrada desde la app',
-          photo_url: null
-        }),
+      await inventoryApi.reviewAsset(asset.id, {
+        notes: reviewNotes || 'Revisión preventiva registrada desde la app',
+        photo_url: null
       });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || 'Error al registrar la revisión');
-      }
 
       // Reload the page to show the new status
       window.location.reload();
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : 'Error inesperado';
-      alert(errorMsg); // Fallback error handling for now
+      alert(errorMsg);
     } finally {
       setSubmittingReview(false);
     }

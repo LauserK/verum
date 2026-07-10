@@ -34,8 +34,8 @@ export default function RecipeEditor({ itemId, initialData, itemName }: RecipeEd
   const [safetyMargin, setSafetyMargin] = useState(initialData?.safety_margin ?? 1.00)
   
   // Ingredients and Steps state
-  const [ingredients, setIngredients] = useState<RecipeIngredient[]>(initialData?.ingredients || [])
-  const [steps, setSteps] = useState<RecipeStep[]>(initialData?.steps || [])
+  const [ingredients, setIngredients] = useState<RecipeIngredient[]>((initialData?.ingredients as RecipeIngredient[]) || [])
+  const [steps, setSteps] = useState<RecipeStep[]>((initialData?.steps as RecipeStep[]) || [])
   
   // Catalog data
   const [allItems, setAllItems] = useState<InventoryItem[]>([])
@@ -130,7 +130,7 @@ export default function RecipeEditor({ itemId, initialData, itemName }: RecipeEd
       }
 
       if (initialData?.ingredients) {
-        const uniqueItemIds = Array.from(new Set(initialData.ingredients.map(i => i.item_id)))
+        const uniqueItemIds = Array.from(new Set((initialData.ingredients as any[]).map(i => i.item_id)))
         const presPromises = uniqueItemIds.map(id => adminApi.getItemPresentations(id))
         const results = await Promise.all(presPromises)
         

@@ -183,7 +183,7 @@ export default function MobileInventoryCount() {
 
             // 2. Query backend to check if it matches a stock lot number
             try {
-              const res = await adminApi.resolveLotNumber(trimmed)
+              const res = (await adminApi.resolveLotNumber(trimmed)) as any;
               if (res && res.item) {
                 selectItem(res.item)
                 setOpenItemScanner(false)
@@ -238,9 +238,9 @@ export default function MobileInventoryCount() {
     setLoading(true)
     try {
       const list = await adminApi.getPhysicalInventories()
-      const draft = list.find((c: any) => c.warehouse_id === warehouseId && c.status === 'draft')
+      const draft = list.find((c: any) => c.warehouse_id === warehouseId && c.status === 'draft') as any
       if (draft) {
-        const detail = await adminApi.getPhysicalInventoryDetail(draft.id)
+        const detail = (await adminApi.getPhysicalInventoryDetail(draft.id)) as any
         setDraftId(draft.id)
         setLines(detail.lines.map((l: any) => ({
           item_id: l.item_id,
@@ -328,7 +328,7 @@ export default function MobileInventoryCount() {
         await adminApi.updatePhysicalInventory(draftId, data)
         setSaveStatus('saved')
       } else {
-        const doc = await adminApi.createPhysicalInventory(data)
+        const doc = (await adminApi.createPhysicalInventory(data)) as any
         setDraftId(doc.id)
         setSaveStatus('saved')
       }
@@ -391,7 +391,7 @@ export default function MobileInventoryCount() {
             qty_presentation: l.qty_presentation
           }))
         }
-        const doc = await adminApi.createPhysicalInventory(data)
+        const doc = (await adminApi.createPhysicalInventory(data)) as any
         currentDraftId = doc.id
         setDraftId(doc.id)
       }

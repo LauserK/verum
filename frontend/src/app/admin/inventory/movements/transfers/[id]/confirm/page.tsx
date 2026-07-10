@@ -32,7 +32,7 @@ export default function ConfirmTransferPage({ params }: { params: Promise<{ id: 
 
   async function loadDetail() {
     try {
-      const data = await adminApi.getTransferDetail(id);
+      const data = (await adminApi.getTransferDetail(id)) as any;
       setHeader(data.header);
       setLines(data.lines.map((l: any) => ({
         ...l,

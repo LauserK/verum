@@ -1,10 +1,10 @@
 // frontend/src/app/admin/settings/roles/RoleManager.tsx
 'use client';
 import { useState, useEffect } from 'react';
-import { createClient } from '@/utils/supabase/client';
 import { useTranslations } from '@/components/I18nProvider';
 import { useVenue } from '@/components/VenueContext';
 import { Plus, X, Shield, Check, Loader2 } from 'lucide-react';
+import { settingsApi } from '@/lib/api';
 
 interface CustomRole {
   id: string;
@@ -36,41 +36,37 @@ export function RoleManager() {
   const [isCreating, setIsAdmin] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const supabase = createClient();
   const { t } = useTranslations('admin');
 
   useEffect(() => {
     if (!activeOrgId) return;
 
     // Initial fetch of roles for the active organization and the full permissions catalog
-    supabase.from('custom_roles')
-      .select('*')
-      .eq('org_id', activeOrgId)
-      .order('name')
-      .then(({ data }) => {
-        if (data) setRoles(data as CustomRole[]);
-      });
+    settingsApi.getRoles(activeOrgId).then((data) => {
+      if (data) setRoles(data as CustomRole[]);
+    });
 
-    supabase.from('permissions').select('*').order('module').then(({ data }) => {
+    settingsApi.getPermissions().then((data) => {
       if (data) setAvailablePermissions(data as Permission[]);
     });
     
     // Reset selection if org changes
     setSelectedRole(null);
     setRolePermissions([]);
-  }, [supabase, activeOrgId]);
+  }, [activeOrgId]);
 
   const handleSelectRole = async (role: CustomRole) => {
     setSelectedRole(role);
     setLoadingPerms(true);
-    const { data } = await supabase
-      .from('role_permissions')
-      .select('permission_id')
-      .eq('role_id', role.id);
-    
-    if (data) {
-      setRolePermissions(data.map(rp => rp.permission_id));
-    } else {
+    try {
+      const data = await settingsApi.getRolePermissions(role.id);
+      if (data) {
+        setRolePermissions(data);
+      } else {
+        setRolePermissions([]);
+      }
+    } catch (e) {
+      console.error(e);
       setRolePermissions([]);
     }
     setLoadingPerms(false);
@@ -80,18 +76,19 @@ export function RoleManager() {
     if (!selectedRole) return;
 
     const isGranted = rolePermissions.includes(permId);
+    let newPermissions: string[];
     if (isGranted) {
-      // Remove
-      await supabase.from('role_permissions')
-        .delete()
-        .eq('role_id', selectedRole.id)
-        .eq('permission_id', permId);
-      setRolePermissions(prev => prev.filter(id => id !== permId));
+      newPermissions = rolePermissions.filter(id => id !== permId);
     } else {
-      // Add
-      await supabase.from('role_permissions')
-        .insert({ role_id: selectedRole.id, permission_id: permId });
-      setRolePermissions(prev => [...prev, permId]);
+      newPermissions = [...rolePermissions, permId];
+    }
+    
+    try {
+      await settingsApi.assignRolePermissions(selectedRole.id, newPermissions);
+      setRolePermissions(newPermissions);
+    } catch (e) {
+      console.error('Error toggling permission:', e);
+      alert('Error al guardar los permisos');
     }
   };
 
@@ -101,18 +98,12 @@ export function RoleManager() {
 
     setSaving(true);
     try {
-      const { data, error } = await supabase
-        .from('custom_roles')
-        .insert({
-          org_id: activeOrgId,
-          name: newRoleName.trim(),
-          description: newRoleDesc.trim(),
-          is_admin: isCreating
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
+      const data = await settingsApi.createRole({
+        org_id: activeOrgId,
+        name: newRoleName.trim(),
+        description: newRoleDesc.trim(),
+        is_admin: isCreating
+      });
 
       if (data) {
         setRoles(prev => [...prev, data as CustomRole].sort((a, b) => a.name.localeCompare(b.name)));

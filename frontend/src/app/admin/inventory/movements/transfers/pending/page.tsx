@@ -37,7 +37,7 @@ export default function PendingTransfersPage() {
 
   async function handlePrint(tr: any) {
     try {
-        const detail = await adminApi.getTransferDetail(tr.id);
+        const detail = (await adminApi.getTransferDetail(tr.id)) as any;
         setPrintData({
             type: 'transfer',
             id: detail.header.id,

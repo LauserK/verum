@@ -2,7 +2,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { adminApi, type VenueInfo, type InventoryDashboardSummary, type LowStockAlertItem } from '@/lib/api'
+import { inventoryApi, type VenueInfo, type InventoryDashboardSummary, type LowStockAlertItem } from '@/lib/api'
 import { useVenue } from '@/components/VenueContext'
 import { Box, Wrench, AlertTriangle, ClipboardList, Clock, ArrowRight, Archive, Warehouse, History } from 'lucide-react'
 import Link from 'next/link'
@@ -27,8 +27,8 @@ export default function InventoryDashboardPage() {
     if (active) setLoading(true)
     
     Promise.all([
-      adminApi.getInventoryDashboard(selectedVenue || undefined),
-      adminApi.getLowStockAlerts(selectedVenue || undefined)
+      inventoryApi.getInventoryDashboard(selectedVenue || undefined),
+      inventoryApi.getLowStockAlerts(selectedVenue || undefined)
     ])
     .then(([dashboardRes, alertsRes]) => {
       if (active) {
@@ -155,7 +155,7 @@ export default function InventoryDashboardPage() {
               <p className="text-sm text-text-secondary text-center py-6">No hay conteos pendientes de auditar.</p>
             ) : (
               <div className="space-y-3">
-                {data.pending_counts.map((c) => (
+                {data.pending_counts.map((c: any) => (
                   <Link href={`/admin/inventory/utensils/counts/${c.id}`} key={c.id} className="flex justify-between items-center p-3 bg-surface border border-border hover:border-primary/50 rounded-xl transition-colors group">
                     <div>
                       <p className="font-semibold text-sm text-text-primary group-hover:text-primary transition-colors">Conteo de {c.profiles?.full_name}</p>

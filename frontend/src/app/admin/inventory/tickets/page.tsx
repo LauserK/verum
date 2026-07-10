@@ -2,11 +2,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/utils/supabase/client'
 import { Loader2, AlertTriangle, Search, ChevronRight } from 'lucide-react'
 import Link from 'next/link'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { getProfile, inventoryApi, adminApi } from '@/lib/api'
 
 interface Ticket {
   id: string
@@ -35,41 +35,21 @@ export default function AdminTicketsPage() {
   const [filterStatus, setFilterStatus] = useState('active') // 'active' | 'all' | 'resuelto'
   const [search, setSearch] = useState('')
 
-  const supabase = createClient()
-
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true)
 
       try {
-        const { data: userRes } = await supabase.auth.getUser()
-        if (!userRes.user) return
+        const profileData = await getProfile()
+        const orgId = profileData.organization_id
 
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('organization_id')
-          .eq('id', userRes.user.id)
-          .single()
-
-        const orgId = profile?.organization_id
-
-        // Fetch tickets with asset info
-        let query = supabase
-          .from('repair_tickets')
-          .select('*, assets!inner(id, name, venue_id, org_id), profiles!repair_tickets_opened_by_fkey(full_name)')
-          .order('opened_at', { ascending: false })
-
-        if (orgId) {
-          query = query.eq('assets.org_id', orgId)
-        }
-
-        const [ticketsRes, venuesRes] = await Promise.all([
-          query,
-          orgId ? supabase.from('venues').select('id, name').eq('org_id', orgId) : Promise.resolve({ data: [] })
+        const [ticketsData, venuesData] = await Promise.all([
+          inventoryApi.getTickets(),
+          orgId ? adminApi.getVenues(orgId) : Promise.resolve([])
         ])
 
-        if (ticketsRes.data) setTickets(ticketsRes.data as Ticket[])
-        if (venuesRes.data) setVenues(venuesRes.data as Venue[])
+        setTickets(ticketsData as Ticket[])
+        setVenues(venuesData as Venue[])
       } catch (err) {
         console.error(err)
       } finally {
@@ -78,7 +58,7 @@ export default function AdminTicketsPage() {
     }
 
     fetchData()
-  }, [supabase])
+  }, [])
 
   const venueMap = Object.fromEntries(venues.map(v => [v.id, v.name]))
 

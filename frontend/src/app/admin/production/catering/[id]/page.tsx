@@ -196,7 +196,7 @@ export default function MRPConsolePage() {
                 const yieldQty = recipe.yield_qty_base || 1
                 const scale = qtyRequested / yieldQty
 
-                for (const ing of recipe.ingredients) {
+                for (const ing of recipe.ingredients as any[]) {
                     const ingName: string = ing.items?.name || ing.item_name || ing.item_id
                     const ingUom: string = ing.items?.uom_base?.name || ing.uom_name || ''
                     const ingQty: number = (ing.qty_base || 0) * scale
