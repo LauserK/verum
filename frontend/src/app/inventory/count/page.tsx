@@ -274,7 +274,7 @@ export default function MobileInventoryCount() {
     })
   }
 
-  const handleBarcodeSearch = (e: React.FormEvent) => {
+  const handleBarcodeSearch = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!barcodeQuery.trim()) return
     
@@ -282,9 +282,10 @@ export default function MobileInventoryCount() {
     setSearchResults([]) 
     setSelectedItem(null)
 
-    setTimeout(() => {
-      const query = barcodeQuery.trim().toLowerCase()
+    const trimmed = barcodeQuery.trim()
+    const query = trimmed.toLowerCase()
 
+    try {
       const matches = items.filter(it => {
         const matchesCode = it.code && it.code.toLowerCase() === query
         const matchesName = it.name.toLowerCase().includes(query)
@@ -295,17 +296,28 @@ export default function MobileInventoryCount() {
         return matchesCode || matchesName || matchesCategory
       })
 
-      setSearching(false)
-
       if (matches.length === 1 && matches[0].code?.toLowerCase() === query) {
         selectItem(matches[0])
       } else if (matches.length > 0) {
         setSearchResults(matches)
       } else {
+        // Fallback: Query backend to check if it matches a stock lot number
+        try {
+          const res = (await adminApi.resolveLotNumber(trimmed)) as any;
+          if (res && res.item) {
+            selectItem(res.item)
+            return
+          }
+        } catch (err: any) {
+          console.error('Error resolving lot number from search:', err)
+        }
+
         setSearchResults([])
-        showAlert('Artículo no encontrado', 'No se encontró ningún artículo con el término o código ingresado.')
+        showAlert('Artículo no encontrado', 'No se encontró ningún artículo o lote con el término o código ingresado.')
       }
-    }, 400)
+    } finally {
+      setSearching(false)
+    }
   }
 
   const saveChanges = async (currentLines: any[]) => {
