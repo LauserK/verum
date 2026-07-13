@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.gzip import GZipMiddleware
+from app.purchasing.router import router as purchasing_router
 from app.transfers.router import router as transfers_router
 from app.catering.router import router as catering_router
 from app.superadmin.router import router as superadmin_router
@@ -27,6 +28,7 @@ def create_app() -> FastAPI:
     app.add_middleware(GZipMiddleware, minimum_size=500)
 
     # Register routers
+    app.include_router(purchasing_router)
     app.include_router(transfers_router)
     app.include_router(catering_router)
     app.include_router(superadmin_router)

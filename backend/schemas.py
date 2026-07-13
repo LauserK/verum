@@ -99,3 +99,14 @@ from app.inventory.schemas import (
     InventoryDocumentLineResponse, InventoryDocumentResponse,
     TransferReceiveLineSchema, TransferReceiveRequest
 )
+
+# ── Purchasing Models ─────────────────────────────────────
+from app.purchasing.schemas import (
+    SupplierContactCreate, SupplierContactResponse, SupplierCreate,
+    SupplierResponse, SupplierUpdate, SupplierItemCreate, SupplierItemResponse,
+    SupplierPriceListItemCreate, SupplierPriceListItemResponse,
+    SupplierPriceListCreate, SupplierPriceListResponse,
+    POApprovalLimitCreate, POApprovalLimitResponse,
+    POApprovalConfigResponse, POApprovalConfigUpdate
+)
+
