@@ -109,12 +109,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             ]
         },
         {
-            href: '/suppliers',
+            href: '/admin/suppliers',
             labelEs: 'Compras',
             labelEn: 'Purchasing',
             icon: ShoppingCart,
             items: [
-                { href: '/suppliers', labelEs: 'Proveedores', labelEn: 'Suppliers' },
+                { href: '/admin/suppliers', labelEs: 'Proveedores', labelEn: 'Suppliers' },
             ]
         },
         {

@@ -224,7 +224,7 @@ export default function SupplierDetailPage() {
         <XCircle className="h-12 w-12 text-red-500 mx-auto" />
         <h2 className="text-lg font-semibold text-text-primary">Error de carga</h2>
         <p className="text-sm text-text-secondary">{error || 'Proveedor no encontrado'}</p>
-        <Link href="/suppliers" className="inline-block bg-primary text-white text-sm px-4 py-2 rounded-xl">
+        <Link href="/admin/suppliers" className="inline-block bg-primary text-white text-sm px-4 py-2 rounded-xl">
           Volver al directorio
         </Link>
       </div>
@@ -237,7 +237,7 @@ export default function SupplierDetailPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-4">
         <div className="flex items-center gap-3">
           <Link
-            href="/suppliers"
+            href="/admin/suppliers"
             className="p-2 hover:bg-background-hover rounded-lg border border-border transition-colors text-text-primary"
           >
             <ArrowLeft className="h-5 w-5" />
@@ -462,7 +462,7 @@ export default function SupplierDetailPage() {
             </h3>
             <button
               onClick={() => { setShowLinkItem(true); setFormError(null); }}
-              className="flex items-center gap-1 bg-primary hover:bg-primary-hover text-white px-3 py-1.5 rounded-lg text-xs font-semibold"
+              className="flex items-center justify-center gap-1 bg-primary text-text-inverse px-4 h-9 rounded-xl text-xs font-bold hover:bg-primary-hover transition-all active:scale-95 shadow-md shadow-primary/10"
             >
               <Plus className="h-4 w-4" /> Asociar Artículo
             </button>
@@ -542,14 +542,14 @@ export default function SupplierDetailPage() {
                     <button
                       type="button"
                       onClick={() => setShowLinkItem(false)}
-                      className="px-4 py-2 text-xs border border-border hover:bg-background-hover rounded-lg text-text-primary font-semibold"
+                      className="flex items-center justify-center bg-surface border border-border text-text-primary px-4 h-9 rounded-xl text-xs font-bold hover:bg-surface-raised transition-all active:scale-95"
                     >
                       Cancelar
                     </button>
                     <button
                       type="submit"
                       disabled={submitting}
-                      className="flex items-center gap-1 bg-primary hover:bg-primary-hover text-white px-4 py-2 text-xs font-semibold rounded-lg disabled:opacity-50"
+                      className="flex items-center justify-center gap-1 bg-primary text-text-inverse px-4 h-9 rounded-xl text-xs font-bold hover:bg-primary-hover transition-all active:scale-95 disabled:opacity-50"
                     >
                       {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                       Vincular
@@ -617,7 +617,7 @@ export default function SupplierDetailPage() {
             </h3>
             <button
               onClick={() => { setShowAddPriceList(true); setFormError(null); }}
-              className="flex items-center gap-1 bg-primary hover:bg-primary-hover text-white px-3 py-1.5 rounded-lg text-xs font-semibold"
+              className="flex items-center justify-center gap-1 bg-primary text-text-inverse px-4 h-9 rounded-xl text-xs font-bold hover:bg-primary-hover transition-all active:scale-95 shadow-md shadow-primary/10"
             >
               <Plus className="h-4 w-4" /> Nuevo Catálogo
             </button>
@@ -703,7 +703,7 @@ export default function SupplierDetailPage() {
                       <button
                         type="button"
                         onClick={handleAddItemToPriceList}
-                        className="bg-primary hover:bg-primary-hover text-white px-3 py-1.5 rounded-md text-xs font-bold transition-colors"
+                        className="flex items-center justify-center bg-primary text-text-inverse px-4 h-9 rounded-xl text-xs font-bold hover:bg-primary-hover transition-all active:scale-95 w-full"
                       >
                         Añadir Línea
                       </button>
@@ -746,14 +746,14 @@ export default function SupplierDetailPage() {
                     <button
                       type="button"
                       onClick={() => setShowAddPriceList(false)}
-                      className="px-4 py-2 text-xs border border-border hover:bg-background-hover rounded-lg text-text-primary font-semibold"
+                      className="flex items-center justify-center bg-surface border border-border text-text-primary px-4 h-9 rounded-xl text-xs font-bold hover:bg-surface-raised transition-all active:scale-95"
                     >
                       Cancelar
                     </button>
                     <button
                       type="submit"
                       disabled={submitting}
-                      className="flex items-center gap-1 bg-primary hover:bg-primary-hover text-white px-4 py-2 text-xs font-semibold rounded-lg disabled:opacity-50"
+                      className="flex items-center justify-center gap-1 bg-primary text-text-inverse px-4 h-9 rounded-xl text-xs font-bold hover:bg-primary-hover transition-all active:scale-95 disabled:opacity-50"
                     >
                       {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                       Guardar Catálogo

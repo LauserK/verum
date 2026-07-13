@@ -77,8 +77,8 @@ export default function SuppliersDirectoryPage() {
           <p className="text-sm text-text-secondary">Administra los proveedores comerciales, contactos y listas de precios negociadas.</p>
         </div>
         <Link
-          href="/suppliers/new"
-          className="flex items-center justify-center gap-2 bg-primary hover:bg-primary-hover text-white font-semibold px-4 py-2.5 rounded-xl text-sm transition-all shadow-lg shadow-primary/10 hover:shadow-primary/20 shrink-0"
+          href="/admin/suppliers/new"
+          className="flex items-center justify-center gap-2 bg-primary text-text-inverse px-5 h-11 rounded-xl text-sm font-bold hover:bg-primary-hover transition-all shadow-lg shadow-primary/20 w-full sm:w-auto active:scale-95 shrink-0"
         >
           <Plus className="h-4 w-4" />
           Nuevo Proveedor
@@ -159,7 +159,7 @@ export default function SuppliersDirectoryPage() {
                     <td className="py-4 px-6">{renderStars(supplier.score)}</td>
                     <td className="py-4 px-6 text-right">
                       <Link
-                        href={`/suppliers/${supplier.id}`}
+                        href={`/admin/suppliers/${supplier.id}`}
                         className="inline-flex items-center gap-1.5 bg-background-button hover:bg-background-button-hover text-text-primary px-3 py-1.5 rounded-lg text-xs font-semibold border border-border transition-all shadow-sm"
                       >
                         Ficha completa

@@ -59,7 +59,7 @@ export default function NewSupplierPage() {
       }
 
       await adminApi.createSupplier(payload);
-      router.push('/suppliers');
+      router.push('/admin/suppliers');
     } catch (err: any) {
       console.error('Error creating supplier:', err);
       setError(err?.detail || 'Error al intentar registrar el proveedor. Valida los campos ingresados.');
@@ -73,7 +73,7 @@ export default function NewSupplierPage() {
       {/* Navigation & Title */}
       <div className="flex items-center gap-3">
         <Link
-          href="/suppliers"
+          href="/admin/suppliers"
           className="p-2 hover:bg-background-hover rounded-lg border border-border transition-colors text-text-primary"
         >
           <ArrowLeft className="h-5 w-5" />
@@ -289,15 +289,15 @@ export default function NewSupplierPage() {
         {/* Buttons */}
         <div className="flex items-center justify-end gap-3">
           <Link
-            href="/suppliers"
-            className="px-5 py-2.5 rounded-xl border border-border hover:bg-background-hover text-text-primary font-semibold text-sm transition-colors"
+            href="/admin/suppliers"
+            className="flex items-center justify-center bg-surface border border-border text-text-primary px-5 h-11 rounded-xl text-sm font-bold hover:bg-surface-raised transition-all active:scale-95 w-full sm:w-auto"
           >
             Cancelar
           </Link>
           <button
             type="submit"
             disabled={saving}
-            className="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white font-semibold px-5 py-2.5 rounded-xl text-sm transition-all shadow-lg shadow-primary/10 hover:shadow-primary/20 disabled:opacity-50"
+            className="flex items-center justify-center gap-2 bg-primary text-text-inverse px-5 h-11 rounded-xl text-sm font-bold hover:bg-primary-hover transition-all shadow-lg shadow-primary/20 disabled:opacity-50 active:scale-95 w-full sm:w-auto"
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Registrar Proveedor
