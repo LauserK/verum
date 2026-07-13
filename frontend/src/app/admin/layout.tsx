@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { getProfile, type Profile } from '@/lib/api'
 import { logout } from '@/app/login/actions'
-import { LayoutDashboard, ClipboardCheck, Users, Building2, Box, Clock, LogOut, ChevronLeft, Moon, Sun, ChefHat, ChevronDown, Menu, X } from 'lucide-react'
+import { LayoutDashboard, ClipboardCheck, Users, Building2, Box, Clock, LogOut, ChevronLeft, Moon, Sun, ChefHat, ChevronDown, Menu, X, ShoppingCart } from 'lucide-react'
 import { useTranslations } from '@/components/I18nProvider'
 import { useTheme } from '@/components/ThemeProvider'
 import { useVenue } from '@/components/VenueContext'
@@ -106,6 +106,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 { href: '/admin/attendance/reports', labelEs: 'Reportes', labelEn: 'Reports' },
                 { href: '/admin/attendance/shifts', labelEs: 'Turnos', labelEn: 'Shifts' },
                 { href: '/admin/attendance/absences', labelEs: 'Ausencias', labelEn: 'Absences' },
+            ]
+        },
+        {
+            href: '/suppliers',
+            labelEs: 'Compras',
+            labelEn: 'Purchasing',
+            icon: ShoppingCart,
+            items: [
+                { href: '/suppliers', labelEs: 'Proveedores', labelEn: 'Suppliers' },
             ]
         },
         {
