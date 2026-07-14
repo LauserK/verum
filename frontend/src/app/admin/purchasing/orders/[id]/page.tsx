@@ -1,12 +1,14 @@
 // frontend/src/app/admin/purchasing/orders/[id]/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { adminApi, PurchaseOrderResponse } from '@/lib/api';
+import { useReactToPrint } from 'react-to-print';
+import { PurchaseOrderPrintTemplate } from '@/components/purchasing/PurchaseOrderPrintTemplate';
 import { 
   ArrowLeft, Loader2, AlertCircle, ShoppingCart, Calendar, 
-  Building2, User, HelpCircle, Check, X, Ban, Send, FileSpreadsheet, MessageSquare
+  Building2, User, HelpCircle, Check, X, Ban, Send, FileSpreadsheet, MessageSquare, Printer
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -26,6 +28,13 @@ export default function PurchaseOrderDetailPage() {
   const [approvalNotes, setApprovalNotes] = useState('');
   const [rejectionNotes, setRejectionNotes] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
+
+  // Ref for Printing Template
+  const printRef = useRef<HTMLDivElement>(null);
+  const handlePrint = useReactToPrint({
+    contentRef: printRef,
+    documentTitle: po ? `Orden-Compra-${po.po_number}` : 'Orden-Compra'
+  });
 
   const fetchOrder = async () => {
     setLoading(true);
@@ -106,7 +115,7 @@ export default function PurchaseOrderDetailPage() {
           </div>
         ) : (
           steps.map((step, idx) => {
-            const isCompleted = idx < statusIndex || currentStatus === 'received' || currentStatus === 'invoiced' || currentStatus === 'closed';
+            const isCompleted = idx < statusIndex || currentStatus === 'received' || currentStatus === 'partially_received' || currentStatus === 'invoiced' || currentStatus === 'closed';
             const isActive = step.key === currentStatus || (step.key === 'received' && (currentStatus === 'partially_received' || currentStatus === 'invoiced' || currentStatus === 'closed'));
             
             return (
@@ -226,6 +235,17 @@ export default function PurchaseOrderDetailPage() {
         <div className="flex gap-2">
           {actionLoading && <Loader2 className="h-5 w-5 animate-spin text-primary self-center" />}
 
+          {/* Printable Button (Always active if not cancelled) */}
+          {po.status !== 'cancelled' && (
+            <button
+              onClick={() => handlePrint()}
+              disabled={actionLoading}
+              className="flex items-center gap-2 bg-surface border border-border text-text-primary px-4 h-11 rounded-xl text-sm font-bold hover:bg-surface-raised active:scale-95 transition-all disabled:opacity-50"
+            >
+              <Printer className="h-4 w-4 text-text-secondary" /> Imprimir / Guardar PDF
+            </button>
+          )}
+
           {po.status === 'draft' && (
             <>
               <button
@@ -276,10 +296,11 @@ export default function PurchaseOrderDetailPage() {
 
           {po.status === 'approved' && (
             <button
-              onClick={() => alert('Próximamente M27: Enviar PDF por email al proveedor')}
-              className="flex items-center gap-2 bg-primary text-text-inverse px-5 h-11 rounded-xl text-sm font-bold hover:bg-primary-hover active:scale-95 transition-all"
+              onClick={() => handleAction(() => adminApi.sendPurchaseOrder(po.id), 'Orden marcada como enviada al proveedor')}
+              disabled={actionLoading}
+              className="flex items-center gap-2 bg-primary text-text-inverse px-5 h-11 rounded-xl text-sm font-bold hover:bg-primary-hover active:scale-95 transition-all disabled:opacity-50"
             >
-              <Send className="h-4 w-4" /> Despachar (Enviar PDF)
+              <Send className="h-4 w-4" /> Marcar como Enviada
             </button>
           )}
         </div>
@@ -294,7 +315,7 @@ export default function PurchaseOrderDetailPage() {
             Líneas de la Orden
           </h3>
 
-          <div className="border border-border rounded-xl overflow-hidden">
+          <div className="border border-border rounded-xl overflow-hidden shadow-sm">
             <table className="w-full text-left border-collapse text-sm">
               <thead>
                 <tr className="bg-surface-raised/50 border-b border-border text-text-secondary text-xs font-bold uppercase">
@@ -338,9 +359,9 @@ export default function PurchaseOrderDetailPage() {
               <span>IVA (16%):</span>
               <span className="font-semibold text-text-primary">${po.tax_amount.toLocaleString('es-ES', { minimumFractionDigits: 2 })}</span>
             </div>
-            <div className="flex justify-between w-full max-w-[240px] text-sm font-bold text-text-primary border-t border-border pt-1.5 mt-1">
+            <div className="flex justify-between w-full max-w-[240px] text-sm font-bold text-text-primary border-t border-border/50 pt-1.5">
               <span>Total:</span>
-              <span>${po.total.toLocaleString('es-ES', { minimumFractionDigits: 2 })} {po.currency}</span>
+              <span>${po.total.toLocaleString('es-ES', { minimumFractionDigits: 2 })}</span>
             </div>
           </div>
         </div>
@@ -400,78 +421,62 @@ export default function PurchaseOrderDetailPage() {
           {/* Notes Card */}
           {po.notes && (
             <div className="bg-background-card border border-border rounded-2xl p-6 space-y-2">
-              <h3 className="text-sm font-bold uppercase text-text-secondary tracking-wider">
-                Notas
+              <h3 className="text-xs font-bold uppercase text-text-secondary tracking-wider flex items-center gap-1.5">
+                <MessageSquare className="h-3.5 w-3.5" />
+                Notas del Comprador
               </h3>
-              <p className="text-sm text-text-primary whitespace-pre-wrap leading-relaxed">{po.notes}</p>
+              <p className="text-sm text-text-secondary italic leading-relaxed">
+                "{po.notes}"
+              </p>
+            </div>
+          )}
+
+          {/* Approvals History Card */}
+          {po.approvals && po.approvals.length > 0 && (
+            <div className="bg-background-card border border-border rounded-2xl p-6 space-y-4">
+              <h3 className="text-xs font-bold uppercase text-text-secondary tracking-wider flex items-center gap-1.5 border-b border-border pb-2">
+                <Check className="h-4 w-4 text-success" />
+                Bitácora de Firmas
+              </h3>
+              <div className="space-y-3 max-h-48 overflow-y-auto divide-y divide-border">
+                {po.approvals.map((app) => (
+                  <div key={app.id} className="pt-2 text-xs flex flex-col gap-1.5 first:pt-0 first:border-0">
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold text-text-primary">{app.approver_name || 'Aprobador'}</span>
+                      <span className={`px-1.5 py-0.5 rounded text-[8px] font-extrabold uppercase border ${
+                        app.action === 'approved' ? 'bg-success-light border-success/20 text-success' : 'bg-error-light border-error/20 text-error'
+                      }`}>
+                        {app.action === 'approved' ? 'Firmó' : 'Rechazó'}
+                      </span>
+                    </div>
+                    {app.notes && <p className="text-text-secondary italic">"{app.notes}"</p>}
+                    <span className="text-[10px] text-text-disabled">{new Date(app.created_at).toLocaleString('es-ES')}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* Approvals audit trail */}
-      <div className="bg-background-card border border-border rounded-2xl p-6 space-y-4">
-        <h3 className="text-sm font-bold uppercase text-text-secondary tracking-wider flex items-center gap-1.5">
-          <MessageSquare className="h-4 w-4 text-primary" />
-          Historial de Firmas y Aprobaciones
-        </h3>
-
-        {po.approvals.length === 0 ? (
-          <p className="text-sm text-text-secondary italic">No se registran firmas en esta orden.</p>
-        ) : (
-          <div className="relative border-l-2 border-border pl-6 ml-2 space-y-6">
-            {po.approvals.map((appr) => (
-              <div key={appr.id} className="relative">
-                {/* Node icon */}
-                <div className={`absolute -left-[33px] top-0 w-4 h-4 rounded-full border-2 ${
-                  appr.action === 'approved' ? 'bg-success border-success' : 'bg-error border-error'
-                }`} />
-
-                <div className="space-y-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-bold text-text-primary">
-                      {appr.approver_name || 'Aprobador / Firma Digital'}
-                    </span>
-                    <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${
-                      appr.action === 'approved' ? 'bg-success-light text-success border-success/20' : 'bg-error-light text-error border-error/20'
-                    }`}>
-                      {appr.action === 'approved' ? 'APROBÓ' : 'RECHAZÓ'}
-                    </span>
-                    <span className="text-xs text-text-disabled ml-auto">
-                      {new Date(appr.created_at).toLocaleString('es-ES')}
-                    </span>
-                  </div>
-                  {appr.notes && (
-                    <p className="text-xs text-text-secondary mt-1 bg-surface-raised/40 p-2.5 rounded-lg border border-border/50 max-w-xl">
-                      {appr.notes}
-                    </p>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* APPROVAL MODAL */}
+      {/* --- Modals for Approval and Rejection --- */}
       {showApprovalModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-surface border border-border rounded-2xl p-6 max-w-md w-full space-y-4 shadow-xl">
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-surface border border-border rounded-2xl p-6 max-w-md w-full mx-4 space-y-4">
             <h3 className="text-lg font-bold text-text-primary flex items-center gap-2">
-              <Check className="text-success h-6 w-6" />
-              Firmar Orden de Compra
+              <Check className="h-5 w-5 text-success" /> Aprobar y Firmar Orden
             </h3>
-            <p className="text-sm text-text-secondary">
-              ¿Estás seguro de que deseas aprobar la orden {po.po_number} de ${po.total.toLocaleString()} {po.currency}?
+            <p className="text-xs text-text-secondary">
+              ¿Estás seguro de que deseas autorizar esta orden de compra? Puedes añadir una nota opcional a continuación.
             </p>
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-text-primary">Comentarios de firma (Opcional)</label>
+              <label className="text-xs font-semibold text-text-primary">Notas de Aprobación</label>
               <textarea
                 value={approvalNotes}
                 onChange={(e) => setApprovalNotes(e.target.value)}
-                placeholder="Ingresa comentarios o anotaciones para archivar..."
+                placeholder="Ej: Proveedor validado, condiciones de crédito correctas..."
                 rows={3}
-                className="w-full bg-background-input border border-border rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary resize-none"
+                className="w-full bg-surface border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary resize-none font-semibold text-text-primary"
               />
             </div>
             <div className="flex gap-2 justify-end">
@@ -493,29 +498,27 @@ export default function PurchaseOrderDetailPage() {
         </div>
       )}
 
-      {/* REJECTION MODAL */}
       {showRejectionModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-surface border border-border rounded-2xl p-6 max-w-md w-full space-y-4 shadow-xl">
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-surface border border-border rounded-2xl p-6 max-w-md w-full mx-4 space-y-4">
             <h3 className="text-lg font-bold text-text-primary flex items-center gap-2">
-              <X className="text-error h-6 w-6" />
-              Rechazar Orden de Compra
+              <X className="h-5 w-5 text-error" /> Rechazar Orden de Compra
             </h3>
-            <p className="text-sm text-text-secondary">
-              La orden {po.po_number} volverá al estado Borrador para correcciones.
+            <p className="text-xs text-text-secondary">
+              La orden será devuelta al estado "Borrador" para que el comprador pueda realizar los ajustes solicitados.
             </p>
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-text-primary">Motivo del rechazo (Obligatorio)</label>
+              <label className="text-xs font-semibold text-text-primary">Motivo del Rechazo *</label>
               <textarea
-                required
                 value={rejectionNotes}
                 onChange={(e) => {
                   setRejectionNotes(e.target.value);
-                  setValidationError(null);
+                  if (e.target.value.trim()) setValidationError(null);
                 }}
-                placeholder="Explica qué correcciones debe realizar el solicitante..."
+                placeholder="Detalla el motivo (Ej: Precios desactualizados, falta cotización)..."
                 rows={3}
-                className="w-full bg-background-input border border-border rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary resize-none"
+                required
+                className="w-full bg-surface border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary resize-none font-semibold text-text-primary"
               />
               {validationError && <p className="text-xs text-error font-semibold mt-1">{validationError}</p>}
             </div>
@@ -540,6 +543,11 @@ export default function PurchaseOrderDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Hidden Print Container */}
+      <div className="hidden">
+        <PurchaseOrderPrintTemplate ref={printRef} po={po} />
+      </div>
     </div>
   );
 }

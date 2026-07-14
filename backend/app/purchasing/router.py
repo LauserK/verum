@@ -2,7 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from typing import List, Optional
 from uuid import UUID
 from datetime import date, datetime
+import pytz
 import dateutil.parser
+
+CARACAS_TZ = pytz.timezone("America/Caracas")
 
 from database import get_db
 from app.deps import get_active_org_id, require_permission
@@ -823,4 +826,43 @@ async def cancel_purchase_order(
         raise HTTPException(status_code=500, detail="Failed to cancel purchase order")
 
     return await get_purchase_order_by_id_internal(id, org_id, db)
+
+@router.post("/purchase-orders/{id}/send", response_model=PurchaseOrderResponse)
+async def send_purchase_order(
+    id: UUID,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    current_user = Depends(get_current_user),
+    _ = Depends(require_permission("purchasing.send"))
+):
+    # Retrieve PO
+    res = db.table("purchase_orders").select("*").eq("id", str(id)).eq("org_id", org_id).execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Purchase order not found")
+    po = res.data[0]
+
+    if po["status"] != "approved":
+        raise HTTPException(status_code=400, detail="Only approved purchase orders can be marked as sent")
+
+    # Fetch supplier email
+    supplier_email = None
+    supplier_id = po.get("supplier_id")
+    if supplier_id:
+        sup_res = db.table("suppliers").select("email").eq("id", str(supplier_id)).execute()
+        if sup_res.data:
+            supplier_email = sup_res.data[0].get("email")
+
+    # Update PO status to sent
+    upd_res = db.table("purchase_orders").update({
+        "status": "sent",
+        "sent_at": datetime.now(CARACAS_TZ).isoformat(),
+        "sent_by": str(current_user.id),
+        "sent_to_email": supplier_email
+    }).eq("id", str(id)).execute()
+
+    if not upd_res.data:
+        raise HTTPException(status_code=500, detail="Failed to mark purchase order as sent")
+
+    return await get_purchase_order_by_id_internal(id, org_id, db)
+
 

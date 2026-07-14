@@ -390,3 +390,82 @@ def test_reject_purchase_order(client, mock_supabase, mock_user):
     assert response.status_code == 200
     assert response.json()["status"] == "draft"
     assert mock_approvals_table.insert.called
+
+def test_send_purchase_order(client, mock_supabase, mock_user):
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    org_id = str(uuid4())
+    app.dependency_overrides[get_active_org_id] = lambda: org_id
+
+    po_id = str(uuid4())
+    creator_id = str(uuid4())
+
+    # Mock PO select returns: first "approved" for check, second "sent" for final get
+    mock_po_execute = MagicMock()
+    mock_po_execute.execute.side_effect = [
+        MagicMock(data=[{
+            "id": po_id,
+            "org_id": org_id,
+            "po_number": "PO-2026-0001",
+            "total": 1500.0,
+            "status": "approved",
+            "created_by": creator_id,
+            "supplier_id": str(uuid4()),
+            "warehouse_id": str(uuid4()),
+            "created_at": "2026-07-14T00:00:00Z"
+        }]),
+        MagicMock(data=[{
+            "id": po_id,
+            "org_id": org_id,
+            "po_number": "PO-2026-0001",
+            "total": 1500.0,
+            "status": "sent",
+            "created_by": creator_id,
+            "supplier_id": str(uuid4()),
+            "warehouse_id": str(uuid4()),
+            "created_at": "2026-07-14T00:00:00Z",
+            "sent_at": "2026-07-14T12:00:00Z",
+            "sent_by": mock_user.id,
+            "sent_to_email": "supplier@test.com"
+        }])
+    ]
+
+    mock_po_table = MagicMock()
+    mock_po_table.select.return_value.eq.return_value.eq.return_value = mock_po_execute
+
+    # Mock PO update
+    mock_po_table.update.return_value.eq.return_value.execute.return_value.data = [{
+        "id": po_id,
+        "status": "sent"
+    }]
+
+    # Mock supplier email query
+    mock_supplier_table = MagicMock()
+    mock_supplier_table.select.return_value.eq.return_value.execute.return_value.data = [{
+        "email": "supplier@test.com",
+        "name": "Proveedor"
+    }]
+
+    # Mock lines & approvals queries returning empty
+    mock_sub_queries = MagicMock()
+    mock_sub_queries.select.return_value.eq.return_value.execute.return_value.data = []
+
+    def side_effect(name):
+        if name == "purchase_orders":
+            return mock_po_table
+        elif name == "suppliers":
+            return mock_supplier_table
+        elif name in ["purchase_order_lines", "po_approvals", "warehouses"]:
+            return mock_sub_queries
+        return MagicMock()
+
+    mock_supabase.table.side_effect = side_effect
+
+    with patch("permissions.resolve_permission", return_value=True):
+        response = client.post(f"/purchase-orders/{po_id}/send")
+
+    app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "sent"
+    assert mock_po_table.update.called
+

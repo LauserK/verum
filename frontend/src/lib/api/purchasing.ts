@@ -193,6 +193,9 @@ export const purchasingApi = {
 
     cancelPurchaseOrder: (id: string): Promise<PurchaseOrderResponse> =>
         fetchWithAuth(`/purchase-orders/${id}/cancel`, { method: 'POST' }),
+
+    sendPurchaseOrder: (id: string): Promise<PurchaseOrderResponse> =>
+        fetchWithAuth(`/purchase-orders/${id}/send`, { method: 'POST' }),
 }
 
 export interface PurchaseOrderLineCreate {
