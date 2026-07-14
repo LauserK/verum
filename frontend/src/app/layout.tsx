@@ -4,6 +4,7 @@ import "./globals.css";
 import { I18nProvider } from "@/components/I18nProvider";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import AttendanceGuard from "@/components/AttendanceGuard";
+import ConnectionErrorGuard from "@/components/ConnectionErrorGuard";
 import { VenueProvider } from "@/components/VenueContext";
 import { QueryProvider } from "@/components/QueryProvider";
 
@@ -36,9 +37,11 @@ export default function RootLayout({
           <I18nProvider>
             <QueryProvider>
               <VenueProvider>
-                <AttendanceGuard>
-                  {children}
-                </AttendanceGuard>
+                <ConnectionErrorGuard>
+                  <AttendanceGuard>
+                    {children}
+                  </AttendanceGuard>
+                </ConnectionErrorGuard>
               </VenueProvider>
             </QueryProvider>
           </I18nProvider>

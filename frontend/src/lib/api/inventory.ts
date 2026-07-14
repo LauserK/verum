@@ -239,6 +239,8 @@ export interface InventoryItem {
     margin_multiplier?: number
     yield_factor?: number
     production_cost?: number | null
+    tax_id?: string | null
+    tax_rate?: number
 }
 
 export interface InventoryDashboardSummary {

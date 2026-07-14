@@ -28,6 +28,19 @@ CARACAS_TZ = pytz.timezone("America/Caracas")
 
 router = APIRouter(prefix="", tags=["Production"])
 
+def flatten_item_response(item):
+    if not item:
+        return item
+    if item.get("uom_base"):
+        item["uom_name"] = item["uom_base"].get("name")
+        del item["uom_base"]
+    if item.get("taxes"):
+        item["tax_rate"] = float(item["taxes"].get("rate", 0.16))
+        del item["taxes"]
+    else:
+        item["tax_rate"] = item.get("tax_rate", 0.16)
+    return item
+
 # ── Production & Inventory Endpoints (M16) ───────────────
 
 @router.post("/inventory/warehouses", response_model=WarehouseResponse, tags=["Inventory"])
@@ -89,7 +102,8 @@ async def create_item(item: ItemCreate, org_id: str = Depends(get_active_org_id)
         "last_purchase_cost_updated_at": datetime.now(CARACAS_TZ).isoformat() if item.last_purchase_cost is not None else None,
         "margin_multiplier": item.margin_multiplier,
         "yield_factor": item.yield_factor,
-        "production_cost": (item.last_purchase_cost * item.margin_multiplier) / (item.yield_factor if item.yield_factor > 0 else 1.0) if item.last_purchase_cost is not None else None
+        "production_cost": (item.last_purchase_cost * item.margin_multiplier) / (item.yield_factor if item.yield_factor > 0 else 1.0) if item.last_purchase_cost is not None else None,
+        "tax_id": str(item.tax_id) if item.tax_id else None
     }
     
     res = db.table("items").insert(data).execute()
@@ -110,37 +124,28 @@ async def create_item(item: ItemCreate, org_id: str = Depends(get_active_org_id)
             }
             db.table("uom_presentations").insert(p_data).execute()
 
-    # Fetch with uom_name join
+    # Fetch with uom_name and taxes join
     item_res = db.table("items") \
-        .select("*, uom_base(name)") \
+        .select("*, uom_base(name), taxes(rate)") \
         .eq("id", item_id) \
         .execute()
     
     if not item_res.data:
         raise HTTPException(status_code=400, detail="Error fetching created item")
         
-    created_item = item_res.data[0]
-    if created_item.get("uom_base"):
-        created_item["uom_name"] = created_item["uom_base"].get("name")
-        del created_item["uom_base"]
-        
-    return created_item
+    return flatten_item_response(item_res.data[0])
 
 @router.get("/inventory/items", response_model=List[ItemResponse], tags=["Inventory"])
 async def list_items(org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
     res = db.table("items") \
-        .select("*, uom_base(name)") \
+        .select("*, uom_base(name), taxes(rate)") \
         .eq("org_id", org_id) \
         .eq("is_active", True) \
         .execute()
     
-    # Flatten uom_base.name to uom_name
-    for item in res.data:
-        if item.get("uom_base"):
-            item["uom_name"] = item["uom_base"].get("name")
-            del item["uom_base"]
-            
-    return res.data or []
+    # Flatten responses
+    items = [flatten_item_response(item) for item in (res.data or [])]
+    return items
 
 @router.get("/inventory/lots/resolve/{lot_number}", tags=["Inventory"])
 async def resolve_lot_number(lot_number: str, org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
@@ -241,18 +246,16 @@ async def update_item(
         from app.catering.router import cascade_from_production_cost
         await cascade_from_production_cost(db, org_id, item_id)
         
-    # Fetch with uom_name join
+    # Fetch with uom_name and taxes join
     item_res = db.table("items") \
-        .select("*, uom_base(name)") \
+        .select("*, uom_base(name), taxes(rate)") \
         .eq("id", str(item_id)) \
         .execute()
         
-    updated_item = item_res.data[0]
-    if updated_item.get("uom_base"):
-        updated_item["uom_name"] = updated_item["uom_base"].get("name")
-        del updated_item["uom_base"]
+    if not item_res.data:
+        raise HTTPException(status_code=404, detail="Item not found")
         
-    return updated_item
+    return flatten_item_response(item_res.data[0])
 
 @router.delete("/inventory/items/{item_id}", tags=["Inventory"])
 async def delete_item(item_id: UUID, db=Depends(get_db), _=Depends(require_permission("inventory.manage_items"))):
@@ -263,19 +266,14 @@ async def delete_item(item_id: UUID, db=Depends(get_db), _=Depends(require_permi
 @router.get("/inventory/items/{item_id}", response_model=ItemResponse, tags=["Inventory"])
 async def get_item(item_id: UUID, db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
     res = db.table("items") \
-        .select("*, uom_base(name)") \
+        .select("*, uom_base(name), taxes(rate)") \
         .eq("id", str(item_id)) \
         .execute()
         
     if not res.data:
         raise HTTPException(status_code=404, detail="Item not found")
         
-    item = res.data[0]
-    if item.get("uom_base"):
-        item["uom_name"] = item["uom_base"].get("name")
-        del item["uom_base"]
-        
-    return item
+    return flatten_item_response(res.data[0])
 
 @router.get("/inventory/items/{item_id}/stock", tags=["Inventory"])
 async def get_item_stock(item_id: UUID, db=Depends(get_db), _=Depends(require_permission("inventory.view"))):

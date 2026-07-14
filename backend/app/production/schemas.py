@@ -44,6 +44,7 @@ class ItemCreate(BaseModel):
     margin_multiplier: float = 1.0
     yield_factor: float = 1.0
     production_cost: Optional[float] = None
+    tax_id: Optional[UUID] = None
 
 class ItemResponse(BaseModel):
     id: UUID
@@ -62,6 +63,8 @@ class ItemResponse(BaseModel):
     margin_multiplier: float = 1.0
     yield_factor: float = 1.0
     production_cost: Optional[float] = None
+    tax_id: Optional[UUID] = None
+    tax_rate: Optional[float] = 0.16
 
 class ItemUpdate(BaseModel):
     code: Optional[str] = None
@@ -77,6 +80,7 @@ class ItemUpdate(BaseModel):
     margin_multiplier: Optional[float] = None
     yield_factor: Optional[float] = None
     production_cost: Optional[float] = None
+    tax_id: Optional[UUID] = None
 
 class WarehouseCreate(BaseModel):
     name: str

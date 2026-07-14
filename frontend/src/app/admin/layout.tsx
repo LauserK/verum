@@ -115,6 +115,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             icon: ShoppingCart,
             items: [
                 { href: '/admin/suppliers', labelEs: 'Proveedores', labelEn: 'Suppliers' },
+                { href: '/admin/purchasing/orders', labelEs: 'Órdenes de Compra', labelEn: 'Purchase Orders' },
+                { href: '/admin/settings/purchasing', labelEs: 'Configuración', labelEn: 'Settings' },
             ]
         },
         {

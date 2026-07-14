@@ -36,16 +36,23 @@ export async function fetchWithAuth<T = unknown>(path: string, options: RequestI
     }
 
     const activeOrgId = typeof window !== 'undefined' ? localStorage.getItem('activeOrgId') : null
-
-    const res = await fetch(`${API_URL}${path}`, {
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`,
-            ...(activeOrgId ? { 'X-Org-ID': activeOrgId } : {}),
-            ...options.headers,
-        },
-    })
+    let res: Response
+    try {
+        res = await fetch(`${API_URL}${path}`, {
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session.access_token}`,
+                ...(activeOrgId ? { 'X-Org-ID': activeOrgId } : {}),
+                ...options.headers,
+            },
+        })
+    } catch (err: any) {
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('connection-error'));
+        }
+        throw err;
+    }
 
     if (!res.ok) {
         const errorData = await res.json().catch(() => ({}))

@@ -193,6 +193,9 @@ export default function TeamPage() {
                         <Link href="/admin/settings/roles" className="text-sm font-medium text-text-secondary hover:text-text-primary pb-1 border-b-2 border-transparent hover:border-border transition-colors whitespace-nowrap">
                             Roles y Permisos
                         </Link>
+                        <Link href="/admin/settings/purchasing" className="text-sm font-medium text-text-secondary hover:text-text-primary pb-1 border-b-2 border-transparent hover:border-border transition-colors whitespace-nowrap">
+                            Aprobaciones de Compra
+                        </Link>
                     </div>
                 </div>
                 <button

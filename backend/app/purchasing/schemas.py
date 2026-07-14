@@ -120,3 +120,92 @@ class POApprovalConfigResponse(BaseModel):
 class POApprovalConfigUpdate(BaseModel):
     creator_can_approve_own: Optional[bool] = None
     require_approval_above: Optional[float] = None
+
+# --- Purchase Orders ---
+class PurchaseOrderLineCreate(BaseModel):
+    item_id: UUID
+    qty_ordered_base: float
+    presentation_id: Optional[UUID] = None
+    qty_ordered_presentation: Optional[float] = None
+    unit_cost_base: float
+    unit_cost_presentation: Optional[float] = None
+
+class PurchaseOrderLineResponse(BaseModel):
+    id: UUID
+    po_id: UUID
+    item_id: UUID
+    qty_ordered_base: float
+    presentation_id: Optional[UUID] = None
+    qty_ordered_presentation: Optional[float] = None
+    qty_received_base: float
+    qty_pending_base: float
+    unit_cost_base: float
+    unit_cost_presentation: Optional[float] = None
+    line_total: float
+    status: str
+    item_name: Optional[str] = None
+    uom_name: Optional[str] = None
+    display_qty: float
+    display_unit_cost: float
+
+class PurchaseOrderCreate(BaseModel):
+    supplier_id: UUID
+    price_list_id: Optional[UUID] = None
+    origin_type: str = "manual"
+    catering_request_id: Optional[UUID] = None
+    requested_date: Optional[date] = None
+    promised_date: Optional[date] = None
+    currency: str = "USD"
+    payment_terms_days: int = 0
+    warehouse_id: UUID
+    notes: Optional[str] = None
+    lines: List[PurchaseOrderLineCreate]
+
+class POApprovalResponse(BaseModel):
+    id: UUID
+    po_id: UUID
+    action: str
+    approver_id: Optional[UUID]
+    notes: Optional[str]
+    created_at: datetime
+    approver_name: Optional[str] = None
+
+class PurchaseOrderResponse(BaseModel):
+    id: UUID
+    org_id: UUID
+    po_number: str
+    supplier_id: Optional[UUID] = None
+    price_list_id: Optional[UUID] = None
+    origin_type: Optional[str] = "manual"
+    catering_request_id: Optional[UUID] = None
+    requested_date: Optional[date] = None
+    promised_date: Optional[date] = None
+    currency: Optional[str] = "USD"
+    subtotal: Optional[float] = 0.0
+    tax_amount: Optional[float] = 0.0
+    total: Optional[float] = 0.0
+    payment_terms_days: Optional[int] = 0
+    status: Optional[str] = "draft"
+    sent_at: Optional[datetime] = None
+    sent_by: Optional[UUID] = None
+    sent_to_email: Optional[str] = None
+    warehouse_id: Optional[UUID] = None
+    notes: Optional[str] = None
+    created_by: Optional[UUID] = None
+    created_at: Optional[datetime] = None
+    lines: List[PurchaseOrderLineResponse] = []
+    approvals: List[POApprovalResponse] = []
+    supplier_name: Optional[str] = None
+    warehouse_name: Optional[str] = None
+    created_by_name: Optional[str] = None
+
+class PurchaseOrderUpdate(BaseModel):
+    requested_date: Optional[date] = None
+    promised_date: Optional[date] = None
+    payment_terms_days: Optional[int] = None
+    notes: Optional[str] = None
+    lines: Optional[List[PurchaseOrderLineCreate]] = None
+
+class POApprovalAction(BaseModel):
+    notes: Optional[str] = None
+

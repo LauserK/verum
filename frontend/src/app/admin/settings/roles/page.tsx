@@ -16,6 +16,9 @@ export default function RolesPage() {
               Usuarios
             </Link>
             <span className="text-sm font-semibold text-primary border-b-2 border-primary pb-1 whitespace-nowrap">Roles y Permisos</span>
+            <Link href="/admin/settings/purchasing" className="text-sm font-medium text-text-secondary hover:text-text-primary pb-1 border-b-2 border-transparent hover:border-border transition-colors whitespace-nowrap">
+              Aprobaciones de Compra
+            </Link>
           </div>
         </div>
       </div>

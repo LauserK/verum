@@ -164,4 +164,128 @@ export const purchasingApi = {
 
     updatePOApprovalConfig: (orgId: string, data: POApprovalConfigUpdate): Promise<POApprovalConfigResponse> =>
         fetchWithAuth(`/po-approval-config/${orgId}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+    getPurchaseOrders: (filters?: { status?: string; supplier_id?: string }): Promise<PurchaseOrderResponse[]> => {
+        const params = new URLSearchParams()
+        if (filters?.status) params.append('status', filters.status)
+        if (filters?.supplier_id) params.append('supplier_id', filters.supplier_id)
+        const query = params.toString() ? `?${params.toString()}` : ''
+        return fetchWithAuth(`/purchase-orders${query}`)
+    },
+
+    getPurchaseOrder: (id: string): Promise<PurchaseOrderResponse> =>
+        fetchWithAuth(`/purchase-orders/${id}`),
+
+    createPurchaseOrder: (data: PurchaseOrderCreate): Promise<PurchaseOrderResponse> =>
+        fetchWithAuth('/purchase-orders', { method: 'POST', body: JSON.stringify(data) }),
+
+    updatePurchaseOrder: (id: string, data: PurchaseOrderUpdate): Promise<PurchaseOrderResponse> =>
+        fetchWithAuth(`/purchase-orders/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+
+    submitPurchaseOrder: (id: string): Promise<PurchaseOrderResponse> =>
+        fetchWithAuth(`/purchase-orders/${id}/submit`, { method: 'POST' }),
+
+    approvePurchaseOrder: (id: string, data?: POApprovalAction): Promise<PurchaseOrderResponse> =>
+        fetchWithAuth(`/purchase-orders/${id}/approve`, { method: 'POST', body: data ? JSON.stringify(data) : undefined }),
+
+    rejectPurchaseOrder: (id: string, data: POApprovalAction): Promise<PurchaseOrderResponse> =>
+        fetchWithAuth(`/purchase-orders/${id}/reject`, { method: 'POST', body: JSON.stringify(data) }),
+
+    cancelPurchaseOrder: (id: string): Promise<PurchaseOrderResponse> =>
+        fetchWithAuth(`/purchase-orders/${id}/cancel`, { method: 'POST' }),
 }
+
+export interface PurchaseOrderLineCreate {
+    item_id: string
+    qty_ordered_base: number
+    presentation_id?: string | null
+    qty_ordered_presentation?: number | null
+    unit_cost_base: number
+    unit_cost_presentation?: number | null
+}
+
+export interface PurchaseOrderLineResponse {
+    id: string
+    po_id: string
+    item_id: string
+    qty_ordered_base: number
+    presentation_id: string | null
+    qty_ordered_presentation: number | null
+    qty_received_base: number
+    qty_pending_base: number
+    unit_cost_base: number
+    unit_cost_presentation: number | null
+    line_total: number
+    status: string
+    item_name?: string | null
+    uom_name?: string | null
+    display_qty: number
+    display_unit_cost: number
+}
+
+export interface PurchaseOrderCreate {
+    supplier_id: string
+    price_list_id?: string | null
+    origin_type?: string
+    catering_request_id?: string | null
+    requested_date?: string | null
+    promised_date?: string | null
+    currency?: string
+    payment_terms_days?: number
+    warehouse_id: string
+    notes?: string | null
+    lines: PurchaseOrderLineCreate[]
+}
+
+export interface POApprovalResponse {
+    id: string
+    po_id: string
+    action: string
+    approver_id: string | null
+    notes: string | null
+    created_at: string
+    approver_name?: string | null
+}
+
+export interface PurchaseOrderResponse {
+    id: string
+    org_id: string
+    po_number: string
+    supplier_id: string
+    price_list_id: string | null
+    origin_type: string
+    catering_request_id: string | null
+    requested_date: string | null
+    promised_date: string | null
+    currency: string
+    subtotal: number
+    tax_amount: number
+    total: number
+    payment_terms_days: number
+    status: string
+    sent_at: string | null
+    sent_by: string | null
+    sent_to_email: string | null
+    warehouse_id: string
+    notes: string | null
+    created_by: string
+    created_at: string
+    lines: PurchaseOrderLineResponse[]
+    approvals: POApprovalResponse[]
+    supplier_name?: string | null
+    warehouse_name?: string | null
+    created_by_name?: string | null
+}
+
+export interface PurchaseOrderUpdate {
+    requested_date?: string | null
+    promised_date?: string | null
+    payment_terms_days?: number
+    notes?: string | null
+    lines?: PurchaseOrderLineCreate[]
+}
+
+export interface POApprovalAction {
+    notes?: string | null
+}
+
