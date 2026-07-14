@@ -27,7 +27,6 @@ export const PurchaseOrderPrintTemplate = forwardRef<HTMLDivElement, Props>(({ p
       <div className="flex justify-between items-start border-b border-gray-300 pb-6">
         <div className="space-y-1">
           <h1 className="text-2xl font-bold tracking-tight uppercase text-gray-900">{po.org_name || 'VERUM'}</h1>
-          <p className="text-xs text-gray-500 font-semibold">Sistema de Gestión y Operaciones ERP</p>
           <div className="text-xs text-gray-600 space-y-0.5 pt-2">
             <p><span className="font-bold text-gray-700">RIF:</span> {po.org_tax_id || 'J-40899652-3'}</p>
             <p><span className="font-bold text-gray-700">Dirección:</span> {po.org_address || 'Sede Principal VERUM, Caracas, Venezuela'}</p>
