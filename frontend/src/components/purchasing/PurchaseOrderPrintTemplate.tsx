@@ -26,13 +26,13 @@ export const PurchaseOrderPrintTemplate = forwardRef<HTMLDivElement, Props>(({ p
       {/* Header Info */}
       <div className="flex justify-between items-start border-b border-gray-300 pb-6">
         <div className="space-y-1">
-          <h1 className="text-2xl font-bold tracking-tight uppercase text-gray-900">VERUM</h1>
+          <h1 className="text-2xl font-bold tracking-tight uppercase text-gray-900">{po.org_name || 'VERUM'}</h1>
           <p className="text-xs text-gray-500 font-semibold">Sistema de Gestión y Operaciones ERP</p>
           <div className="text-xs text-gray-600 space-y-0.5 pt-2">
-            <p><span className="font-bold text-gray-700">RIF:</span> J-40899652-3</p>
-            <p><span className="font-bold text-gray-700">Dirección:</span> Sede Principal VERUM, Caracas, Venezuela</p>
-            <p><span className="font-bold text-gray-700">Teléfono:</span> +58 (212) 555-0199</p>
-            <p><span className="font-bold text-gray-700">Email:</span> operaciones@verum.com</p>
+            <p><span className="font-bold text-gray-700">RIF:</span> {po.org_tax_id || 'J-40899652-3'}</p>
+            <p><span className="font-bold text-gray-700">Dirección:</span> {po.org_address || 'Sede Principal VERUM, Caracas, Venezuela'}</p>
+            <p><span className="font-bold text-gray-700">Teléfono:</span> {po.org_phone || '+58 (212) 555-0199'}</p>
+            <p><span className="font-bold text-gray-700">Email:</span> {po.org_email || 'operaciones@verum.com'}</p>
           </div>
         </div>
 

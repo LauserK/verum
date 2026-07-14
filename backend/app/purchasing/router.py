@@ -458,6 +458,28 @@ async def get_purchase_order_by_id_internal(id: UUID, org_id: str, db):
     else:
         po["created_by_name"] = "Creador"
         
+    # Get organization contact info (with fallback in case migration hasn't been run yet)
+    try:
+        org_res = db.table("organizations").select("name, tax_id, address, phone, email").eq("id", str(org_id)).execute()
+        if org_res.data and len(org_res.data) > 0:
+            po["org_name"] = org_res.data[0].get("name")
+            po["org_tax_id"] = org_res.data[0].get("tax_id")
+            po["org_address"] = org_res.data[0].get("address")
+            po["org_phone"] = org_res.data[0].get("phone")
+            po["org_email"] = org_res.data[0].get("email")
+        else:
+            po["org_name"] = "VERUM"
+            po["org_tax_id"] = "J-40899652-3"
+            po["org_address"] = "Sede Principal VERUM, Caracas, Venezuela"
+            po["org_phone"] = "+58 (212) 555-0199"
+            po["org_email"] = "operaciones@verum.com"
+    except Exception:
+        po["org_name"] = "VERUM"
+        po["org_tax_id"] = "J-40899652-3"
+        po["org_address"] = "Sede Principal VERUM, Caracas, Venezuela"
+        po["org_phone"] = "+58 (212) 555-0199"
+        po["org_email"] = "operaciones@verum.com"
+        
     return po
 
 @router.post("/purchase-orders", response_model=PurchaseOrderResponse, status_code=201)

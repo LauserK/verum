@@ -278,6 +278,11 @@ export interface PurchaseOrderResponse {
     supplier_name?: string | null
     warehouse_name?: string | null
     created_by_name?: string | null
+    org_name?: string | null
+    org_tax_id?: string | null
+    org_address?: string | null
+    org_phone?: string | null
+    org_email?: string | null
 }
 
 export interface PurchaseOrderUpdate {

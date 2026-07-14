@@ -198,6 +198,11 @@ class PurchaseOrderResponse(BaseModel):
     supplier_name: Optional[str] = None
     warehouse_name: Optional[str] = None
     created_by_name: Optional[str] = None
+    org_name: Optional[str] = None
+    org_tax_id: Optional[str] = None
+    org_address: Optional[str] = None
+    org_phone: Optional[str] = None
+    org_email: Optional[str] = None
 
 class PurchaseOrderUpdate(BaseModel):
     requested_date: Optional[date] = None
