@@ -17,7 +17,8 @@ from app.purchasing.schemas import (
     POApprovalLimitCreate, POApprovalLimitResponse,
     POApprovalConfigResponse, POApprovalConfigUpdate,
     PurchaseOrderLineCreate, PurchaseOrderLineResponse, PurchaseOrderCreate,
-    POApprovalResponse, PurchaseOrderResponse, PurchaseOrderUpdate, POApprovalAction
+    POApprovalResponse, PurchaseOrderResponse, PurchaseOrderUpdate, POApprovalAction,
+    SupplierInvoiceCreate, SupplierInvoiceResponse, SupplierInvoiceLineResponse, SupplierInvoiceLineCreate
 )
 
 router = APIRouter(prefix="", tags=["Purchasing"])
@@ -369,7 +370,8 @@ async def get_po_approval_config(
         default_config = {
             "org_id": org_id,
             "creator_can_approve_own": False,
-            "require_approval_above": 0.0
+            "require_approval_above": 0.0,
+            "matching_tolerance_pct": 2.0
         }
         ins_res = db.table("po_approval_config").insert(default_config).execute()
         if not ins_res.data:
@@ -395,7 +397,8 @@ async def update_po_approval_config(
         default_config = {
             "org_id": org_id,
             "creator_can_approve_own": False,
-            "require_approval_above": 0.0
+            "require_approval_above": 0.0,
+            "matching_tolerance_pct": 2.0
         }
         db.table("po_approval_config").insert(default_config).execute()
 
@@ -886,5 +889,271 @@ async def send_purchase_order(
         raise HTTPException(status_code=500, detail="Failed to mark purchase order as sent")
 
     return await get_purchase_order_by_id_internal(id, org_id, db)
+
+
+# --- Hydration Helper for Supplier Invoices ---
+async def hydrate_invoice_details(invoice_data, db):
+    is_list = isinstance(invoice_data, list)
+    invoices = invoice_data if is_list else [invoice_data]
+    
+    if not invoices:
+        return invoice_data
+        
+    supplier_ids = [str(inv["supplier_id"]) for inv in invoices if inv.get("supplier_id")]
+    po_ids = [str(inv["po_id"]) for inv in invoices if inv.get("po_id")]
+    invoice_ids = [str(inv["id"]) for inv in invoices]
+    
+    # Fetch suppliers
+    suppliers_map = {}
+    if supplier_ids:
+        sup_res = db.table("suppliers").select("id, name").in_("id", supplier_ids).execute()
+        suppliers_map = {s["id"]: s["name"] for s in (sup_res.data or [])}
+        
+    # Fetch POs
+    pos_map = {}
+    if po_ids:
+        po_res = db.table("purchase_orders").select("id, po_number").in_("id", po_ids).execute()
+        pos_map = {p["id"]: p["po_number"] for p in (po_res.data or [])}
+        
+    # Fetch lines
+    lines_map = {inv_id: [] for inv_id in invoice_ids}
+    if invoice_ids:
+        lines_res = db.table("supplier_invoice_lines").select("*, items(name)").in_("invoice_id", invoice_ids).execute()
+        for line in (lines_res.data or []):
+            line["item_name"] = line.get("items", {}).get("name") if line.get("items") else None
+            lines_map[str(line["invoice_id"])].append(line)
+            
+    for inv in invoices:
+        inv["supplier_name"] = suppliers_map.get(str(inv.get("supplier_id")))
+        inv["po_number"] = pos_map.get(str(inv.get("po_id")))
+        inv["lines"] = lines_map.get(str(inv["id"]), [])
+        
+    return invoices if is_list else invoices[0]
+
+
+# --- Supplier Invoices Endpoints ---
+
+@router.post("/supplier-invoices", response_model=SupplierInvoiceResponse, status_code=201)
+async def create_supplier_invoice(
+    invoice: SupplierInvoiceCreate,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    current_user = Depends(get_current_user),
+    _ = Depends(require_permission("purchasing.invoice"))
+):
+    # 1. Check if invoice number is unique for supplier
+    dup_res = db.table("supplier_invoices") \
+        .select("id") \
+        .eq("org_id", org_id) \
+        .eq("supplier_id", str(invoice.supplier_id)) \
+        .eq("invoice_number", invoice.invoice_number) \
+        .execute()
+    if dup_res.data:
+        raise HTTPException(status_code=400, detail=f"Invoice number '{invoice.invoice_number}' already registered for this supplier")
+
+    # 2. Fetch tolerance percentage
+    tolerance = 2.0
+    config_res = db.table("po_approval_config").select("matching_tolerance_pct").eq("org_id", org_id).execute()
+    if config_res.data and config_res.data[0].get("matching_tolerance_pct") is not None:
+        tolerance = float(config_res.data[0]["matching_tolerance_pct"])
+
+    # 3. Fetch PO lines & Receipt lines
+    po_lines = {}
+    if invoice.po_id:
+        po_lines_res = db.table("purchase_order_lines").select("*").eq("po_id", str(invoice.po_id)).execute()
+        po_lines = {str(l["id"]): l for l in (po_lines_res.data or [])}
+
+    receipt_lines = {}
+    if invoice.receipt_id:
+        rec_lines_res = db.table("inventory_document_lines").select("*").eq("document_id", str(invoice.receipt_id)).execute()
+        receipt_lines = {str(l["po_line_id"]): l for l in (rec_lines_res.data or []) if l.get("po_line_id")}
+
+    # Fetch item names
+    item_ids = list(set(str(line.item_id) for line in invoice.lines))
+    item_names = {}
+    if item_ids:
+        items_res = db.table("items").select("id, name").in_("id", item_ids).execute()
+        item_names = {str(i["id"]): i["name"] for i in (items_res.data or [])}
+
+    # 4. Perform Three-Way Matching calculation
+    matching_status = "matched"
+    mismatches = []
+    partial_matches = []
+    invoice_lines_data = []
+
+    if not invoice.po_id or not invoice.receipt_id:
+        matching_status = "pending"
+        matching_notes = "Falta vincular orden de compra o recepción para realizar la conciliación de tres vías."
+        for line in invoice.lines:
+            invoice_lines_data.append({
+                "po_line_id": str(line.po_line_id) if line.po_line_id else None,
+                "item_id": str(line.item_id),
+                "qty_invoiced_base": line.qty_invoiced_base,
+                "unit_cost_base": line.unit_cost_base,
+                "line_total": line.line_total,
+                "diff_vs_po_base": 0.0,
+                "diff_vs_receipt_base": 0.0
+            })
+    else:
+        for line in invoice.lines:
+            po_line = po_lines.get(str(line.po_line_id)) if line.po_line_id else None
+            rec_line = receipt_lines.get(str(line.po_line_id)) if line.po_line_id else None
+
+            qty_ordered = float(po_line["qty_ordered_base"]) if po_line else line.qty_invoiced_base
+            unit_cost_ordered = float(po_line["unit_cost_base"]) if po_line else line.unit_cost_base
+            qty_received = float(rec_line["qty_base"]) if rec_line else line.qty_invoiced_base
+
+            diff_po = line.qty_invoiced_base - qty_ordered
+            diff_rec = line.qty_invoiced_base - qty_received
+
+            pct_diff_cost = (abs(line.unit_cost_base - unit_cost_ordered) / unit_cost_ordered * 100.0) if unit_cost_ordered > 0 else 0.0
+            pct_diff_qty_po = (abs(diff_po) / qty_ordered * 100.0) if qty_ordered > 0 else 0.0
+            pct_diff_qty_rec = (abs(diff_rec) / qty_received * 100.0) if qty_received > 0 else 0.0
+
+            exceeds_tolerance = (
+                pct_diff_cost > tolerance or 
+                pct_diff_qty_po > tolerance or 
+                pct_diff_qty_rec > tolerance
+            )
+
+            is_partial = (
+                (0.0 < pct_diff_cost <= tolerance) or
+                (0.0 < pct_diff_qty_po <= tolerance) or
+                (0.0 < pct_diff_qty_rec <= tolerance)
+            )
+
+            item_name = item_names.get(str(line.item_id), f"item {line.item_id}")
+            if exceeds_tolerance:
+                mismatches.append(f"Línea {item_name}: dif costo {pct_diff_cost:.2f}%, dif cant PO {pct_diff_qty_po:.2f}%, dif cant Rec {pct_diff_qty_rec:.2f}%")
+            elif is_partial:
+                partial_matches.append(f"Línea {item_name}: pequeña desviación dentro de tolerancia")
+
+            invoice_lines_data.append({
+                "po_line_id": str(line.po_line_id) if line.po_line_id else None,
+                "item_id": str(line.item_id),
+                "qty_invoiced_base": line.qty_invoiced_base,
+                "unit_cost_base": line.unit_cost_base,
+                "line_total": line.line_total,
+                "diff_vs_po_base": diff_po,
+                "diff_vs_receipt_base": diff_rec
+            })
+
+        if mismatches:
+            matching_status = "mismatch"
+            matching_notes = "Discrepancias fuera de tolerancia:\n" + "\n".join(mismatches)
+        elif partial_matches:
+            matching_status = "partial_match"
+            matching_notes = "Desviaciones menores dentro de tolerancia:\n" + "\n".join(partial_matches)
+        else:
+            matching_status = "matched"
+            matching_notes = "Conciliación de tres vías exitosa."
+
+    # 5. Insert invoice header
+    header_data = {
+        "org_id": org_id,
+        "supplier_id": str(invoice.supplier_id),
+        "po_id": str(invoice.po_id) if invoice.po_id else None,
+        "receipt_id": str(invoice.receipt_id) if invoice.receipt_id else None,
+        "invoice_number": invoice.invoice_number,
+        "invoice_date": invoice.invoice_date.isoformat(),
+        "due_date": invoice.due_date.isoformat() if invoice.due_date else None,
+        "currency": invoice.currency,
+        "subtotal": invoice.subtotal,
+        "tax_amount": invoice.tax_amount,
+        "total": invoice.total,
+        "matching_status": matching_status,
+        "matching_notes": matching_notes,
+        "payment_status": "unpaid",
+        "pdf_url": invoice.pdf_url,
+        "created_by": str(current_user.id)
+    }
+
+    header_res = db.table("supplier_invoices").insert(header_data).execute()
+    if not header_res.data:
+        raise HTTPException(status_code=500, detail="Failed to create supplier invoice header")
+
+    invoice_id = header_res.data[0]["id"]
+
+    # 6. Insert lines
+    for line_data in invoice_lines_data:
+        line_data["invoice_id"] = invoice_id
+        db.table("supplier_invoice_lines").insert(line_data).execute()
+
+    # 7. Update PO status to invoiced if no mismatch
+    if matching_status != "mismatch" and invoice.po_id:
+        db.table("purchase_orders").update({"status": "invoiced"}).eq("id", str(invoice.po_id)).execute()
+
+    return await hydrate_invoice_details(header_res.data[0], db)
+
+@router.get("/supplier-invoices", response_model=List[SupplierInvoiceResponse])
+async def list_supplier_invoices(
+    supplier_id: Optional[UUID] = None,
+    payment_status: Optional[str] = None,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("purchasing.view"))
+):
+    query = db.table("supplier_invoices").select("*").eq("org_id", org_id)
+    if supplier_id:
+        query = query.eq("supplier_id", str(supplier_id))
+    if payment_status:
+        query = query.eq("payment_status", payment_status)
+    
+    res = query.execute()
+    return await hydrate_invoice_details(res.data or [], db)
+
+@router.get("/supplier-invoices/{id}", response_model=SupplierInvoiceResponse)
+async def get_supplier_invoice(
+    id: UUID,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("purchasing.view"))
+):
+    res = db.table("supplier_invoices").select("*").eq("id", str(id)).eq("org_id", org_id).execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Supplier invoice not found")
+    
+    return await hydrate_invoice_details(res.data[0], db)
+
+@router.patch("/supplier-invoices/{id}/mark-exported", response_model=SupplierInvoiceResponse)
+async def mark_invoice_exported(
+    id: UUID,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("purchasing.pay"))
+):
+    res = db.table("supplier_invoices").select("payment_status").eq("id", str(id)).eq("org_id", org_id).execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Supplier invoice not found")
+    
+    upd_res = db.table("supplier_invoices").update({
+        "payment_status": "exported",
+        "exported_at": datetime.now(CARACAS_TZ).isoformat()
+    }).eq("id", str(id)).execute()
+    
+    if not upd_res.data:
+        raise HTTPException(status_code=500, detail="Failed to mark invoice as exported")
+        
+    return await hydrate_invoice_details(upd_res.data[0], db)
+
+@router.patch("/supplier-invoices/{id}/mark-paid", response_model=SupplierInvoiceResponse)
+async def mark_invoice_paid(
+    id: UUID,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("purchasing.pay"))
+):
+    res = db.table("supplier_invoices").select("payment_status").eq("id", str(id)).eq("org_id", org_id).execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Supplier invoice not found")
+    
+    upd_res = db.table("supplier_invoices").update({
+        "payment_status": "paid"
+    }).eq("id", str(id)).execute()
+    
+    if not upd_res.data:
+        raise HTTPException(status_code=500, detail="Failed to mark invoice as paid")
+        
+    return await hydrate_invoice_details(upd_res.data[0], db)
 
 

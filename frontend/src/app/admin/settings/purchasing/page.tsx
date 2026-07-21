@@ -25,9 +25,11 @@ export default function PurchasingSettingsPage() {
   const [config, setConfig] = useState<{
     creator_can_approve_own: boolean;
     require_approval_above: number;
+    matching_tolerance_pct: number;
   }>({
     creator_can_approve_own: false,
     require_approval_above: 0,
+    matching_tolerance_pct: 2.0,
   });
 
   const [loading, setLoading] = useState(true);
@@ -59,6 +61,7 @@ export default function PurchasingSettingsPage() {
           setConfig({
             creator_can_approve_own: configData.creator_can_approve_own,
             require_approval_above: configData.require_approval_above,
+            matching_tolerance_pct: configData.matching_tolerance_pct ?? 2.0,
           });
         }
       } catch (error) {
@@ -176,6 +179,23 @@ export default function PurchasingSettingsPage() {
                 min="0"
               />
               <span className="text-xs text-text-secondary">0 significa que todas las POs requieren aprobación.</span>
+            </div>
+
+            <div className="space-y-1.5">
+              <label htmlFor="matching-tolerance" className="text-sm font-medium text-text-primary">
+                Tolerancia de Conciliación de Facturas (%)
+              </label>
+              <input
+                id="matching-tolerance"
+                type="number"
+                step="0.1"
+                value={config.matching_tolerance_pct}
+                onChange={(e) => setConfig({ ...config, matching_tolerance_pct: Number(e.target.value) })}
+                className="w-full bg-background-input border border-border rounded-lg px-3 py-2 text-text-primary text-sm focus:outline-none focus:border-primary"
+                min="0"
+                max="100"
+              />
+              <span className="text-xs text-text-secondary">Diferencias mayores a este % marcarán la factura como Mismatch.</span>
             </div>
 
             <button

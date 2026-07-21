@@ -913,7 +913,9 @@ async def create_inventory_document(
         "supplier": doc.supplier,
         "reason": doc.reason,
         "notes": doc.notes,
-        "created_by": user.id
+        "created_by": user.id,
+        "po_id": str(doc.po_id) if doc.po_id else None,
+        "supplier_id": str(doc.supplier_id) if doc.supplier_id else None
     }
     
     res = db.table("inventory_documents").insert(header_data).execute()
@@ -932,6 +934,14 @@ async def create_inventory_document(
                 
         qty_base = float(line.qty_presentation) * factor
         
+        po_qty_ordered_base = None
+        discrepancy_base = None
+        if line.po_line_id:
+            pol_res = db.table("purchase_order_lines").select("qty_ordered_base").eq("id", str(line.po_line_id)).execute()
+            if pol_res.data:
+                po_qty_ordered_base = float(pol_res.data[0]["qty_ordered_base"])
+                discrepancy_base = qty_base - po_qty_ordered_base
+                
         line_data = {
             "document_id": doc_id,
             "item_id": str(line.item_id),
@@ -941,7 +951,10 @@ async def create_inventory_document(
             "unit_cost_presentation": line.unit_cost_presentation,
             "unit_cost_base": (line.unit_cost_presentation / factor) if (line.unit_cost_presentation is not None and factor > 0) else None,
             "lot_number": line.lot_number,
-            "expiry_date": line.expiry_date
+            "expiry_date": line.expiry_date,
+            "po_line_id": str(line.po_line_id) if line.po_line_id else None,
+            "po_qty_ordered_base": po_qty_ordered_base,
+            "discrepancy_base": discrepancy_base
         }
         db.table("inventory_document_lines").insert(line_data).execute()
 
@@ -1067,6 +1080,14 @@ async def update_inventory_document(
                     
             qty_base = float(line.qty_presentation) * factor
             
+            po_qty_ordered_base = None
+            discrepancy_base = None
+            if line.po_line_id:
+                pol_res = db.table("purchase_order_lines").select("qty_ordered_base").eq("id", str(line.po_line_id)).execute()
+                if pol_res.data:
+                    po_qty_ordered_base = float(pol_res.data[0]["qty_ordered_base"])
+                    discrepancy_base = qty_base - po_qty_ordered_base
+            
             line_data = {
                 "document_id": str(id),
                 "item_id": str(line.item_id),
@@ -1076,7 +1097,10 @@ async def update_inventory_document(
                 "unit_cost_presentation": line.unit_cost_presentation,
                 "unit_cost_base": (line.unit_cost_presentation / factor) if (line.unit_cost_presentation is not None and factor > 0) else None,
                 "lot_number": line.lot_number,
-                "expiry_date": line.expiry_date
+                "expiry_date": line.expiry_date,
+                "po_line_id": str(line.po_line_id) if line.po_line_id else None,
+                "po_qty_ordered_base": po_qty_ordered_base,
+                "discrepancy_base": discrepancy_base
             }
             db.table("inventory_document_lines").insert(line_data).execute()
             
@@ -1173,6 +1197,48 @@ async def process_inventory_document(
             item_uuid = UUID(str(line["item_id"]))
             await update_item_cost_and_cascade(db, org_id, item_uuid, float(line["unit_cost_base"] or 0))
             
+        # Update purchase order if linked
+        if header.get("po_id"):
+            po_id = header["po_id"]
+            for line in lines:
+                if line.get("po_line_id"):
+                    po_line_id = line["po_line_id"]
+                    # Get current PO line quantities
+                    pol_res = db.table("purchase_order_lines").select("qty_ordered_base, qty_received_base").eq("id", str(po_line_id)).execute()
+                    if pol_res.data:
+                        po_line_data = pol_res.data[0]
+                        qty_ordered = float(po_line_data["qty_ordered_base"])
+                        curr_received = float(po_line_data["qty_received_base"] or 0)
+                        
+                        new_received = curr_received + float(line["qty_base"])
+                        new_pending = max(0.0, qty_ordered - new_received)
+                        
+                        # Determine line status
+                        line_status = 'received' if new_pending <= 0 else 'partially_received'
+                        
+                        db.table("purchase_order_lines").update({
+                            "qty_received_base": new_received,
+                            "qty_pending_base": new_pending,
+                            "status": line_status
+                        }).eq("id", str(po_line_id)).execute()
+            
+            # Recalculate global PO status
+            all_lines_res = db.table("purchase_order_lines").select("qty_ordered_base, qty_received_base, status").eq("po_id", str(po_id)).execute()
+            if all_lines_res.data:
+                total_lines = len(all_lines_res.data)
+                received_or_cancelled_count = sum(1 for l in all_lines_res.data if l["status"] in ('received', 'cancelled'))
+                partially_received_count = sum(1 for l in all_lines_res.data if l["status"] == 'partially_received')
+                total_received_qty = sum(float(l["qty_received_base"] or 0) for l in all_lines_res.data)
+                
+                if received_or_cancelled_count == total_lines:
+                    global_status = 'received'
+                elif partially_received_count > 0 or total_received_qty > 0:
+                    global_status = 'partially_received'
+                else:
+                    global_status = 'sent'
+                
+                db.table("purchase_orders").update({"status": global_status}).eq("id", str(po_id)).execute()
+                
         # Update status
         db.table("inventory_documents").update({
             "status": "confirmed",

@@ -116,6 +116,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             items: [
                 { href: '/admin/suppliers', labelEs: 'Proveedores', labelEn: 'Suppliers' },
                 { href: '/admin/purchasing/orders', labelEs: 'Órdenes de Compra', labelEn: 'Purchase Orders' },
+                { href: '/admin/purchasing/invoices', labelEs: 'Facturas de Proveedores', labelEn: 'Supplier Invoices' },
                 { href: '/admin/settings/purchasing', labelEs: 'Configuración', labelEn: 'Settings' },
             ]
         },

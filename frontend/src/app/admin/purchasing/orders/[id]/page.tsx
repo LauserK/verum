@@ -303,6 +303,26 @@ export default function PurchaseOrderDetailPage() {
               <Send className="h-4 w-4" /> Marcar como Enviada
             </button>
           )}
+
+          {(po.status === 'sent' || po.status === 'partially_received') && (
+            <button
+              onClick={() => router.push(`/admin/purchasing/orders/${po.id}/receive`)}
+              disabled={actionLoading}
+              className="flex items-center gap-2 bg-primary text-text-inverse px-5 h-11 rounded-xl text-sm font-bold hover:bg-primary-hover active:scale-95 transition-all disabled:opacity-50"
+            >
+              <ShoppingCart className="h-4 w-4" /> Registrar Recepción
+            </button>
+          )}
+
+          {(po.status === 'sent' || po.status === 'partially_received' || po.status === 'received') && (
+            <button
+              onClick={() => router.push(`/admin/purchasing/invoices/new?po_id=${po.id}`)}
+              disabled={actionLoading}
+              className="flex items-center gap-2 bg-success text-text-inverse px-5 h-11 rounded-xl text-sm font-bold hover:bg-success/90 active:scale-95 transition-all disabled:opacity-50"
+            >
+              <FileSpreadsheet className="h-4 w-4" /> Registrar Factura
+            </button>
+          )}
         </div>
       </div>
 

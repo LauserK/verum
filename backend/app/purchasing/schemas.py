@@ -116,10 +116,12 @@ class POApprovalConfigResponse(BaseModel):
     org_id: UUID
     creator_can_approve_own: bool
     require_approval_above: float
+    matching_tolerance_pct: float
 
 class POApprovalConfigUpdate(BaseModel):
     creator_can_approve_own: Optional[bool] = None
     require_approval_above: Optional[float] = None
+    matching_tolerance_pct: Optional[float] = None
 
 # --- Purchase Orders ---
 class PurchaseOrderLineCreate(BaseModel):
@@ -213,4 +215,62 @@ class PurchaseOrderUpdate(BaseModel):
 
 class POApprovalAction(BaseModel):
     notes: Optional[str] = None
+
+# --- Supplier Invoices ---
+class SupplierInvoiceLineCreate(BaseModel):
+    po_line_id: Optional[UUID] = None
+    item_id: UUID
+    qty_invoiced_base: float
+    unit_cost_base: float
+    line_total: float
+
+class SupplierInvoiceLineResponse(BaseModel):
+    id: UUID
+    invoice_id: UUID
+    po_line_id: Optional[UUID] = None
+    item_id: UUID
+    qty_invoiced_base: float
+    unit_cost_base: float
+    line_total: float
+    diff_vs_po_base: Optional[float] = None
+    diff_vs_receipt_base: Optional[float] = None
+    item_name: Optional[str] = None
+
+class SupplierInvoiceCreate(BaseModel):
+    supplier_id: UUID
+    po_id: Optional[UUID] = None
+    receipt_id: Optional[UUID] = None
+    invoice_number: str
+    invoice_date: date
+    due_date: Optional[date] = None
+    currency: str = "USD"
+    subtotal: float
+    tax_amount: float = 0.0
+    total: float
+    pdf_url: Optional[str] = None
+    lines: List[SupplierInvoiceLineCreate]
+
+class SupplierInvoiceResponse(BaseModel):
+    id: UUID
+    org_id: UUID
+    supplier_id: UUID
+    po_id: Optional[UUID] = None
+    receipt_id: Optional[UUID] = None
+    invoice_number: str
+    invoice_date: date
+    due_date: Optional[date] = None
+    currency: str
+    subtotal: float
+    tax_amount: float
+    total: float
+    matching_status: str
+    matching_notes: Optional[str] = None
+    payment_status: str
+    exported_at: Optional[datetime] = None
+    pdf_url: Optional[str] = None
+    created_by: Optional[UUID] = None
+    created_at: datetime
+    lines: List[SupplierInvoiceLineResponse] = []
+    supplier_name: Optional[str] = None
+    po_number: Optional[str] = None
 

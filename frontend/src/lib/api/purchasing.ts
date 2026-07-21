@@ -121,11 +121,13 @@ export interface POApprovalConfigResponse {
     org_id: string
     creator_can_approve_own: boolean
     require_approval_above: number
+    matching_tolerance_pct: number
 }
 
 export interface POApprovalConfigUpdate {
     creator_can_approve_own?: boolean
     require_approval_above?: number
+    matching_tolerance_pct?: number
 }
 
 export const purchasingApi = {
@@ -196,6 +198,87 @@ export const purchasingApi = {
 
     sendPurchaseOrder: (id: string): Promise<PurchaseOrderResponse> =>
         fetchWithAuth(`/purchase-orders/${id}/send`, { method: 'POST' }),
+
+    createSupplierInvoice: (data: SupplierInvoiceCreate): Promise<SupplierInvoiceResponse> =>
+        fetchWithAuth('/supplier-invoices', { method: 'POST', body: JSON.stringify(data) }),
+
+    getSupplierInvoices: (filters?: { supplier_id?: string; payment_status?: string }): Promise<SupplierInvoiceResponse[]> => {
+        const params = new URLSearchParams()
+        if (filters?.supplier_id) params.append('supplier_id', filters.supplier_id)
+        if (filters?.payment_status) params.append('payment_status', filters.payment_status)
+        const query = params.toString() ? `?${params.toString()}` : ''
+        return fetchWithAuth(`/supplier-invoices${query}`)
+    },
+
+    getSupplierInvoice: (id: string): Promise<SupplierInvoiceResponse> =>
+        fetchWithAuth(`/supplier-invoices/${id}`),
+
+    markInvoiceExported: (id: string): Promise<SupplierInvoiceResponse> =>
+        fetchWithAuth(`/supplier-invoices/${id}/mark-exported`, { method: 'PATCH' }),
+
+    markInvoicePaid: (id: string): Promise<SupplierInvoiceResponse> =>
+        fetchWithAuth(`/supplier-invoices/${id}/mark-paid`, { method: 'PATCH' }),
+}
+
+export interface SupplierInvoiceLineCreate {
+    po_line_id?: string | null
+    item_id: string
+    qty_invoiced_base: number
+    unit_cost_base: number
+    line_total: number
+}
+
+export interface SupplierInvoiceLineResponse {
+    id: string
+    invoice_id: string
+    po_line_id: string | null
+    item_id: string
+    qty_invoiced_base: number
+    unit_cost_base: number
+    line_total: number
+    diff_vs_po_base?: number | null
+    diff_vs_receipt_base?: number | null
+    item_name?: string | null
+}
+
+export interface SupplierInvoiceCreate {
+    supplier_id: string
+    po_id?: string | null
+    receipt_id?: string | null
+    invoice_number: string
+    invoice_date: string
+    due_date?: string | null
+    currency?: string
+    subtotal: number
+    tax_amount?: number
+    total: number
+    pdf_url?: string | null
+    lines: SupplierInvoiceLineCreate[]
+}
+
+export interface SupplierInvoiceResponse {
+    id: string
+    org_id: string
+    supplier_id: string
+    po_id: string | null
+    receipt_id: string | null
+    invoice_number: string
+    invoice_date: string
+    due_date: string | null
+    currency: string
+    subtotal: number
+    tax_amount: number
+    total: number
+    matching_status: 'pending' | 'matched' | 'partial_match' | 'mismatch'
+    matching_notes: string | null
+    payment_status: 'unpaid' | 'exported' | 'paid'
+    exported_at: string | null
+    pdf_url: string | null
+    created_by: string | null
+    created_at: string
+    lines: SupplierInvoiceLineResponse[]
+    supplier_name?: string | null
+    po_number?: string | null
 }
 
 export interface PurchaseOrderLineCreate {

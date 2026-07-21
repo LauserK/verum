@@ -154,6 +154,7 @@ class InventoryDocumentLineSchema(BaseModel):
     unit_cost_presentation: Optional[float] = None
     lot_number: Optional[str] = None
     expiry_date: Optional[str] = None
+    po_line_id: Optional[UUID] = None
 
 class InventoryDocumentCreate(BaseModel):
     document_type: Literal['receipt', 'issue', 'transfer']
@@ -164,6 +165,8 @@ class InventoryDocumentCreate(BaseModel):
     notes: Optional[str] = None
     auto_confirm: Optional[bool] = False
     lines: List[InventoryDocumentLineSchema]
+    po_id: Optional[UUID] = None
+    supplier_id: Optional[UUID] = None
 
 class InventoryDocumentUpdate(BaseModel):
     warehouse_id: Optional[UUID] = None
@@ -172,6 +175,8 @@ class InventoryDocumentUpdate(BaseModel):
     reason: Optional[str] = None
     notes: Optional[str] = None
     lines: Optional[List[InventoryDocumentLineSchema]] = None
+    po_id: Optional[UUID] = None
+    supplier_id: Optional[UUID] = None
 
 class InventoryDocumentLineResponse(BaseModel):
     id: UUID
@@ -188,6 +193,9 @@ class InventoryDocumentLineResponse(BaseModel):
     expiry_date: Optional[str] = None
     qty_received_presentation: Optional[float] = None
     qty_received_base: Optional[float] = None
+    po_line_id: Optional[UUID] = None
+    po_qty_ordered_base: Optional[float] = None
+    discrepancy_base: Optional[float] = None
 
 class InventoryDocumentResponse(BaseModel):
     id: UUID
@@ -211,6 +219,8 @@ class InventoryDocumentResponse(BaseModel):
     cancelled_name: Optional[str] = None
     cancelled_at: Optional[datetime] = None
     created_at: datetime
+    po_id: Optional[UUID] = None
+    supplier_id: Optional[UUID] = None
 
 class TransferReceiveLineSchema(BaseModel):
     id: UUID
