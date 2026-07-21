@@ -351,9 +351,9 @@ export default function MobileInventoryCount() {
   }
 
   const addLine = () => {
-    if (!selectedItem || !qtyInput) return
+    if (!selectedItem || qtyInput === '') return
     const qty = parseFloat(qtyInput)
-    if (isNaN(qty) || qty <= 0) return
+    if (isNaN(qty) || qty < 0) return
 
     const selectedPres = presentations.find(p => p.id === selectedPresId)
     const factor = selectedPres ? parseFloat(selectedPres.conversion_factor) : 1.0
