@@ -153,6 +153,10 @@ export default function InventoryDocumentsPage() {
       const payload = {
         ...newDoc,
         destination_warehouse_id: newDoc.destination_warehouse_id || null,
+        lines: newDoc.lines.map(line => ({
+          ...line,
+          presentation_id: line.presentation_id || null
+        }))
       };
       await adminApi.createInventoryDocument(payload);
       setShowCreateModal(false);
