@@ -150,7 +150,11 @@ export default function InventoryDocumentsPage() {
 
     setSaving(true);
     try {
-      await adminApi.createInventoryDocument(newDoc);
+      const payload = {
+        ...newDoc,
+        destination_warehouse_id: newDoc.destination_warehouse_id || null,
+      };
+      await adminApi.createInventoryDocument(payload);
       setShowCreateModal(false);
       resetNewDoc();
       await loadData();
