@@ -147,6 +147,10 @@ export default function InventoryDocumentsPage() {
       setErrorModal({ isOpen: true, message: 'Debe agregar al menos una línea al documento' });
       return;
     }
+    if (newDoc.lines.some(l => !l.item_id)) {
+      setErrorModal({ isOpen: true, message: 'Debe seleccionar un artículo para todas las líneas del documento' });
+      return;
+    }
 
     setSaving(true);
     try {
