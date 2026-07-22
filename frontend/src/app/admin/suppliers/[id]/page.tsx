@@ -19,7 +19,7 @@ export default function SupplierDetailPage() {
   const [priceLists, setPriceLists] = useState<SupplierPriceListResponse[]>([]);
   const [catalogItems, setCatalogItems] = useState<any[]>([]); // Catalog items from inventory
 
-  const [activeTab, setActiveTab] = useState<'info' | 'items' | 'prices'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'items' | 'prices' | 'evaluations'>('info');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -29,6 +29,17 @@ export default function SupplierDetailPage() {
   const [showAddContact, setShowAddContact] = useState(false);
   const [showLinkItem, setShowLinkItem] = useState(false);
   const [showAddPriceList, setShowAddPriceList] = useState(false);
+  const [showAddEvaluation, setShowAddEvaluation] = useState(false);
+
+  // M31 States
+  const [metrics, setMetrics] = useState<any | null>(null);
+  const [evaluations, setEvaluations] = useState<any[]>([]);
+  const [evalPeriodStart, setEvalPeriodStart] = useState('');
+  const [evalPeriodEnd, setEvalPeriodEnd] = useState('');
+  const [manualQuality, setManualQuality] = useState(5);
+  const [manualCommunication, setManualCommunication] = useState(5);
+  const [manualFlexibility, setManualFlexibility] = useState(5);
+  const [evalNotes, setEvalNotes] = useState('');
 
   // Form Submissions
   const [newContact, setNewContact] = useState({
@@ -76,8 +87,15 @@ export default function SupplierDetailPage() {
 
         const catItems = await adminApi.getInventoryItems();
         setCatalogItems(catItems || []);
+
+        // Cargar Evaluaciones y Métricas
+        const evalsData = await adminApi.getSupplierEvaluations(supplierId);
+        setEvaluations(evalsData || []);
+
+        const metricsData = await adminApi.getSupplierMetrics(supplierId);
+        setMetrics(metricsData || null);
       } catch (err) {
-        console.error('Error fetching supplier details:', err);
+        console.error('Error fetching supplier details/metrics:', err);
         setError('No se pudo cargar la información del proveedor');
       } finally {
         setLoading(false);
@@ -209,6 +227,47 @@ export default function SupplierDetailPage() {
     }
   };
 
+  const handleCreateEvaluation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!evalPeriodStart || !evalPeriodEnd || !supplier) return;
+
+    setSubmitting(true);
+    setFormError(null);
+    try {
+      await adminApi.createSupplierEvaluation(supplier.id, {
+        period_start: evalPeriodStart,
+        period_end: evalPeriodEnd,
+        manual_quality: manualQuality,
+        manual_communication: manualCommunication,
+        manual_flexibility: manualFlexibility,
+        notes: evalNotes || null
+      });
+
+      // Recargar datos
+      const evalsData = await adminApi.getSupplierEvaluations(supplierId);
+      setEvaluations(evalsData || []);
+      
+      const metricsData = await adminApi.getSupplierMetrics(supplierId);
+      setMetrics(metricsData || null);
+
+      const supData = await adminApi.getSupplier(supplierId);
+      setSupplier(supData);
+
+      setShowAddEvaluation(false);
+      setEvalPeriodStart('');
+      setEvalPeriodEnd('');
+      setManualQuality(5);
+      setManualCommunication(5);
+      setManualFlexibility(5);
+      setEvalNotes('');
+    } catch (err: any) {
+      console.error(err);
+      setFormError(err?.detail || 'Error al guardar la evaluación.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] gap-2">
@@ -304,6 +363,14 @@ export default function SupplierDetailPage() {
           }`}
         >
           Catálogos de precios ({priceLists.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('evaluations')}
+          className={`pb-3 text-sm font-semibold whitespace-nowrap transition-colors border-b-2 px-1 ${
+            activeTab === 'evaluations' ? 'border-primary text-primary' : 'border-transparent text-text-secondary hover:text-text-primary'
+          }`}
+        >
+          Evaluaciones ({evaluations.length})
         </button>
       </div>
 
@@ -816,6 +883,293 @@ export default function SupplierDetailPage() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Tab: Evaluations */}
+      {activeTab === 'evaluations' && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-text-primary text-sm uppercase text-text-muted">
+              Evaluación de Desempeño
+            </h3>
+            <button
+              onClick={() => { setShowAddEvaluation(true); setFormError(null); }}
+              className="flex items-center justify-center gap-1 bg-primary text-text-inverse px-4 h-9 rounded-xl text-xs font-bold hover:bg-primary-hover transition-all active:scale-95 shadow-md shadow-primary/10"
+            >
+              <Plus className="h-4 w-4" /> Nueva Evaluación
+            </button>
+          </div>
+
+          {/* Metrics Overview Cards */}
+          {metrics && (
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+              <div className="bg-background-card border border-border rounded-2xl p-5 space-y-2">
+                <span className="text-xs text-text-secondary uppercase font-bold">Puntualidad de Entrega</span>
+                <div className="text-2xl font-mono font-bold text-text-primary">
+                  {metrics.auto_on_time_pct.toFixed(1)}%
+                </div>
+                <div className="text-[10px] text-text-secondary">Entregas recibidas a tiempo</div>
+              </div>
+              <div className="bg-background-card border border-border rounded-2xl p-5 space-y-2">
+                <span className="text-xs text-text-secondary uppercase font-bold">Exactitud de Cantidad</span>
+                <div className="text-2xl font-mono font-bold text-text-primary">
+                  {metrics.auto_qty_accuracy_pct.toFixed(1)}%
+                </div>
+                <div className="text-[10px] text-text-secondary">Líneas con discrepancia cero</div>
+              </div>
+              <div className="bg-background-card border border-border rounded-2xl p-5 space-y-2">
+                <span className="text-xs text-text-secondary uppercase font-bold">Tasa de Devoluciones</span>
+                <div className="text-2xl font-mono font-bold text-text-primary">
+                  {metrics.auto_return_rate_pct.toFixed(1)}%
+                </div>
+                <div className="text-[10px] text-text-secondary">Tasa de artículos rechazados</div>
+              </div>
+              <div className="bg-background-card border border-border rounded-2xl p-5 space-y-2 bg-gradient-to-br from-primary/5 to-transparent">
+                <span className="text-xs text-text-secondary uppercase font-bold">Score Automático</span>
+                <div className="text-2xl font-mono font-bold text-primary flex items-center gap-1.5">
+                  <Star className="h-5 w-5 fill-primary text-primary shrink-0" />
+                  {metrics.auto_score.toFixed(1)} / 5.0
+                </div>
+                <div className="text-[10px] text-text-secondary">Ponderación automática (60%)</div>
+              </div>
+            </div>
+          )}
+
+          {/* Trend Graph */}
+          {evaluations.length > 0 && (
+            <div className="bg-background-card border border-border rounded-2xl p-6 space-y-4">
+              <div className="text-xs font-bold uppercase text-text-secondary tracking-wider">Tendencia del Score Final</div>
+              <div className="w-full h-48 bg-surface-raised/10 rounded-xl border border-border/40 p-4 flex items-center justify-center">
+                <svg className="w-full h-full" viewBox="0 0 500 150">
+                  {/* Grid Lines */}
+                  <line x1="0" y1="20" x2="500" y2="20" stroke="var(--border)" strokeDasharray="3,3" />
+                  <line x1="0" y1="75" x2="500" y2="75" stroke="var(--border)" strokeDasharray="3,3" />
+                  <line x1="0" y1="130" x2="500" y2="130" stroke="var(--border)" strokeDasharray="3,3" />
+                  
+                  {/* Polyline */}
+                  {(() => {
+                    const sortedEvals = [...evaluations].reverse();
+                    const points = sortedEvals.map((e, idx) => {
+                      const x = sortedEvals.length > 1 ? (idx / (sortedEvals.length - 1)) * 460 + 20 : 250;
+                      // score map: 5.0 -> 20px, 0.0 -> 130px
+                      const y = 130 - (e.final_score / 5.0) * 110;
+                      return `${x},${y}`;
+                    }).join(' ');
+                    
+                    return (
+                      <>
+                        <polyline
+                          fill="none"
+                          stroke="var(--primary)"
+                          strokeWidth="3"
+                          points={points}
+                        />
+                        {sortedEvals.map((e, idx) => {
+                          const x = sortedEvals.length > 1 ? (idx / (sortedEvals.length - 1)) * 460 + 20 : 250;
+                          const y = 130 - (e.final_score / 5.0) * 110;
+                          return (
+                            <g key={e.id} className="group cursor-pointer">
+                              <circle
+                                cx={x}
+                                cy={y}
+                                r="5"
+                                className="fill-primary stroke-background-card stroke-2 hover:r-7 transition-all"
+                              />
+                              <text
+                                x={x}
+                                y={y - 10}
+                                textAnchor="middle"
+                                className="text-[10px] font-bold fill-text-primary"
+                              >
+                                {e.final_score.toFixed(1)}
+                              </text>
+                            </g>
+                          );
+                        })}
+                      </>
+                    );
+                  })()}
+                </svg>
+              </div>
+            </div>
+          )}
+
+          {/* Evaluations list */}
+          <div className="space-y-4">
+            <h4 className="text-xs font-bold uppercase text-text-secondary tracking-wider">Historial de Evaluaciones</h4>
+            {evaluations.length === 0 ? (
+              <div className="bg-background-card border border-border rounded-2xl p-8 text-center text-sm text-text-secondary">
+                No hay evaluaciones registradas para este proveedor.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {evaluations.map((e) => (
+                  <div key={e.id} className="bg-background-card border border-border rounded-2xl p-5 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-sm font-bold text-text-primary">
+                          Período: {new Date(e.period_start).toLocaleDateString()} - {new Date(e.period_end).toLocaleDateString()}
+                        </div>
+                        <div className="text-xs text-text-secondary">
+                          Evaluado el {new Date(e.created_at).toLocaleDateString()}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 bg-primary/10 text-primary px-3 py-1.5 rounded-lg border border-primary/20 text-xs font-bold font-mono">
+                        <Star className="h-4 w-4 fill-primary text-primary shrink-0" />
+                        <span>Score: {e.final_score.toFixed(1)} / 5.0</span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs border-t border-border pt-3">
+                      <div>
+                        <span className="text-text-secondary">Puntualidad:</span>
+                        <p className="font-bold text-text-primary">{e.auto_on_time_pct}%</p>
+                      </div>
+                      <div>
+                        <span className="text-text-secondary">Calidad (Manual):</span>
+                        <p className="font-bold text-text-primary">{e.manual_quality} / 5</p>
+                      </div>
+                      <div>
+                        <span className="text-text-secondary">Comunicación (Manual):</span>
+                        <p className="font-bold text-text-primary">{e.manual_communication} / 5</p>
+                      </div>
+                      <div>
+                        <span className="text-text-secondary">Flexibilidad (Manual):</span>
+                        <p className="font-bold text-text-primary">{e.manual_flexibility} / 5</p>
+                      </div>
+                    </div>
+
+                    {e.notes && (
+                      <div className="text-xs text-text-secondary bg-surface-raised/40 p-2.5 rounded-lg border border-border/40">
+                        <span className="font-semibold block text-text-primary mb-0.5">Observaciones:</span>
+                        {e.notes}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Modal Add Evaluation */}
+          {showAddEvaluation && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+              <div className="bg-surface border border-border rounded-2xl p-6 w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto shadow-2xl">
+                <div>
+                  <h3 className="font-semibold text-text-primary">Registrar Nueva Evaluación</h3>
+                  <p className="text-xs text-text-secondary">Evalúa al proveedor manual y cuantitativamente en base al período indicado.</p>
+                </div>
+
+                <form onSubmit={handleCreateEvaluation} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-text-primary">Desde *</label>
+                      <input
+                        type="date"
+                        required
+                        value={evalPeriodStart}
+                        onChange={(e) => setEvalPeriodStart(e.target.value)}
+                        className="w-full bg-background-input border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-text-primary">Hasta *</label>
+                      <input
+                        type="date"
+                        required
+                        value={evalPeriodEnd}
+                        onChange={(e) => setEvalPeriodEnd(e.target.value)}
+                        className="w-full bg-background-input border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 pt-2">
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs font-medium text-text-primary">
+                        <span>Calidad del Producto / Servicio *</span>
+                        <span className="font-bold font-mono">{manualQuality} / 5</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="1"
+                        max="5"
+                        value={manualQuality}
+                        onChange={(e) => setManualQuality(Number(e.target.value))}
+                        className="w-full accent-primary"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs font-medium text-text-primary">
+                        <span>Comunicación y Soporte *</span>
+                        <span className="font-bold font-mono">{manualCommunication} / 5</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="1"
+                        max="5"
+                        value={manualCommunication}
+                        onChange={(e) => setManualCommunication(Number(e.target.value))}
+                        className="w-full accent-primary"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs font-medium text-text-primary">
+                        <span>Flexibilidad y Respuesta *</span>
+                        <span className="font-bold font-mono">{manualFlexibility} / 5</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="1"
+                        max="5"
+                        value={manualFlexibility}
+                        onChange={(e) => setManualFlexibility(Number(e.target.value))}
+                        className="w-full accent-primary"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-text-primary">Observaciones y Notas</label>
+                    <textarea
+                      value={evalNotes}
+                      onChange={(e) => setEvalNotes(e.target.value)}
+                      rows={3}
+                      placeholder="Agrega comentarios sobre el desempeño del proveedor en este período..."
+                      className="w-full bg-background-input border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none"
+                    />
+                  </div>
+
+                  {formError && (
+                    <div className="p-3 rounded-lg bg-red-500/10 text-red-500 text-xs border border-red-500/20">
+                      {formError}
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-end gap-3 border-t border-border pt-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowAddEvaluation(false)}
+                      className="flex items-center justify-center bg-surface border border-border text-text-primary px-4 h-9 rounded-xl text-xs font-bold hover:bg-surface-raised transition-all active:scale-95"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      className="flex items-center justify-center gap-1 bg-primary text-text-inverse px-4 h-9 rounded-xl text-xs font-bold hover:bg-primary-hover transition-all active:scale-95 disabled:opacity-50"
+                    >
+                      {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                      Guardar Evaluación
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

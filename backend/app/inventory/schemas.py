@@ -221,6 +221,7 @@ class InventoryDocumentResponse(BaseModel):
     created_at: datetime
     po_id: Optional[UUID] = None
     supplier_id: Optional[UUID] = None
+    supplier_name: Optional[str] = None
 
 class TransferReceiveLineSchema(BaseModel):
     id: UUID

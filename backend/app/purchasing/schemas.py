@@ -274,3 +274,99 @@ class SupplierInvoiceResponse(BaseModel):
     supplier_name: Optional[str] = None
     po_number: Optional[str] = None
 
+
+# --- Supplier Returns ---
+class SupplierReturnLineCreate(BaseModel):
+    item_id: UUID
+    qty_base: float = Field(..., gt=0)
+    lot_id: Optional[UUID] = None
+    unit_cost_base: Optional[float] = None
+    reason: Optional[str] = None
+
+class SupplierReturnLineResponse(BaseModel):
+    id: UUID
+    return_id: UUID
+    item_id: UUID
+    lot_id: Optional[UUID] = None
+    qty_base: float
+    unit_cost_base: Optional[float] = None
+    line_total: Optional[float] = None
+    reason: Optional[str] = None
+    item_name: Optional[str] = None
+    uom_name: Optional[str] = None
+    tax_rate: Optional[float] = None
+
+class SupplierReturnCreate(BaseModel):
+    receipt_id: UUID
+    supplier_id: UUID
+    po_id: Optional[UUID] = None
+    reason: str
+    notes: Optional[str] = None
+    lines: List[SupplierReturnLineCreate]
+
+class SupplierReturnResponse(BaseModel):
+    id: UUID
+    org_id: UUID
+    return_number: str
+    receipt_id: Optional[UUID] = None
+    supplier_id: UUID
+    po_id: Optional[UUID] = None
+    reason: str
+    status: str
+    notes: Optional[str] = None
+    created_by: Optional[UUID] = None
+    created_at: datetime
+    lines: List[SupplierReturnLineResponse] = []
+    supplier_name: Optional[str] = None
+    receipt_number: Optional[str] = None
+
+class SupplierCreditNoteCreate(BaseModel):
+    credit_note_number: Optional[str] = None
+    amount: float = Field(..., gt=0)
+    issue_date: Optional[date] = None
+    applied_to_invoice_id: Optional[UUID] = None
+
+class SupplierCreditNoteResponse(BaseModel):
+    id: UUID
+    return_id: UUID
+    supplier_id: UUID
+    credit_note_number: Optional[str] = None
+    amount: float
+    issue_date: Optional[date] = None
+    applied_to_invoice_id: Optional[UUID] = None
+    status: str
+    created_at: datetime
+
+
+# --- Supplier Evaluations & Metrics ---
+class SupplierMetricsResponse(BaseModel):
+    auto_on_time_pct: float
+    auto_qty_accuracy_pct: float
+    auto_return_rate_pct: float
+    auto_score: float
+
+class SupplierEvaluationCreate(BaseModel):
+    period_start: date
+    period_end: date
+    manual_quality: int = Field(..., ge=1, le=5)
+    manual_communication: int = Field(..., ge=1, le=5)
+    manual_flexibility: int = Field(..., ge=1, le=5)
+    notes: Optional[str] = None
+
+class SupplierEvaluationResponse(BaseModel):
+    id: UUID
+    supplier_id: UUID
+    period_start: date
+    period_end: date
+    auto_on_time_pct: float
+    auto_qty_accuracy_pct: float
+    auto_return_rate_pct: float
+    auto_score: float
+    manual_quality: int
+    manual_communication: int
+    manual_flexibility: int
+    manual_score: float
+    final_score: float
+    evaluator_id: Optional[UUID] = None
+    notes: Optional[str] = None
+    created_at: datetime

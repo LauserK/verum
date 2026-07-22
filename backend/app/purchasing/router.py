@@ -18,7 +18,10 @@ from app.purchasing.schemas import (
     POApprovalConfigResponse, POApprovalConfigUpdate,
     PurchaseOrderLineCreate, PurchaseOrderLineResponse, PurchaseOrderCreate,
     POApprovalResponse, PurchaseOrderResponse, PurchaseOrderUpdate, POApprovalAction,
-    SupplierInvoiceCreate, SupplierInvoiceResponse, SupplierInvoiceLineResponse, SupplierInvoiceLineCreate
+    SupplierInvoiceCreate, SupplierInvoiceResponse, SupplierInvoiceLineResponse, SupplierInvoiceLineCreate,
+    SupplierReturnCreate, SupplierReturnResponse, SupplierReturnLineCreate, SupplierReturnLineResponse,
+    SupplierCreditNoteCreate, SupplierCreditNoteResponse,
+    SupplierMetricsResponse, SupplierEvaluationCreate, SupplierEvaluationResponse
 )
 
 router = APIRouter(prefix="", tags=["Purchasing"])
@@ -1157,3 +1160,382 @@ async def mark_invoice_paid(
     return await hydrate_invoice_details(upd_res.data[0], db)
 
 
+# --- Supplier Returns ---
+
+async def get_supplier_return_by_id(return_id: str, org_id: str, db) -> dict:
+    ret_res = db.table("supplier_returns").select("*").eq("id", return_id).eq("org_id", org_id).execute()
+    if not ret_res.data:
+        raise HTTPException(status_code=404, detail="Return not found")
+    ret = ret_res.data[0]
+
+    # Hydrate supplier name
+    sup_res = db.table("suppliers").select("name").eq("id", ret["supplier_id"]).execute()
+    if sup_res.data:
+        ret["supplier_name"] = sup_res.data[0]["name"]
+
+    # Hydrate receipt number
+    rec_res = db.table("inventory_documents").select("document_number").eq("id", ret["receipt_id"]).execute()
+    if rec_res.data:
+        ret["receipt_number"] = rec_res.data[0]["document_number"]
+
+    # Hydrate lines
+    lines_res = db.table("supplier_return_lines").select("*").eq("return_id", return_id).execute()
+    lines = lines_res.data
+
+    for line in lines:
+        item_res = db.table("items").select("name, tax_id, taxes(id, name, rate), uom_base(name)").eq("id", line["item_id"]).execute()
+        if item_res.data:
+            line["item_name"] = item_res.data[0]["name"]
+            line["uom_name"] = item_res.data[0].get("uom_base", {}).get("name") if item_res.data[0].get("uom_base") else "uds"
+            tax_data = item_res.data[0].get("taxes") or {}
+            line["tax_rate"] = float(tax_data.get("rate") or 0.0)
+
+    ret["lines"] = lines
+    return ret
+
+@router.post("/supplier-returns", response_model=SupplierReturnResponse, status_code=201)
+async def create_supplier_return(
+    ret_create: SupplierReturnCreate,
+    org_id: str = Depends(get_active_org_id),
+    user=Depends(get_current_user),
+    _perm=Depends(require_permission("purchasing.return")),
+    db=Depends(get_db)
+):
+    # Validar recepción existe y confirmada
+    rec_res = db.table("inventory_documents").select("*").eq("id", str(ret_create.receipt_id)).eq("org_id", org_id).execute()
+    if not rec_res.data:
+        raise HTTPException(status_code=404, detail="Receipt not found")
+    receipt = rec_res.data[0]
+    
+    if receipt["status"] != "confirmed":
+        raise HTTPException(status_code=400, detail="Receipt must be confirmed to create a return")
+    
+    # Validar que los items están en la recepción y la qty no excede
+    rec_lines_res = db.table("inventory_document_lines").select("*").eq("document_id", receipt["id"]).execute()
+    rec_lines = {str(l["item_id"]): l for l in rec_lines_res.data}
+    
+    for req_line in ret_create.lines:
+        item_id_str = str(req_line.item_id)
+        if item_id_str not in rec_lines:
+            raise HTTPException(status_code=400, detail=f"Item {item_id_str} not in receipt")
+        
+        # Validar si no excede la qty recibida
+        if req_line.qty_base > rec_lines[item_id_str]["qty_base"]:
+            raise HTTPException(status_code=400, detail=f"Quantity for item {item_id_str} exceeds received quantity")
+
+    # Generar return_number en base al conteo de devoluciones para evitar depender de secuencias no migradas
+    count_res = db.table("supplier_returns").select("id").eq("org_id", org_id).execute()
+    count_val = len(count_res.data or [])
+    return_number = f"DEV-{str(count_val + 1).zfill(4)}"
+
+    # Crear header en supplier_returns
+    ret_insert = db.table("supplier_returns").insert({
+        "org_id": org_id,
+        "return_number": return_number,
+        "receipt_id": str(ret_create.receipt_id),
+        "supplier_id": str(ret_create.supplier_id),
+        "po_id": str(ret_create.po_id) if ret_create.po_id else None,
+        "reason": ret_create.reason,
+        "notes": ret_create.notes,
+        "created_by": user.id,
+        "status": "pending"
+    }).execute()
+    
+    return_id = ret_insert.data[0]["id"]
+    
+    # Procesar líneas
+    for req_line in ret_create.lines:
+        # Registrar línea de devolución
+        unit_cost = req_line.unit_cost_base or 0
+        db.table("supplier_return_lines").insert({
+            "return_id": return_id,
+            "item_id": str(req_line.item_id),
+            "lot_id": str(req_line.lot_id) if req_line.lot_id else None,
+            "qty_base": req_line.qty_base,
+            "unit_cost_base": req_line.unit_cost_base,
+            "line_total": req_line.qty_base * unit_cost,
+            "reason": req_line.reason or ret_create.reason
+        }).execute()
+
+        # Consumir stock FIFO y registrar stock_movements (return_out)
+        qty_to_consume = req_line.qty_base
+        lots_res = db.table("stock_lots").select("*").eq("item_id", str(req_line.item_id)).gt("qty_base", 0).order("received_at").execute()
+        
+        for lot in lots_res.data:
+            if qty_to_consume <= 0:
+                break
+                
+            qty_available = lot["qty_base"]
+            consume_now = min(qty_to_consume, qty_available)
+            
+            # Decrementar stock de lote y marcar como exhausto si llega a 0
+            new_qty_lot = max(0.0, qty_available - consume_now)
+            db.table("stock_lots").update({
+                "qty_base": new_qty_lot,
+                "is_exhausted": new_qty_lot <= 0
+            }).eq("id", lot["id"]).execute()
+            
+            # Decrementar stock consolidado por bodega y artículo
+            stock_res = db.table("stock").select("id, qty_base").eq("warehouse_id", receipt["warehouse_id"]).eq("item_id", str(req_line.item_id)).execute()
+            if stock_res.data:
+                new_qty_stock = max(0.0, float(stock_res.data[0]["qty_base"]) - consume_now)
+                db.table("stock").update({"qty_base": new_qty_stock}).eq("id", stock_res.data[0]["id"]).execute()
+            
+            # Registrar movimiento
+            db.table("stock_movements").insert({
+                "org_id": org_id,
+                "item_id": str(req_line.item_id),
+                "lot_id": lot["id"],
+                "movement_type": "return_out",
+                "qty_base": consume_now,
+                "reference_id": return_id,
+                "created_by": user.id,
+                "warehouse_id": receipt["warehouse_id"]
+            }).execute()
+            
+            qty_to_consume -= consume_now
+
+        # Actualizar PO line qty_received_base (reducir por la devolución)
+        if ret_create.po_id:
+            po_line_res = db.table("purchase_order_lines").select("*").eq("po_id", str(ret_create.po_id)).eq("item_id", str(req_line.item_id)).execute()
+            if po_line_res.data:
+                po_line = po_line_res.data[0]
+                new_received = max(0, po_line["qty_received_base"] - req_line.qty_base)
+                db.table("purchase_order_lines").update({
+                    "qty_received_base": new_received
+                }).eq("id", po_line["id"]).execute()
+
+    # Recalcular estado global de PO
+    if ret_create.po_id:
+        po_lines = db.table("purchase_order_lines").select("*").eq("po_id", str(ret_create.po_id)).execute()
+        all_received = all(l["qty_received_base"] >= l["qty_ordered_base"] for l in po_lines.data)
+        if not all_received:
+            # Revertir estado si ya estaba en received
+            po_res = db.table("purchase_orders").select("status").eq("id", str(ret_create.po_id)).execute()
+            if po_res.data and po_res.data[0]["status"] == "received":
+                db.table("purchase_orders").update({"status": "partially_received"}).eq("id", str(ret_create.po_id)).execute()
+
+    # Retornar devolución hidratada
+    return await get_supplier_return_by_id(return_id, org_id, db)
+
+@router.get("/supplier-returns", response_model=List[SupplierReturnResponse])
+async def list_supplier_returns(
+    supplier_id: Optional[UUID] = None,
+    status: Optional[str] = None,
+    org_id: str = Depends(get_active_org_id),
+    _perm=Depends(require_permission("purchasing.return")),
+    db=Depends(get_db)
+):
+    query = db.table("supplier_returns").select("*").eq("org_id", org_id)
+    if supplier_id:
+        query = query.eq("supplier_id", str(supplier_id))
+    if status:
+        query = query.eq("status", status)
+        
+    res = query.order("created_at", desc=True).execute()
+    return res.data
+
+@router.get("/supplier-returns/{id}", response_model=SupplierReturnResponse)
+async def get_supplier_return(
+    id: UUID,
+    org_id: str = Depends(get_active_org_id),
+    _perm=Depends(require_permission("purchasing.return")),
+    db=Depends(get_db)
+):
+    return await get_supplier_return_by_id(str(id), org_id, db)
+
+@router.patch("/supplier-returns/{id}/send", response_model=SupplierReturnResponse)
+async def send_supplier_return(
+    id: UUID,
+    org_id: str = Depends(get_active_org_id),
+    _perm=Depends(require_permission("purchasing.return")),
+    db=Depends(get_db)
+):
+    ret_res = db.table("supplier_returns").select("*").eq("id", str(id)).eq("org_id", org_id).execute()
+    if not ret_res.data:
+        raise HTTPException(status_code=404, detail="Return not found")
+        
+    if ret_res.data[0]["status"] != "pending":
+        raise HTTPException(status_code=400, detail="Only pending returns can be sent")
+        
+    db.table("supplier_returns").update({"status": "sent"}).eq("id", str(id)).execute()
+    
+    return await get_supplier_return_by_id(str(id), org_id, db)
+
+@router.post("/supplier-returns/{id}/credit-note", response_model=SupplierCreditNoteResponse, status_code=201)
+async def create_supplier_credit_note(
+    id: UUID,
+    cn_create: SupplierCreditNoteCreate,
+    org_id: str = Depends(get_active_org_id),
+    _perm=Depends(require_permission("purchasing.return")),
+    db=Depends(get_db)
+):
+    ret_res = db.table("supplier_returns").select("*").eq("id", str(id)).eq("org_id", org_id).execute()
+    if not ret_res.data:
+        raise HTTPException(status_code=404, detail="Return not found")
+    ret = ret_res.data[0]
+    
+    if ret["status"] == "credit_note_received":
+        raise HTTPException(status_code=400, detail="Credit note already received for this return")
+
+    status = "pending"
+    if cn_create.applied_to_invoice_id:
+        # Aplicar a la factura
+        inv_res = db.table("supplier_invoices").select("*").eq("id", str(cn_create.applied_to_invoice_id)).execute()
+        if not inv_res.data:
+            raise HTTPException(status_code=404, detail="Invoice to apply not found")
+            
+        new_total = max(0, inv_res.data[0]["total"] - cn_create.amount)
+        db.table("supplier_invoices").update({"total": new_total}).eq("id", str(cn_create.applied_to_invoice_id)).execute()
+        status = "applied"
+
+    cn_insert = db.table("supplier_credit_notes").insert({
+        "return_id": str(id),
+        "supplier_id": ret["supplier_id"],
+        "credit_note_number": cn_create.credit_note_number,
+        "amount": cn_create.amount,
+        "issue_date": str(cn_create.issue_date) if cn_create.issue_date else None,
+        "applied_to_invoice_id": str(cn_create.applied_to_invoice_id) if cn_create.applied_to_invoice_id else None,
+        "status": status
+    }).execute()
+
+    # Actualizar estado de la devolución
+    db.table("supplier_returns").update({"status": "credit_note_received"}).eq("id", str(id)).execute()
+
+    return cn_insert.data[0]
+
+
+# --- Supplier Evaluations & Metrics ---
+
+async def calculate_supplier_metrics(supplier_id: str, org_id: str, db) -> dict:
+    # 1. On-time Percentage
+    pos_res = db.table("purchase_orders").select("id, promised_date").eq("supplier_id", supplier_id).eq("org_id", org_id).execute()
+    pos = {str(po["id"]): po for po in pos_res.data if po.get("promised_date")}
+    
+    receipts_res = db.table("inventory_documents").select("id, po_id, created_at").eq("supplier_id", supplier_id).eq("document_type", "receipt").execute()
+    
+    total_receipts_with_po = 0
+    on_time_receipts = 0
+    
+    for rec in receipts_res.data:
+        po_id = str(rec.get("po_id"))
+        if po_id in pos:
+            total_receipts_with_po += 1
+            promised = dateutil.parser.parse(pos[po_id]["promised_date"]).date()
+            received = dateutil.parser.parse(rec["created_at"]).date()
+            if received <= promised:
+                on_time_receipts += 1
+                
+    auto_on_time_pct = (on_time_receipts / total_receipts_with_po * 100) if total_receipts_with_po > 0 else 100.0
+
+    # 2. Qty Accuracy Percentage
+    po_ids = list(pos.keys())
+    auto_qty_accuracy_pct = 100.0
+    if po_ids:
+        po_lines_res = db.table("purchase_order_lines").select("qty_ordered_base, qty_received_base").in_("po_id", po_ids).execute()
+        total_ordered = sum(l.get("qty_ordered_base", 0) for l in po_lines_res.data)
+        total_received = sum(l.get("qty_received_base", 0) for l in po_lines_res.data)
+        if total_ordered > 0:
+            diff = abs(total_ordered - total_received)
+            accuracy = max(0, 100.0 - (diff / total_ordered * 100.0))
+            auto_qty_accuracy_pct = accuracy
+            
+    # 3. Return Rate Percentage
+    returns_res = db.table("supplier_returns").select("id").eq("supplier_id", supplier_id).execute()
+    return_ids = [str(r["id"]) for r in returns_res.data]
+    total_returned = 0.0
+    if return_ids:
+        ret_lines_res = db.table("supplier_return_lines").select("qty_base").in_("return_id", return_ids).execute()
+        total_returned = sum(l.get("qty_base", 0) for l in ret_lines_res.data)
+        
+    auto_return_rate_pct = 0.0
+    total_received_all = 0.0
+    all_receipts = [str(r["id"]) for r in receipts_res.data]
+    if all_receipts:
+        rec_lines_res = db.table("inventory_document_lines").select("qty_base").in_("document_id", all_receipts).execute()
+        total_received_all = sum(l.get("qty_base", 0) for l in rec_lines_res.data)
+        
+    if total_received_all > 0:
+        auto_return_rate_pct = min(100.0, (total_returned / total_received_all) * 100.0)
+        
+    # Auto Score: (OnTime * 0.4) + (QtyAcc * 0.4) + ((100-ReturnRate) * 0.2) -> scale to 5
+    score_100 = (auto_on_time_pct * 0.4) + (auto_qty_accuracy_pct * 0.4) + ((100.0 - auto_return_rate_pct) * 0.2)
+    auto_score = (score_100 / 100.0) * 5.0
+
+    return {
+        "auto_on_time_pct": round(auto_on_time_pct, 2),
+        "auto_qty_accuracy_pct": round(auto_qty_accuracy_pct, 2),
+        "auto_return_rate_pct": round(auto_return_rate_pct, 2),
+        "auto_score": round(auto_score, 2)
+    }
+
+@router.get("/suppliers/{supplier_id}/metrics", response_model=SupplierMetricsResponse)
+async def get_supplier_metrics(
+    supplier_id: UUID,
+    org_id: str = Depends(get_active_org_id),
+    _perm=Depends(require_permission("purchasing.supplier.view")),
+    db=Depends(get_db)
+):
+    return await calculate_supplier_metrics(str(supplier_id), org_id, db)
+
+@router.post("/suppliers/{supplier_id}/evaluations", response_model=SupplierEvaluationResponse, status_code=201)
+async def create_supplier_evaluation(
+    supplier_id: UUID,
+    eval_create: SupplierEvaluationCreate,
+    org_id: str = Depends(get_active_org_id),
+    user=Depends(get_current_user),
+    _perm=Depends(require_permission("purchasing.supplier.edit")),
+    db=Depends(get_db)
+):
+    metrics = await calculate_supplier_metrics(str(supplier_id), org_id, db)
+    
+    manual_score = (eval_create.manual_quality + eval_create.manual_communication + eval_create.manual_flexibility) / 3.0
+    final_score = (metrics["auto_score"] * 0.6) + (manual_score * 0.4)
+    
+    eval_insert = db.table("supplier_evaluations").insert({
+        "supplier_id": str(supplier_id),
+        "period_start": str(eval_create.period_start),
+        "period_end": str(eval_create.period_end),
+        "auto_on_time_pct": metrics["auto_on_time_pct"],
+        "auto_qty_accuracy_pct": metrics["auto_qty_accuracy_pct"],
+        "auto_return_rate_pct": metrics["auto_return_rate_pct"],
+        "auto_score": metrics["auto_score"],
+        "manual_quality": eval_create.manual_quality,
+        "manual_communication": eval_create.manual_communication,
+        "manual_flexibility": eval_create.manual_flexibility,
+        "manual_score": round(manual_score, 2),
+        "final_score": round(final_score, 2),
+        "evaluator_id": user.id,
+        "notes": eval_create.notes
+    }).execute()
+    
+    eval_id = eval_insert.data[0]["id"]
+    all_evals = db.table("supplier_evaluations").select("final_score").eq("supplier_id", str(supplier_id)).execute()
+    avg_score = sum(e["final_score"] for e in all_evals.data) / len(all_evals.data)
+    
+    db.table("suppliers").update({"score": round(avg_score, 2)}).eq("id", str(supplier_id)).execute()
+    
+    return eval_insert.data[0]
+
+@router.get("/suppliers/{supplier_id}/evaluations", response_model=List[SupplierEvaluationResponse])
+async def list_supplier_evaluations(
+    supplier_id: UUID,
+    org_id: str = Depends(get_active_org_id),
+    _perm=Depends(require_permission("purchasing.supplier.view")),
+    db=Depends(get_db)
+):
+    res = db.table("supplier_evaluations").select("*").eq("supplier_id", str(supplier_id)).order("created_at", desc=True).execute()
+    return res.data
+
+@router.get("/purchasing/taxes", response_model=List[dict])
+async def get_purchasing_taxes(
+    org_id: str = Depends(get_active_org_id),
+    _perm=Depends(require_permission("purchasing.supplier.view")),
+    db=Depends(get_db)
+):
+    res = db.table("taxes") \
+        .select("*") \
+        .or_(f"org_id.is.null,org_id.eq.{org_id}") \
+        .eq("is_active", True) \
+        .execute()
+    return res.data

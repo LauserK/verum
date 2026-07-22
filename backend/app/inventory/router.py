@@ -986,7 +986,7 @@ async def list_inventory_documents(
     db = Depends(get_db)
 ):
     query = db.table("inventory_documents") \
-        .select("*, warehouse:warehouse_id(name), destination_warehouse:destination_warehouse_id(name), creator:created_by(full_name)") \
+        .select("*, warehouse:warehouse_id(name), destination_warehouse:destination_warehouse_id(name), supplier_rel:supplier_id(name), creator:created_by(full_name)") \
         .eq("org_id", org_id)
         
     if doc_type:
@@ -1004,6 +1004,7 @@ async def list_inventory_documents(
         doc["warehouse_name"] = doc.get("warehouse", {}).get("name") if doc.get("warehouse") else None
         doc["destination_warehouse_name"] = doc.get("destination_warehouse", {}).get("name") if doc.get("destination_warehouse") else None
         doc["creator_name"] = doc.get("creator", {}).get("full_name") if doc.get("creator") else None
+        doc["supplier_name"] = doc.get("supplier_rel", {}).get("name") if doc.get("supplier_rel") else None
         data.append(doc)
         
     return data
@@ -1017,7 +1018,7 @@ async def get_inventory_document_detail(
     db = Depends(get_db)
 ):
     res_header = db.table("inventory_documents") \
-        .select("*, warehouse:warehouse_id(name), destination_warehouse:destination_warehouse_id(name), creator:created_by(full_name), processor:processed_by(full_name), canceller:cancelled_by(full_name)") \
+        .select("*, warehouse:warehouse_id(name), destination_warehouse:destination_warehouse_id(name), supplier_rel:supplier_id(name), creator:created_by(full_name), processor:processed_by(full_name), canceller:cancelled_by(full_name)") \
         .eq("id", str(id)) \
         .execute()
         
@@ -1030,9 +1031,10 @@ async def get_inventory_document_detail(
     header["creator_name"] = header.get("creator", {}).get("full_name") if header.get("creator") else None
     header["processor_name"] = header.get("processor", {}).get("full_name") if header.get("processor") else None
     header["canceller_name"] = header.get("canceller", {}).get("full_name") if header.get("canceller") else None
+    header["supplier_name"] = header.get("supplier_rel", {}).get("name") if header.get("supplier_rel") else None
     
     res_lines = db.table("inventory_document_lines") \
-        .select("*, items(name, code, uom_base(name)), uom_presentations(name)") \
+        .select("*, items(name, code, tax_id, taxes(id, name, rate), uom_base(name)), uom_presentations(name)") \
         .eq("document_id", str(id)) \
         .execute()
         
@@ -1040,6 +1042,13 @@ async def get_inventory_document_detail(
     for line in (res_lines.data or []):
         line["item_name"] = line.get("items", {}).get("name") if line.get("items") else None
         line["presentation_name"] = line.get("uom_presentations", {}).get("name") if line.get("uom_presentations") else None
+        
+        # Mapear datos de impuestos asociados al artículo
+        item_data = line.get("items") or {}
+        tax_data = item_data.get("taxes") or {}
+        line["tax_rate"] = float(tax_data.get("rate") or 0.0)
+        line["tax_id"] = item_data.get("tax_id")
+        
         lines.append(line)
         
     return {

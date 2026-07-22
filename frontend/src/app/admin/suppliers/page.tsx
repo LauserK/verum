@@ -51,9 +51,13 @@ export default function SuppliersDirectoryPage() {
 
   const renderStars = (score: number | null) => {
     if (score === null || score === undefined) return <span className="text-text-secondary text-xs">—</span>;
+    let colorClass = "fill-red-500 text-red-500";
+    if (score >= 4.0) colorClass = "fill-green-500 text-green-500";
+    else if (score >= 3.0) colorClass = "fill-yellow-500 text-yellow-500";
+    
     return (
       <div className="flex items-center gap-1">
-        <Star className="h-4 w-4 fill-yellow-500 text-yellow-500 shrink-0" />
+        <Star className={`h-4 w-4 shrink-0 ${colorClass}`} />
         <span className="text-sm font-semibold text-text-primary">{score.toFixed(1)}</span>
       </div>
     );
@@ -114,16 +118,16 @@ export default function SuppliersDirectoryPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+            <table className="w-full text-left text-sm border-collapse">
               <thead>
-                <tr className="border-b border-border bg-background-hover/10 text-xs uppercase text-text-muted">
-                  <th className="py-4 px-6 font-semibold">Código</th>
-                  <th className="py-4 px-6 font-semibold">Nombre comercial</th>
-                  <th className="py-4 px-6 font-semibold">RIF / Identificación</th>
-                  <th className="py-4 px-6 font-semibold">Contacto Directo</th>
-                  <th className="py-4 px-6 font-semibold">Estado</th>
-                  <th className="py-4 px-6 font-semibold">Score</th>
-                  <th className="py-4 px-6 text-right font-semibold">Acciones</th>
+                <tr className="border-b border-border bg-background-hover/10 text-[11px] uppercase text-text-muted tracking-wider">
+                  <th className="py-2.5 px-4 font-bold whitespace-nowrap">Código</th>
+                  <th className="py-2.5 px-4 font-bold">Nombre comercial</th>
+                  <th className="py-2.5 px-4 font-bold whitespace-nowrap">RIF / Identificación</th>
+                  <th className="py-2.5 px-4 font-bold">Contacto Directo</th>
+                  <th className="py-2.5 px-4 font-bold whitespace-nowrap">Estado</th>
+                  <th className="py-2.5 px-4 font-bold whitespace-nowrap">Score</th>
+                  <th className="py-2.5 px-4 text-right font-bold whitespace-nowrap">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
@@ -132,37 +136,37 @@ export default function SuppliersDirectoryPage() {
                     key={supplier.id}
                     className="hover:bg-background-hover/20 transition-colors group"
                   >
-                    <td className="py-4 px-6 font-semibold text-text-primary">
+                    <td className="py-2 px-4 font-semibold text-text-primary whitespace-nowrap text-xs">
                       {supplier.code || '—'}
                     </td>
-                    <td className="py-4 px-6">
-                      <div className="font-semibold text-text-primary group-hover:text-primary transition-colors">
+                    <td className="py-2 px-4">
+                      <div className="font-semibold text-text-primary group-hover:text-primary transition-colors text-xs leading-tight">
                         {supplier.name}
                       </div>
                       {supplier.payment_terms_days > 0 ? (
-                        <div className="text-xs text-text-secondary mt-0.5">
+                        <div className="text-[10px] text-text-secondary mt-0.5 leading-none">
                           Crédito {supplier.payment_terms_days} días
                         </div>
                       ) : (
-                        <div className="text-xs text-text-secondary mt-0.5">Contado</div>
+                        <div className="text-[10px] text-text-secondary mt-0.5 leading-none">Contado</div>
                       )}
                     </td>
-                    <td className="py-4 px-6 text-text-primary">
+                    <td className="py-2 px-4 text-text-primary whitespace-nowrap text-xs">
                       {supplier.tax_id || '—'}
                     </td>
-                    <td className="py-4 px-6">
-                      {supplier.email && <div className="text-text-primary text-xs">{supplier.email}</div>}
-                      {supplier.phone && <div className="text-text-secondary text-xs mt-0.5">{supplier.phone}</div>}
+                    <td className="py-2 px-4">
+                      {supplier.email && <div className="text-text-primary text-[11px] leading-tight max-w-[180px] truncate">{supplier.email}</div>}
+                      {supplier.phone && <div className="text-text-secondary text-[10px] mt-0.5 leading-none">{supplier.phone}</div>}
                       {!supplier.email && !supplier.phone && <span className="text-text-secondary text-xs">—</span>}
                     </td>
-                    <td className="py-4 px-6">{getStatusBadge(supplier.status)}</td>
-                    <td className="py-4 px-6">{renderStars(supplier.score)}</td>
-                    <td className="py-4 px-6 text-right">
+                    <td className="py-2 px-4 whitespace-nowrap">{getStatusBadge(supplier.status)}</td>
+                    <td className="py-2 px-4 whitespace-nowrap">{renderStars(supplier.score)}</td>
+                    <td className="py-2 px-4 text-right whitespace-nowrap">
                       <Link
                         href={`/admin/suppliers/${supplier.id}`}
-                        className="inline-flex items-center gap-1.5 bg-background-button hover:bg-background-button-hover text-text-primary px-3 py-1.5 rounded-lg text-xs font-semibold border border-border transition-all shadow-sm"
+                        title="Ver ficha completa"
+                        className="inline-flex items-center justify-center h-7 w-7 bg-background-button hover:bg-background-button-hover text-text-primary rounded-lg border border-border transition-all shadow-sm active:scale-95 ml-auto"
                       >
-                        Ficha completa
                         <ExternalLink className="h-3.5 w-3.5" />
                       </Link>
                     </td>

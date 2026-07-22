@@ -218,6 +218,43 @@ export const purchasingApi = {
 
     markInvoicePaid: (id: string): Promise<SupplierInvoiceResponse> =>
         fetchWithAuth(`/supplier-invoices/${id}/mark-paid`, { method: 'PATCH' }),
+
+    getSupplierReturns: (filters?: { supplier_id?: string; status?: string }): Promise<SupplierReturnResponse[]> => {
+        const params = new URLSearchParams()
+        if (filters?.supplier_id) params.append('supplier_id', filters.supplier_id)
+        if (filters?.status) params.append('status', filters.status)
+        const query = params.toString() ? `?${params.toString()}` : ''
+        return fetchWithAuth(`/supplier-returns${query}`)
+    },
+
+    getSupplierReturn: (id: string): Promise<SupplierReturnResponse> =>
+        fetchWithAuth(`/supplier-returns/${id}`),
+
+    createSupplierReturn: (data: SupplierReturnCreate): Promise<SupplierReturnResponse> =>
+        fetchWithAuth('/supplier-returns', { method: 'POST', body: JSON.stringify(data) }),
+
+    sendSupplierReturn: (id: string): Promise<SupplierReturnResponse> =>
+        fetchWithAuth(`/supplier-returns/${id}/send`, { method: 'PATCH' }),
+
+    createCreditNote: (returnId: string, data: SupplierCreditNoteCreate): Promise<SupplierCreditNoteResponse> =>
+        fetchWithAuth(`/supplier-returns/${returnId}/credit-note`, { method: 'POST', body: JSON.stringify(data) }),
+
+    getSupplierMetrics: (id: string, from?: string, to?: string): Promise<SupplierMetricsResponse> => {
+        const params = new URLSearchParams()
+        if (from) params.append('from_date', from)
+        if (to) params.append('to_date', to)
+        const query = params.toString() ? `?${params.toString()}` : ''
+        return fetchWithAuth(`/suppliers/${id}/metrics${query}`)
+    },
+
+    createSupplierEvaluation: (id: string, data: SupplierEvaluationCreate): Promise<SupplierEvaluationResponse> =>
+        fetchWithAuth(`/suppliers/${id}/evaluations`, { method: 'POST', body: JSON.stringify(data) }),
+
+    getSupplierEvaluations: (id: string): Promise<SupplierEvaluationResponse[]> =>
+        fetchWithAuth(`/suppliers/${id}/evaluations`),
+
+    getPurchasingTaxes: (): Promise<any[]> =>
+        fetchWithAuth('/purchasing/taxes'),
 }
 
 export interface SupplierInvoiceLineCreate {
@@ -380,3 +417,104 @@ export interface POApprovalAction {
     notes?: string | null
 }
 
+export interface SupplierReturnLineCreate {
+    item_id: string
+    qty_base: number
+    lot_id?: string | null
+    unit_cost_base?: number | null
+    reason?: string | null
+}
+
+export interface SupplierReturnLineResponse {
+    id: string
+    return_id: string
+    item_id: string
+    lot_id: string | null
+    qty_base: number
+    unit_cost_base: number | null
+    line_total: number | null
+    reason: string | null
+    item_name?: string | null
+    uom_name?: string | null
+    tax_rate?: number | null
+}
+
+export interface SupplierReturnCreate {
+    receipt_id: string
+    supplier_id: string
+    po_id?: string | null
+    reason: 'damaged' | 'wrong_item' | 'excess_qty' | 'quality' | 'expired'
+    notes?: string | null
+    lines: SupplierReturnLineCreate[]
+}
+
+export interface SupplierReturnResponse {
+    id: string
+    org_id: string
+    return_number: string
+    receipt_id: string | null
+    supplier_id: string
+    po_id: string | null
+    reason: string
+    status: 'pending' | 'sent' | 'credit_note_received' | 'closed'
+    notes: string | null
+    created_by: string | null
+    created_at: string
+    lines: SupplierReturnLineResponse[]
+    supplier_name?: string | null
+    receipt_number?: string | null
+}
+
+export interface SupplierCreditNoteCreate {
+    credit_note_number?: string | null
+    amount: number
+    issue_date?: string | null
+    applied_to_invoice_id?: string | null
+}
+
+export interface SupplierCreditNoteResponse {
+    id: string
+    return_id: string
+    supplier_id: string
+    credit_note_number: string | null
+    amount: number
+    issue_date: string | null
+    applied_to_invoice_id: string | null
+    status: 'pending' | 'applied' | 'refunded'
+    created_at: string
+}
+
+export interface SupplierMetricsResponse {
+    auto_on_time_pct: number
+    auto_qty_accuracy_pct: number
+    auto_return_rate_pct: number
+    auto_score: number
+}
+
+export interface SupplierEvaluationCreate {
+    period_start: string
+    period_end: string
+    manual_quality: number
+    manual_communication: number
+    manual_flexibility: number
+    notes?: string | null
+}
+
+export interface SupplierEvaluationResponse {
+    id: string
+    supplier_id: string
+    period_start: string
+    period_end: string
+    auto_on_time_pct: number
+    auto_qty_accuracy_pct: number
+    auto_return_rate_pct: number
+    auto_score: number
+    manual_quality: number
+    manual_communication: number
+    manual_flexibility: number
+    manual_score: number
+    final_score: number
+    evaluator_id: string | null
+    notes: string | null
+    created_at: string
+}
