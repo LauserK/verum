@@ -519,8 +519,14 @@ export default function KDSPage() {
                                     ${selectedOrder.status === 'in_progress' ? 'bg-success text-text-inverse hover:scale-105 shadow-success/30' : 'bg-primary text-text-inverse hover:scale-105 shadow-primary/30'}
                                 `}
                             >
-                                {saving ? <Loader2 className="w-6 h-6 animate-spin" /> : null}
-                                {selectedOrder.status === 'in_progress' ? 'FINALIZAR PRODUCCIÓN' : 'INICIAR PRODUCCIÓN'}
+                                {saving ? (
+                                    <>
+                                        <Loader2 className="w-6 h-6 animate-spin" />
+                                        <span>PROCESANDO...</span>
+                                    </>
+                                ) : (
+                                    <span>{selectedOrder.status === 'in_progress' ? 'FINALIZAR PRODUCCIÓN' : 'INICIAR PRODUCCIÓN'}</span>
+                                )}
                             </button>
                         </div>
                     </div>
@@ -652,8 +658,14 @@ export default function KDSPage() {
                                 disabled={saving || loadingCompletionData || qtyProduced <= 0}
                                 className="flex-1 h-12 bg-success text-text-inverse rounded-xl font-bold text-sm hover:bg-success-dark transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-success/20"
                             >
-                                {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-                                Finalizar
+                                {saving ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        <span>Procesando...</span>
+                                    </>
+                                ) : (
+                                    <span>Finalizar</span>
+                                )}
                             </button>
                         </div>
                     </div>
@@ -708,8 +720,14 @@ export default function KDSPage() {
                                 disabled={saving}
                                 className="w-full h-14 bg-warning text-text-inverse rounded-2xl font-black text-sm hover:bg-warning-dark transition-all flex items-center justify-center gap-3 shadow-lg shadow-warning/20 uppercase tracking-widest"
                             >
-                                {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-                                Sí, Procesar con Alerta
+                                {saving ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        <span>Procesando...</span>
+                                    </>
+                                ) : (
+                                    <span>Sí, Procesar con Alerta</span>
+                                )}
                             </button>
                         </div>
                     </div>
