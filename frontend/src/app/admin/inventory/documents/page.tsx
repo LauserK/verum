@@ -45,6 +45,11 @@ export default function InventoryDocumentsPage() {
   const [errorModal, setErrorModal] = useState({ isOpen: false, message: '' });
   const [cancelConfirmModal, setCancelConfirmModal] = useState({ isOpen: false, docId: '' });
   
+  // Suppliers selection modal state
+  const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [showSupplierModal, setShowSupplierModal] = useState(false);
+  const [supplierSearch, setSupplierSearch] = useState('');
+  
   const [selectedDoc, setSelectedDoc] = useState<any>(null);
   const [selectedDocLines, setSelectedDocLines] = useState<any[]>([]);
 
@@ -54,6 +59,7 @@ export default function InventoryDocumentsPage() {
     warehouse_id: string;
     destination_warehouse_id: string;
     supplier: string;
+    supplier_id?: string;
     reason: 'sale' | 'waste' | 'adjustment' | 'internal_consumption';
     notes: string;
     auto_confirm?: boolean;
@@ -63,6 +69,7 @@ export default function InventoryDocumentsPage() {
     warehouse_id: '',
     destination_warehouse_id: '',
     supplier: '',
+    supplier_id: '',
     reason: 'adjustment',
     notes: '',
     auto_confirm: false,
@@ -98,14 +105,16 @@ export default function InventoryDocumentsPage() {
   async function loadData() {
     setLoading(true);
     try {
-      const [docsData, itemsData, whData] = await Promise.all([
+      const [docsData, itemsData, whData, suppliersData] = await Promise.all([
         adminApi.getInventoryDocuments(),
         adminApi.getInventoryItems(),
-        adminApi.getInventoryWarehouses()
+        adminApi.getInventoryWarehouses(),
+        adminApi.getSuppliers()
       ]);
       setDocuments(docsData);
       setItems(itemsData);
       setWarehouses(whData.filter((w: any) => w.is_active));
+      setSuppliers(suppliersData || []);
     } catch (error) {
       console.error('Error loading inventory data:', error);
     } finally {
@@ -157,6 +166,8 @@ export default function InventoryDocumentsPage() {
       const payload = {
         ...newDoc,
         destination_warehouse_id: newDoc.destination_warehouse_id || null,
+        supplier: newDoc.supplier || null,
+        supplier_id: newDoc.supplier_id || null,
         lines: newDoc.lines.map(line => ({
           ...line,
           presentation_id: line.presentation_id || null
@@ -238,6 +249,7 @@ export default function InventoryDocumentsPage() {
       warehouse_id: '',
       destination_warehouse_id: '',
       supplier: '',
+      supplier_id: '',
       reason: 'adjustment',
       notes: '',
       auto_confirm: false,
@@ -538,14 +550,46 @@ export default function InventoryDocumentsPage() {
 
                 {newDoc.document_type === 'receipt' && (
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-bold text-text-secondary uppercase">Proveedor</label>
-                    <input
-                      type="text"
-                      placeholder="Nombre del proveedor..."
-                      value={newDoc.supplier}
-                      onChange={e => setNewDoc(prev => ({ ...prev, supplier: e.target.value }))}
-                      className="bg-surface-raised border border-border rounded-xl px-4 h-11 text-sm outline-none focus:border-primary"
-                    />
+                    <label className="text-xs font-bold text-text-secondary uppercase">Proveedor (Opcional)</label>
+                    <div className="flex gap-2">
+                      <div className="relative flex-grow">
+                        <input
+                          type="text"
+                          readOnly
+                          placeholder="Seleccionar..."
+                          value={newDoc.supplier || ''}
+                          onClick={() => {
+                            setSupplierSearch('');
+                            setShowSupplierModal(true);
+                          }}
+                          className="w-full bg-surface-raised border border-border rounded-xl px-3 h-11 text-sm outline-none cursor-pointer font-semibold placeholder:text-text-disabled truncate pr-8"
+                        />
+                        {newDoc.supplier && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setNewDoc(prev => ({ ...prev, supplier: '', supplier_id: '' }));
+                            }}
+                            className="absolute right-2 top-3.5 p-0.5 hover:bg-surface rounded-full text-text-secondary hover:text-error transition-colors"
+                            title="Limpiar proveedor"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSupplierSearch('');
+                          setShowSupplierModal(true);
+                        }}
+                        className="px-3 bg-primary text-text-inverse rounded-xl hover:bg-primary-hover active:scale-95 transition-all flex items-center justify-center shrink-0 h-11"
+                        title="Buscar proveedor"
+                      >
+                        <Search className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
                 )}
 
@@ -1018,6 +1062,88 @@ export default function InventoryDocumentsPage() {
               >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
                 Confirmar Recepción
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SUPPLIER SELECTION MODAL */}
+      {showSupplierModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in">
+          <div className="bg-surface rounded-3xl p-6 w-full max-w-lg shadow-2xl border border-border flex flex-col max-h-[80vh] animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h2 className="text-lg font-bold text-text-primary">Seleccionar Proveedor</h2>
+                <p className="text-xs text-text-secondary">Seleccione un proveedor para asociar a la recepción</p>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setShowSupplierModal(false)}
+                className="p-2 hover:bg-surface-raised rounded-full border border-border transition-colors"
+              >
+                <X className="w-5 h-5 text-text-secondary" />
+              </button>
+            </div>
+
+            <div className="relative mb-4">
+              <input
+                type="text"
+                placeholder="Buscar por nombre o código de proveedor..."
+                value={supplierSearch}
+                onChange={e => setSupplierSearch(e.target.value)}
+                className="w-full bg-surface-raised border border-border rounded-xl pl-9 pr-3 h-11 text-text-primary text-sm focus:outline-none focus:border-primary transition-all font-semibold"
+              />
+              <Search className="absolute left-3 top-3.5 h-4 w-4 text-text-secondary" />
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1 max-h-[50vh]">
+              {suppliers
+                .filter(s => {
+                  const q = supplierSearch.toLowerCase();
+                  return s.name.toLowerCase().includes(q) || (s.code || '').toLowerCase().includes(q);
+                })
+                .map(s => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => {
+                      setNewDoc(prev => ({ ...prev, supplier: s.name, supplier_id: s.id }));
+                      setShowSupplierModal(false);
+                    }}
+                    className="w-full text-left px-4 py-3 hover:bg-surface-raised rounded-xl transition-colors border border-transparent hover:border-border text-xs font-semibold text-text-primary flex flex-col gap-0.5 animate-in fade-in-50 duration-100"
+                  >
+                    <span className="font-bold text-text-primary text-sm">{s.name}</span>
+                    <span className="text-[10px] text-text-secondary">Código: {s.code || '—'}</span>
+                  </button>
+                ))}
+              {suppliers.filter(s => {
+                const q = supplierSearch.toLowerCase();
+                return s.name.toLowerCase().includes(q) || (s.code || '').toLowerCase().includes(q);
+              }).length === 0 && (
+                <div className="text-center py-8 text-xs text-text-secondary italic">
+                  No se encontraron proveedores
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-border pt-4 flex justify-between items-center mt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setNewDoc(prev => ({ ...prev, supplier: '', supplier_id: '' }));
+                  setShowSupplierModal(false);
+                }}
+                className="text-xs font-bold text-error hover:underline px-2 py-1"
+              >
+                Limpiar Selección (Sin Proveedor)
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowSupplierModal(false)}
+                className="px-4 h-9 border border-border hover:bg-surface-raised rounded-xl text-xs font-semibold transition-colors"
+              >
+                Cerrar
               </button>
             </div>
           </div>
