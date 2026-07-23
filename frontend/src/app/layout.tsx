@@ -5,6 +5,7 @@ import { I18nProvider } from "@/components/I18nProvider";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import AttendanceGuard from "@/components/AttendanceGuard";
 import ConnectionErrorGuard from "@/components/ConnectionErrorGuard";
+import PermissionErrorGuard from "@/components/PermissionErrorGuard";
 import { VenueProvider } from "@/components/VenueContext";
 import { QueryProvider } from "@/components/QueryProvider";
 
@@ -38,9 +39,11 @@ export default function RootLayout({
             <QueryProvider>
               <VenueProvider>
                 <ConnectionErrorGuard>
-                  <AttendanceGuard>
-                    {children}
-                  </AttendanceGuard>
+                  <PermissionErrorGuard>
+                    <AttendanceGuard>
+                      {children}
+                    </AttendanceGuard>
+                  </PermissionErrorGuard>
                 </ConnectionErrorGuard>
               </VenueProvider>
             </QueryProvider>

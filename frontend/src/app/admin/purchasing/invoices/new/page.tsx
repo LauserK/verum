@@ -160,7 +160,7 @@ export default function NewSupplierInvoicePage() {
             // Defaults quantity invoiced to quantity received, fallback to ordered
             qty_invoiced: qty_received > 0 ? qty_received : line.qty_ordered_base,
             unit_cost_invoiced: line.unit_cost_base,
-            line_total: (qty_received > 0 ? qty_received : line.qty_ordered_base) * line.unit_cost_base
+            line_total: Math.round(((qty_received > 0 ? qty_received : line.qty_ordered_base) * line.unit_cost_base) * 100) / 100
           };
         });
 
@@ -184,7 +184,7 @@ export default function NewSupplierInvoicePage() {
         ...line,
         qty_received: 0,
         qty_invoiced: line.qty_ordered,
-        line_total: line.qty_ordered * line.unit_cost_invoiced
+        line_total: Math.round((line.qty_ordered * line.unit_cost_invoiced) * 100) / 100
       }));
       setLines(resetLines);
       return;
@@ -209,7 +209,7 @@ export default function NewSupplierInvoicePage() {
           ...line,
           qty_received: qty_received,
           qty_invoiced: qty_received > 0 ? qty_received : line.qty_ordered,
-          line_total: (qty_received > 0 ? qty_received : line.qty_ordered) * line.unit_cost_invoiced
+          line_total: Math.round(((qty_received > 0 ? qty_received : line.qty_ordered) * line.unit_cost_invoiced) * 100) / 100
         };
       });
       setLines(updatedLines);
@@ -224,27 +224,30 @@ export default function NewSupplierInvoicePage() {
   // Recalculate totals whenever lines change
   useEffect(() => {
     const sub = lines.reduce((acc, line) => acc + line.line_total, 0);
+    const roundedSub = Math.round(sub * 100) / 100;
     const tax = lines.reduce((acc, line) => {
       const rate = itemTaxRates[line.item_id] ?? 0.0;
       return acc + (line.line_total * rate);
     }, 0);
     const roundedTax = Math.round(tax * 100) / 100;
-    setSubtotal(sub);
+    setSubtotal(roundedSub);
     setTaxAmount(roundedTax);
-    setTotal(sub + roundedTax);
+    setTotal(Math.round((roundedSub + roundedTax) * 100) / 100);
   }, [lines, itemTaxRates]);
 
   const handleLineQtyChange = (index: number, val: number) => {
     const updated = [...lines];
-    updated[index].qty_invoiced = Math.max(0, val);
-    updated[index].line_total = Math.max(0, val) * updated[index].unit_cost_invoiced;
+    const qty = Math.max(0, val);
+    updated[index].qty_invoiced = qty;
+    updated[index].line_total = Math.round((qty * updated[index].unit_cost_invoiced) * 100) / 100;
     setLines(updated);
   };
 
   const handleLineCostChange = (index: number, val: number) => {
     const updated = [...lines];
-    updated[index].unit_cost_invoiced = Math.max(0, val);
-    updated[index].line_total = updated[index].qty_invoiced * Math.max(0, val);
+    const cost = Math.max(0, val);
+    updated[index].unit_cost_invoiced = cost;
+    updated[index].line_total = Math.round((updated[index].qty_invoiced * cost) * 100) / 100;
     setLines(updated);
   };
 
@@ -534,7 +537,7 @@ export default function NewSupplierInvoicePage() {
                         </div>
                       </td>
                       <td className="py-4 px-4 text-right font-mono font-bold text-text-primary">
-                        ${line.line_total.toLocaleString('es-ES', { minimumFractionDigits: 2 })}
+                        ${line.line_total.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
                     </tr>
                   ))}
@@ -546,15 +549,15 @@ export default function NewSupplierInvoicePage() {
           <div className="flex flex-col items-end gap-1.5 pt-4 border-t border-border">
             <div className="flex justify-between w-full max-w-[260px] text-xs text-text-secondary">
               <span>Subtotal Factura:</span>
-              <span className="font-semibold text-text-primary">${subtotal.toLocaleString('es-ES', { minimumFractionDigits: 2 })}</span>
+              <span className="font-semibold text-text-primary">${subtotal.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
             <div className="flex justify-between w-full max-w-[260px] text-xs text-text-secondary">
               <span>Impuesto (IVA 16%):</span>
-              <span className="font-semibold text-text-primary">${taxAmount.toLocaleString('es-ES', { minimumFractionDigits: 2 })}</span>
+              <span className="font-semibold text-text-primary">${taxAmount.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
             <div className="flex justify-between w-full max-w-[260px] text-base font-bold text-text-primary border-t border-border/50 pt-2">
               <span>Total Facturado:</span>
-              <span>${total.toLocaleString('es-ES', { minimumFractionDigits: 2 })}</span>
+              <span>${total.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
           </div>
         </div>

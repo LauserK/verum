@@ -65,6 +65,12 @@ export async function fetchWithAuth<T = unknown>(path: string, options: RequestI
             }
         }
 
+        if (errorDetail === 'missing_permission') {
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('missing-permission'))
+            }
+        }
+
         if (typeof errorDetail === 'object' && errorDetail !== null) {
             errorDetail = JSON.stringify(errorDetail)
         }

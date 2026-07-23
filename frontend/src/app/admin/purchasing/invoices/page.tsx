@@ -213,7 +213,7 @@ export default function SupplierInvoicesPage() {
                       )}
                     </td>
                     <td className="py-4 px-4 text-right font-mono font-bold text-text-primary">
-                      ${inv.total.toLocaleString('es-ES', { minimumFractionDigits: 2 })}
+                      ${inv.total.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                     <td className="py-4 px-4 flex justify-center">
                       {getMatchingStatusPill(inv.matching_status)}

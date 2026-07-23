@@ -31,3 +31,4 @@ class ProfileResponse(BaseModel):
     venue_id: Optional[str] = None
     shift_id: Optional[str] = None
     shift_name: Optional[str] = None
+    permissions: List[str] = []

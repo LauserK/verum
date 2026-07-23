@@ -5,6 +5,7 @@ from typing import Optional
 from database import get_db as _real_get_db
 from auth_deps import get_current_user
 from app.auth.schemas import SyncResponse, ProfileResponse
+from permissions import get_user_permissions
 
 
 def _get_db():
@@ -164,6 +165,12 @@ async def get_profile(x_org_id: Optional[str] = Header(None), user=Depends(get_c
             if shift_res.data and len(shift_res.data) > 0:
                 shift_name = shift_res.data[0].get("name")
 
+        # Resolve user permissions for the current active organization
+        try:
+            user_permissions = await get_user_permissions(user.id, db, org_id=x_org_id)
+        except Exception:
+            user_permissions = []
+
         return {
             "id": profile["id"],
             "full_name": profile.get("full_name"),
@@ -174,6 +181,7 @@ async def get_profile(x_org_id: Optional[str] = Header(None), user=Depends(get_c
             "venue_id": profile.get("venue_id"),
             "shift_id": shift_id,
             "shift_name": shift_name,
+            "permissions": user_permissions,
         }
     except HTTPException:
         raise

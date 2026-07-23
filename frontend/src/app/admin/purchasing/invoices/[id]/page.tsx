@@ -280,15 +280,15 @@ export default function SupplierInvoiceDetailPage() {
           <div className="flex flex-col items-end gap-1.5 pt-2 border-t border-border">
             <div className="flex justify-between w-full max-w-[240px] text-xs text-text-secondary">
               <span>Subtotal:</span>
-              <span className="font-semibold text-text-primary">${invoice.subtotal.toLocaleString('es-ES', { minimumFractionDigits: 2 })}</span>
+              <span className="font-semibold text-text-primary">${invoice.subtotal.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
             <div className="flex justify-between w-full max-w-[240px] text-xs text-text-secondary">
               <span>IVA (16%):</span>
-              <span className="font-semibold text-text-primary">${invoice.tax_amount.toLocaleString('es-ES', { minimumFractionDigits: 2 })}</span>
+              <span className="font-semibold text-text-primary">${invoice.tax_amount.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
             <div className="flex justify-between w-full max-w-[240px] text-sm font-bold text-text-primary border-t border-border/50 pt-1.5">
               <span>Total Facturado:</span>
-              <span>${invoice.total.toLocaleString('es-ES', { minimumFractionDigits: 2 })}</span>
+              <span>${invoice.total.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
           </div>
         </div>

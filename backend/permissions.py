@@ -109,3 +109,46 @@ async def check_restriction(profile_id: str, permission_key: str, db, org_id: st
             return True
 
     return False
+
+
+async def get_user_permissions(profile_id: str, db, org_id: str = None) -> list[str]:
+    """
+    Returns the list of all permission keys that the user has.
+    """
+    perm_context = await get_user_permission_context(profile_id, db, org_id)
+    
+    # Fetch all permissions from the catalog
+    all_perms_res = db.table('permissions').select('id, key').execute()
+    if not all_perms_res.data:
+        return []
+    
+    # If the user is super admin or admin of the organization, they have all permissions
+    if perm_context["is_superadmin"] or perm_context["is_admin"]:
+        return [p['key'] for p in all_perms_res.data]
+        
+    role_id = perm_context["role_id"]
+    
+    # Map permission ID to key
+    perm_map = {p['id']: p['key'] for p in all_perms_res.data}
+    
+    granted_perm_ids = set()
+    
+    # 1. Add permissions from the role
+    if role_id:
+        rp_res = db.table('role_permissions').select('permission_id').eq('role_id', role_id).execute()
+        if rp_res.data:
+            for rp in rp_res.data:
+                granted_perm_ids.add(rp['permission_id'])
+                
+    # 2. Apply individual overrides
+    override_res = db.table('profile_permission_overrides').select('permission_id, granted').eq('profile_id', profile_id).execute()
+    if override_res.data:
+        for override in override_res.data:
+            p_id = override['permission_id']
+            if override['granted']:
+                granted_perm_ids.add(p_id)
+            else:
+                granted_perm_ids.discard(p_id)
+                
+    # Map back to keys
+    return [perm_map[p_id] for p_id in granted_perm_ids if p_id in perm_map]

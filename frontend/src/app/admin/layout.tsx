@@ -210,7 +210,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         async function checkAccess() {
             try {
                 const p = await getProfile()
-                if (p.role !== 'admin') {
+                const hasAdminAccess = p.role === 'admin' || p.is_superadmin || p.permissions?.includes('admin.view_dashboard');
+                if (!hasAdminAccess) {
                     router.push('/dashboard')
                     return
                 }

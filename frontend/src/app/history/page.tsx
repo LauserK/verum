@@ -123,7 +123,7 @@ export default function HistoryPage() {
                             </button>
                         )}
 
-                        {profile?.role === 'admin' && (
+                        {(profile?.role === 'admin' || profile?.is_superadmin || profile?.permissions?.includes('admin.view_dashboard')) && (
                             <button
                                 onClick={() => router.push('/admin/dashboard')}
                                 className="p-2 rounded-full hover:bg-surface-raised text-primary transition-colors"

@@ -12,6 +12,7 @@ export interface Profile {
     venue_id?: string
     shift_id?: string
     shift_name?: string
+    permissions?: string[]
 }
 
 export interface ChecklistItem {
