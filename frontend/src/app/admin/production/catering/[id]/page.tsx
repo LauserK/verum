@@ -110,10 +110,10 @@ export default function MRPConsolePage() {
             await adminApi.updateCateringRequest(id as string, payload)
             await loadData()
             setMrpResult(null) // Reset plan since requirements/scale changed
-            alert('Configuración guardada exitosamente')
+            setErrorModal({ isOpen: true, message: 'Configuración guardada exitosamente' })
         } catch (err) {
             console.error('Error saving config:', err)
-            alert('Error al guardar la configuración: ' + (err as Error).message)
+            setErrorModal({ isOpen: true, message: 'Error al guardar la configuración: ' + (err as Error).message })
         } finally {
             setSavingConfig(false)
         }
@@ -142,7 +142,7 @@ export default function MRPConsolePage() {
             setShowEditItemsModal(false)
         } catch (err) {
             console.error('Error saving lines:', err)
-            alert('Error al guardar los artículos: ' + (err as Error).message)
+            setErrorModal({ isOpen: true, message: 'Error al guardar los artículos: ' + (err as Error).message })
         } finally {
             setSavingLines(false)
         }
@@ -150,7 +150,7 @@ export default function MRPConsolePage() {
 
     const handleAddItem = (item: InventoryItem) => {
         if (editingLines.some(l => l.item_id === item.id)) {
-            alert('El artículo ya está en la lista')
+            setErrorModal({ isOpen: true, message: 'El artículo ya está en la lista' })
             return
         }
         setEditingLines([...editingLines, {
@@ -293,10 +293,10 @@ export default function MRPConsolePage() {
             // Reload request to see status change
             const updated = await adminApi.getCateringRequest(id as string)
             setRequest(updated)
-            alert('Órdenes de producción generadas exitosamente')
+            setErrorModal({ isOpen: true, message: 'Órdenes de producción generadas exitosamente' })
         } catch (err) {
             console.error('Error generating orders:', err)
-            alert('Error al generar órdenes: ' + (err as Error).message)
+            setErrorModal({ isOpen: true, message: 'Error al generar órdenes: ' + (err as Error).message })
         } finally {
             setGeneratingOrders(false)
         }
@@ -310,7 +310,7 @@ export default function MRPConsolePage() {
             await loadData()
         } catch (err) {
             console.error('Error marking catering request completed:', err)
-            alert('Error al marcar como realizado: ' + (err as Error).message)
+            setErrorModal({ isOpen: true, message: 'Error al marcar como realizado: ' + (err as Error).message })
         } finally {
             setMarkingCompleted(false)
         }
