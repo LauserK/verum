@@ -602,7 +602,7 @@ async def get_purchase_orders(
     if supplier_id:
         query = query.eq("supplier_id", str(supplier_id))
     
-    res = query.execute()
+    res = query.order("created_at", desc=True).execute()
     pos = res.data or []
     
     if not pos:
