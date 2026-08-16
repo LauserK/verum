@@ -25,3 +25,9 @@ def authenticated_user_mock():
     user.email = "test@example.com"
     user.user_metadata = {"full_name": "Test User"}
     return user
+
+@pytest.fixture(autouse=True, scope="session")
+def disable_redis_cache():
+    from config import settings
+    settings.REDIS_URL = None
+

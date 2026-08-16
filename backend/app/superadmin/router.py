@@ -278,3 +278,16 @@ async def super_get_metrics(user=Depends(get_super_admin)):
         "total_venues": venues_res.count or 0,
         "total_users": users_res.count or 0,
     }
+
+@router.get("/cache/health")
+async def super_get_cache_health(user=Depends(get_super_admin)):
+    from app.cache import cache
+    return await cache.health()
+
+@router.post("/cache/flush")
+async def super_flush_cache(user=Depends(get_super_admin)):
+    from app.cache import cache
+    success = await cache.flush_all()
+    if not success:
+        raise HTTPException(500, detail="Failed to flush cache or cache is disabled")
+    return {"ok": True, "message": "Cache flushed completely"}

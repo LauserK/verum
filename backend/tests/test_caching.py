@@ -1,7 +1,8 @@
 # backend/tests/test_caching.py
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, patch, MagicMock
 from app.cache import CacheManager, hash_token, VERSIONS
+from permissions import get_super_admin
 
 @pytest.mark.asyncio
 async def test_cache_no_op_fallback():
@@ -144,3 +145,33 @@ async def test_invalidation_helpers(mock_cache):
     
     await invalidate_recipes("org1")
     mock_cache.delete.assert_any_call("recipes:graph:org1")
+
+@pytest.mark.asyncio
+@patch("app.cache.cache")
+async def test_super_admin_cache_endpoints(mock_cache):
+    """Verify that GET /super-admin/cache/health and POST /super-admin/cache/flush work correctly."""
+    from main import app
+    from fastapi.testclient import TestClient
+    
+    mock_super_admin = MagicMock()
+    mock_super_admin.id = "super-123"
+    app.dependency_overrides[get_super_admin] = lambda: mock_super_admin
+    
+    mock_cache.health = AsyncMock(return_value={"connected": True, "stats": {"total_hits": 5}})
+    mock_cache.flush_all = AsyncMock(return_value=True)
+    
+    with TestClient(app) as client:
+        # Test Health Endpoint
+        res = client.get("/super-admin/cache/health")
+        assert res.status_code == 200
+        assert res.json() == {"connected": True, "stats": {"total_hits": 5}}
+        mock_cache.health.assert_called_once()
+        
+        # Test Flush Endpoint
+        res = client.post("/super-admin/cache/flush")
+        assert res.status_code == 200
+        assert res.json() == {"ok": True, "message": "Cache flushed completely"}
+        mock_cache.flush_all.assert_called_once()
+        
+    app.dependency_overrides = {}
+

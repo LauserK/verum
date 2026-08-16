@@ -185,6 +185,20 @@ class CacheManager:
         if self._redis:
             await self._redis.close()
 
+    async def flush_all(self) -> bool:
+        """Clear all keys in the database. Returns True if successful, False otherwise."""
+        if not self._enabled:
+            return False
+        try:
+            await self._redis.flushdb()
+            self._hits = 0
+            self._misses = 0
+            logger.info("Redis cache flushed completely.")
+            return True
+        except Exception as e:
+            logger.error(f"Cache FLUSHDB error: {e}")
+            return False
+
 
 # ── Singleton ──────────────────────────────────────────────────────
 cache = CacheManager()
