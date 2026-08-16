@@ -10,6 +10,7 @@ from database import get_db
 from auth_deps import security, get_current_user
 from app.deps import get_active_org_id, require_permission
 from permissions import resolve_permission
+from app.cache import invalidate_user_rbac, invalidate_rbac_catalog
 
 from app.admin.schemas import (
     CreateOrgRequest, CreateVenueRequest, CreateTemplateRequest, CreateQuestionRequest,
@@ -331,6 +332,8 @@ async def update_user(user_id: str, body: UpdateUserRequest, user=Depends(requir
             "organization_id": org_id,
             "role_id": role_id
         }).execute()
+
+    await invalidate_user_rbac(org_id, user_id)
          
     # Fetch and return the updated profile to ensure consistency
     updated_profile = db.table("profiles").select("*").eq("id", user_id).single().execute()
@@ -707,6 +710,11 @@ async def assign_role_permissions(role_id: str, permission_ids: List[str], db=De
     inserts = [{"role_id": role_id, "permission_id": pid} for pid in permission_ids]
     if inserts:
         db.table("role_permissions").insert(inserts).execute()
+
+    role_res = db.table("custom_roles").select("org_id").eq("id", role_id).execute()
+    if role_res.data and role_res.data[0].get("org_id"):
+        await invalidate_rbac_catalog(role_res.data[0]["org_id"])
+
     return {"status": "success"}
 
 
@@ -734,6 +742,11 @@ async def create_override(
         "created_by": current_user.id,
     }
     res = db.table("profile_permission_overrides").upsert(data).execute()
+
+    po_res = db.table("profile_organizations").select("organization_id").eq("profile_id", profile_id).execute()
+    for po in (po_res.data or []):
+        await invalidate_user_rbac(po["organization_id"], profile_id)
+
     return res.data
 
 
