@@ -1,7 +1,9 @@
 # backend/permissions.py
+from typing import Optional
 from fastapi import Depends, HTTPException, status
 from database import get_db
 from auth_deps import get_current_user
+from app.cache import cache
 
 async def get_super_admin(current_user=Depends(get_current_user), db=Depends(get_db)):
     """
@@ -21,12 +23,21 @@ async def get_user_permission_context(profile_id: str, db, org_id: str = None) -
     Fetches user's permission context in minimal queries.
     Returns: { "is_superadmin": bool, "role_id": str|None, "is_admin": bool }
     """
+    cache_key = f"rbac:context:{org_id}:{profile_id}" if org_id else None
+    if cache_key:
+        cached = await cache.get(cache_key)
+        if cached:
+            return cached
+
     # 0. Check global super admin
     profile_res = db.table('profiles').select('is_superadmin').eq('id', profile_id).execute()
     is_superadmin = profile_res.data[0].get('is_superadmin', False) if profile_res.data else False
 
     if is_superadmin:
-        return {"is_superadmin": True, "role_id": None, "is_admin": True}
+        result = {"is_superadmin": True, "role_id": None, "is_admin": True}
+        if cache_key:
+            await cache.set(cache_key, result, ttl=600)
+        return result
 
     # 1. Fetch user's organization-specific role
     role_id = None
@@ -49,11 +60,24 @@ async def get_user_permission_context(profile_id: str, db, org_id: str = None) -
             if custom_roles:
                 is_admin = custom_roles.get('is_admin') is True
 
-    return {
+    result = {
         "is_superadmin": False,
         "role_id": role_id,
         "is_admin": is_admin
     }
+    if cache_key:
+        await cache.set(cache_key, result, ttl=600)
+
+    return result
+
+async def _get_permission_id(permission_key: str, db, org_id: str = None) -> Optional[str]:
+    catalog_key = f"rbac:catalog:perms:{org_id or 'global'}"
+    catalog = await cache.get(catalog_key)
+    if catalog is None:
+        all_perms = db.table('permissions').select('id, key').execute()
+        catalog = {p['key']: p['id'] for p in (all_perms.data or [])}
+        await cache.set(catalog_key, catalog, ttl=3600)
+    return catalog.get(permission_key)
 
 async def resolve_permission(profile_id: str, permission_key: str, db, org_id: str = None, perm_context: dict = None) -> bool:
     if perm_context is None:
@@ -64,11 +88,10 @@ async def resolve_permission(profile_id: str, permission_key: str, db, org_id: s
 
     role_id = perm_context["role_id"]
 
-    # Fetch permission id
-    perm_res = db.table('permissions').select('id').eq('key', permission_key).execute()
-    if not perm_res.data:
+    # Fetch permission id via cached catalog helper
+    perm_id = await _get_permission_id(permission_key, db, org_id)
+    if not perm_id:
         return False
-    perm_id = perm_res.data[0]['id']
 
     # 2. Check individual override
     override_res = db.table('profile_permission_overrides').select('granted').eq('profile_id', profile_id).eq('permission_id', perm_id).execute()
@@ -91,11 +114,10 @@ async def check_restriction(profile_id: str, permission_key: str, db, org_id: st
 
     role_id = perm_context["role_id"]
 
-    # Fetch permission id
-    perm_res = db.table('permissions').select('id').eq('key', permission_key).execute()
-    if not perm_res.data:
+    # Fetch permission id via cached catalog helper
+    perm_id = await _get_permission_id(permission_key, db, org_id)
+    if not perm_id:
         return False
-    perm_id = perm_res.data[0]['id']
 
     # 1. Check individual override
     override_res = db.table('profile_permission_overrides').select('granted').eq('profile_id', profile_id).eq('permission_id', perm_id).execute()
@@ -117,19 +139,25 @@ async def get_user_permissions(profile_id: str, db, org_id: str = None) -> list[
     """
     perm_context = await get_user_permission_context(profile_id, db, org_id)
     
-    # Fetch all permissions from the catalog
-    all_perms_res = db.table('permissions').select('id, key').execute()
-    if not all_perms_res.data:
+    # Fetch all permissions from the catalog (using cache)
+    catalog_key = f"rbac:catalog:perms:{org_id or 'global'}"
+    catalog = await cache.get(catalog_key)
+    if catalog is None:
+        all_perms_res = db.table('permissions').select('id, key').execute()
+        catalog = {p['key']: p['id'] for p in (all_perms_res.data or [])}
+        await cache.set(catalog_key, catalog, ttl=3600)
+
+    if not catalog:
         return []
     
     # If the user is super admin or admin of the organization, they have all permissions
     if perm_context["is_superadmin"] or perm_context["is_admin"]:
-        return [p['key'] for p in all_perms_res.data]
+        return list(catalog.keys())
         
     role_id = perm_context["role_id"]
     
     # Map permission ID to key
-    perm_map = {p['id']: p['key'] for p in all_perms_res.data}
+    perm_map = {perm_id: key for key, perm_id in catalog.items()}
     
     granted_perm_ids = set()
     
