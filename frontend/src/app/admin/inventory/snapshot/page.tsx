@@ -216,6 +216,8 @@ export default function InventorySnapshotPage() {
     }
   }
 
+  const [showExportDropdown, setShowExportDropdown] = useState(false)
+
   const handleExportCSV = () => {
     const itemsToExport = groupBy === 'item' ? consolidatedItems : (groupBy === 'warehouse' ? filteredItems : sortedItems)
     if (itemsToExport.length === 0) return
@@ -249,6 +251,79 @@ export default function InventorySnapshotPage() {
     const link = document.createElement('a')
     link.setAttribute('href', encodedUri)
     link.setAttribute('download', `inventario-snapshot${whSuffix}-${date}${groupSuffix}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  const handleExportCompactCSV = () => {
+    if (filteredItems.length === 0) return
+
+    // 1. Get ordered list of unique active warehouses in current filtered items
+    const activeWarehouses = Array.from(
+      new Set(filteredItems.map(item => item.warehouse_name || 'Sin Almacén'))
+    ).sort()
+
+    // 2. Group items by item_id
+    const itemGroups: Record<string, {
+      item_code: string;
+      item_name: string;
+      uom_name: string;
+      warehouse_qtys: Record<string, number>;
+      total_qty: number;
+      total_valuation: number;
+    }> = {}
+
+    filteredItems.forEach(item => {
+      const key = item.item_id
+      if (!itemGroups[key]) {
+        itemGroups[key] = {
+          item_code: item.item_code || '',
+          item_name: item.item_name,
+          uom_name: item.uom_name || 'un',
+          warehouse_qtys: {},
+          total_qty: 0,
+          total_valuation: 0
+        }
+      }
+      const group = itemGroups[key]
+      const whName = item.warehouse_name || 'Sin Almacén'
+      group.warehouse_qtys[whName] = (group.warehouse_qtys[whName] || 0) + item.qty_on_hand
+      group.total_qty += item.qty_on_hand
+      group.total_valuation += item.valuation
+    })
+
+    // 3. Create headers (Code, Item, UoM, ...warehouses, Total Qty, Valuation)
+    const valHeader = valuationMethod === 'peps' ? 'Valoración PEPS Total ($)' : 'Val. Último Costo Total ($)'
+    const headers = ['Código', 'Artículo', 'U.M.', ...activeWarehouses.map(w => `Cant. ${w}`), 'Total Cantidad', valHeader]
+
+    // 4. Generate rows
+    const csvRows = [headers.join(',')]
+    Object.values(itemGroups).forEach(group => {
+      const row = [
+        `"${group.item_code}"`,
+        `"${group.item_name}"`,
+        `"${group.uom_name}"`,
+        ...activeWarehouses.map(wh => {
+          const qty = group.warehouse_qtys[wh] || 0
+          return qty.toFixed(4)
+        }),
+        group.total_qty.toFixed(4),
+        group.total_valuation.toFixed(2)
+      ]
+      csvRows.push(row.join(','))
+    })
+
+    // 5. Trigger download
+    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + csvRows.join('\n')
+    const encodedUri = encodeURI(csvContent)
+
+    const selectedWh = warehouses.find(w => w.id === selectedWarehouseId)
+    const whSuffix = selectedWh ? `-${selectedWh.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}` : ''
+
+    const link = document.createElement('a')
+    link.setAttribute('href', encodedUri)
+    link.setAttribute('download', `inventario-snapshot-compacto${whSuffix}-${date}.csv`)
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -319,15 +394,51 @@ export default function InventorySnapshotPage() {
             </select>
             <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-secondary pointer-events-none" />
           </div>
-          {/* Export Button */}
-          <button 
-            onClick={handleExportCSV}
-            disabled={groupBy === 'item' ? consolidatedItems.length === 0 : (groupBy === 'warehouse' ? warehouseGroups.length === 0 : sortedItems.length === 0)}
-            className="h-10 px-4 bg-primary hover:bg-primary-hover text-text-inverse disabled:opacity-50 disabled:hover:bg-primary rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-md shadow-primary/10 active:scale-[0.98]"
-          >
-            <Download className="w-3.5 h-3.5" />
-            Exportar CSV
-          </button>
+          {/* Export Button with Options Dropdown */}
+          <div className="relative">
+            <button 
+              onClick={() => setShowExportDropdown(!showExportDropdown)}
+              disabled={filteredItems.length === 0}
+              className="h-10 px-4 bg-primary hover:bg-primary-hover text-text-inverse disabled:opacity-50 disabled:hover:bg-primary rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-md shadow-primary/10 active:scale-[0.98]"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Exportar CSV
+              <ChevronDown className="w-3 h-3 ml-1" />
+            </button>
+
+            {showExportDropdown && (
+              <>
+                <div 
+                  className="fixed inset-0 z-30" 
+                  onClick={() => setShowExportDropdown(false)}
+                />
+                
+                <div className="absolute right-0 mt-2 w-64 bg-surface border border-border rounded-xl shadow-lg py-1.5 z-40 animate-in fade-in slide-in-from-top-2 duration-150 text-left">
+                  <button
+                    onClick={() => {
+                      handleExportCSV();
+                      setShowExportDropdown(false);
+                    }}
+                    className="w-full text-left px-4 py-2 text-xs font-semibold text-text-primary hover:bg-surface-raised hover:text-primary transition-colors flex flex-col gap-0.5"
+                  >
+                    <span>Detallado (Actual)</span>
+                    <span className="text-[10px] text-text-secondary font-normal">Exporta una fila por cada almacén y artículo</span>
+                  </button>
+                  <div className="border-t border-border/60 my-1" />
+                  <button
+                    onClick={() => {
+                      handleExportCompactCSV();
+                      setShowExportDropdown(false);
+                    }}
+                    className="w-full text-left px-4 py-2 text-xs font-semibold text-text-primary hover:bg-surface-raised hover:text-primary transition-colors flex flex-col gap-0.5"
+                  >
+                    <span>Compacto (Multi-almacén)</span>
+                    <span className="text-[10px] text-text-secondary font-normal">Una fila por artículo con columnas para cada almacén</span>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
