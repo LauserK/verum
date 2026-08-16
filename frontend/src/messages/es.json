@@ -457,6 +457,7 @@
   "metrics": "Métricas Globales",
   "organizations": "Organizaciones",
   "users": "Usuarios Globales",
+  "cache": "Caché Redis",
   "totalOrgs": "Organizaciones",
   "totalVenues": "Locales (Venues)",
   "totalUsers": "Usuarios Totales",

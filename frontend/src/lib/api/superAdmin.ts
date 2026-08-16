@@ -60,4 +60,6 @@ export const superAdminApi = {
         fetchWithAuth(`/super-admin/users/${userId}/super-admin`, { method: 'PATCH', body: JSON.stringify({ is_superadmin: isSuper }) }),
         
     getMetrics: (): Promise<unknown> => fetchWithAuth('/super-admin/metrics'),
+    getCacheHealth: (): Promise<any> => fetchWithAuth('/super-admin/cache/health'),
+    flushCache: (): Promise<any> => fetchWithAuth('/super-admin/cache/flush', { method: 'POST' }),
 }

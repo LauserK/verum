@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { getProfile, type Profile } from '@/lib/api'
 import { logout } from '@/app/login/actions'
-import { LayoutDashboard, Users, Building2, LogOut, Moon, Sun, ShieldCheck } from 'lucide-react'
+import { LayoutDashboard, Users, Building2, LogOut, Moon, Sun, ShieldCheck, Database } from 'lucide-react'
 import { useTheme } from '@/components/ThemeProvider'
 import { useTranslations } from '@/components/I18nProvider'
 
@@ -20,6 +20,7 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
         { href: '/super-admin/dashboard', label: t('superAdmin.metrics'), icon: LayoutDashboard },
         { href: '/super-admin/organizations', label: t('superAdmin.organizations'), icon: Building2 },
         { href: '/super-admin/users', label: t('superAdmin.users'), icon: Users },
+        { href: '/super-admin/cache', label: t('superAdmin.cache'), icon: Database },
     ]
 
     useEffect(() => {
