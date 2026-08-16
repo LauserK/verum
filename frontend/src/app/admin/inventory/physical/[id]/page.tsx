@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { adminApi } from '@/lib/api'
 import { Loader2, ArrowLeft, AlertTriangle, Play } from 'lucide-react'
 import Link from 'next/link'
+import ConfirmationModal from '@/components/ConfirmationModal'
 
 export default function AdminPhysicalInventoryDetail() {
   const params = useParams()
@@ -12,6 +13,44 @@ export default function AdminPhysicalInventoryDetail() {
   const [detail, setDetail] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [processing, setProcessing] = useState(false)
+
+  // Modal state
+  const [modalState, setModalState] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmLabel: 'Entendido',
+    cancelLabel: '',
+    onConfirm: () => {}
+  })
+
+  const showAlert = (title: string, message: string, onConfirm = () => {}) => {
+    setModalState({
+      isOpen: true,
+      title,
+      message,
+      confirmLabel: 'Entendido',
+      cancelLabel: '',
+      onConfirm: () => {
+        setModalState(prev => ({ ...prev, isOpen: false }))
+        onConfirm()
+      }
+    })
+  }
+
+  const showConfirm = (title: string, message: string, onConfirm: () => void) => {
+    setModalState({
+      isOpen: true,
+      title,
+      message,
+      confirmLabel: 'Confirmar',
+      cancelLabel: 'Cancelar',
+      onConfirm: () => {
+        setModalState(prev => ({ ...prev, isOpen: false }))
+        onConfirm()
+      }
+    })
+  }
 
   useEffect(() => {
     loadDetail()
@@ -28,22 +67,25 @@ export default function AdminPhysicalInventoryDetail() {
     }
   }
 
-  const handleProcess = async () => {
-    if (!confirm('¿Está seguro de procesar este conteo? Esto actualizará el stock disponible y registrará los movimientos de ajuste en el Kardex.')) {
-      return
-    }
-
-    setProcessing(true)
-    try {
-      await adminApi.processPhysicalInventory(params.id as string)
-      alert('Ajustes aplicados correctamente en la base de datos.')
-      loadDetail()
-    } catch (err) {
-      console.error(err)
-      alert('Error al procesar los ajustes de inventario.')
-    } finally {
-      setProcessing(false)
-    }
+  const handleProcess = () => {
+    showConfirm(
+      '¿Procesar Conteo?',
+      '¿Está seguro de procesar este conteo? Esto actualizará el stock disponible y registrará los movimientos de ajuste en el Kardex.',
+      async () => {
+        setProcessing(true)
+        try {
+          await adminApi.processPhysicalInventory(params.id as string)
+          showAlert('Ajustes Aplicados', 'Los ajustes de inventario han sido aplicados correctamente en la base de datos.', () => {
+            loadDetail()
+          })
+        } catch (err) {
+          console.error(err)
+          showAlert('Error', 'Ocurrió un error al procesar los ajustes de inventario.')
+        } finally {
+          setProcessing(false)
+        }
+      }
+    )
   }
 
   if (loading) {
@@ -166,6 +208,16 @@ export default function AdminPhysicalInventoryDetail() {
           </button>
         </div>
       )}
+
+      <ConfirmationModal 
+        isOpen={modalState.isOpen}
+        title={modalState.title}
+        message={modalState.message}
+        confirmLabel={modalState.confirmLabel}
+        cancelLabel={modalState.cancelLabel}
+        onConfirm={modalState.onConfirm}
+        onCancel={() => setModalState(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   )
 }
