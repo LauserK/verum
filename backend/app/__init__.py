@@ -1,6 +1,11 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.gzip import GZipMiddleware
+
+from app.cache import cache
+from config import settings
+
 from app.purchasing.router import router as purchasing_router
 from app.transfers.router import router as transfers_router
 from app.catering.router import router as catering_router
@@ -12,8 +17,18 @@ from app.admin.router import router as admin_router
 from app.checklists.router import router as checklists_router
 from app.auth.router import router as auth_router
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    await cache.init(settings.REDIS_URL)
+    yield
+    # Shutdown
+    await cache.close()
+
+
 def create_app() -> FastAPI:
-    app = FastAPI(title="VERUM API")
+    app = FastAPI(title="VERUM API", lifespan=lifespan)
 
     # CORS for frontend
     app.add_middleware(
@@ -26,6 +41,11 @@ def create_app() -> FastAPI:
     
     # GZip compression
     app.add_middleware(GZipMiddleware, minimum_size=500)
+
+    # Public health check
+    @app.get("/health")
+    async def health_check():
+        return {"status": "ok", "redis": await cache.health()}
 
     # Register routers
     app.include_router(purchasing_router)
