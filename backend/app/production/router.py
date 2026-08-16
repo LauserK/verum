@@ -133,10 +133,19 @@ async def create_item(item: ItemCreate, org_id: str = Depends(get_active_org_id)
     if not item_res.data:
         raise HTTPException(status_code=400, detail="Error fetching created item")
         
+    from app.cache import invalidate_catalog_items
+    await invalidate_catalog_items(org_id)
+
     return flatten_item_response(item_res.data[0])
 
 @router.get("/inventory/items", response_model=List[ItemResponse], tags=["Inventory"])
 async def list_items(org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
+    from app.cache import cache
+    cache_key = f"catalog:items:{org_id}"
+    cached = await cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     res = db.table("items") \
         .select("*, uom_base(name), taxes(rate)") \
         .eq("org_id", org_id) \
@@ -145,6 +154,7 @@ async def list_items(org_id: str = Depends(get_active_org_id), db=Depends(get_db
     
     # Flatten responses
     items = [flatten_item_response(item) for item in (res.data or [])]
+    await cache.set(cache_key, items, ttl=900)
     return items
 
 @router.get("/inventory/lots/resolve/{lot_number}", tags=["Inventory"])
@@ -255,12 +265,19 @@ async def update_item(
     if not item_res.data:
         raise HTTPException(status_code=404, detail="Item not found")
         
+    from app.cache import invalidate_catalog_items
+    await invalidate_catalog_items(org_id)
+
     return flatten_item_response(item_res.data[0])
 
 @router.delete("/inventory/items/{item_id}", tags=["Inventory"])
 async def delete_item(item_id: UUID, db=Depends(get_db), _=Depends(require_permission("inventory.manage_items"))):
+    item_res = db.table("items").select("org_id").eq("id", str(item_id)).execute()
     # Soft delete: just inactivate
     db.table("items").update({"is_active": False}).eq("id", str(item_id)).execute()
+    if item_res.data and item_res.data[0].get("org_id"):
+        from app.cache import invalidate_catalog_items
+        await invalidate_catalog_items(item_res.data[0]["org_id"])
     return {"ok": True}
 
 @router.get("/inventory/items/{item_id}", response_model=ItemResponse, tags=["Inventory"])
