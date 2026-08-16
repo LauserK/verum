@@ -366,8 +366,16 @@ async def list_uom_base(db=Depends(get_db), _=Depends(require_permission("invent
 
 @router.get("/inventory/uom-presentations", response_model=List[UOMPresentationResponse], tags=["Inventory"])
 async def list_uom_presentations(org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
+    from app.cache import cache
+    cache_key = f"catalog:uom:{org_id}"
+    cached = await cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     res = db.table("uom_presentations").select("*").eq("org_id", org_id).execute()
-    return res.data or []
+    presentations = res.data or []
+    await cache.set(cache_key, presentations, ttl=1800)
+    return presentations
 
 @router.post("/inventory/uom-presentations", response_model=UOMPresentationResponse, tags=["Inventory"])
 async def create_uom_presentation(pres: UOMPresentationCreate, org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.manage_items"))):
@@ -381,11 +389,19 @@ async def create_uom_presentation(pres: UOMPresentationCreate, org_id: str = Dep
     res = db.table("uom_presentations").insert(data).execute()
     if not res.data:
         raise HTTPException(status_code=400, detail="Error creating presentation")
+
+    from app.cache import invalidate_catalog_uom
+    await invalidate_catalog_uom(org_id)
+
     return res.data[0]
 
 @router.delete("/inventory/uom-presentations/{pres_id}", tags=["Inventory"])
 async def delete_uom_presentation(pres_id: UUID, db=Depends(get_db), _=Depends(require_permission("inventory.manage_items"))):
+    pres_res = db.table("uom_presentations").select("org_id").eq("id", str(pres_id)).execute()
     db.table("uom_presentations").delete().eq("id", str(pres_id)).execute()
+    if pres_res.data and pres_res.data[0].get("org_id"):
+        from app.cache import invalidate_catalog_uom
+        await invalidate_catalog_uom(pres_res.data[0]["org_id"])
     return {"ok": True}
 
 @router.get("/inventory/items/{item_id}/presentations", tags=["Inventory"])
