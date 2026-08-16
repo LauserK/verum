@@ -1315,6 +1315,9 @@ async def create_supplier_return(
             if po_res.data and po_res.data[0]["status"] == "received":
                 db.table("purchase_orders").update({"status": "partially_received"}).eq("id", str(ret_create.po_id)).execute()
 
+    from app.cache import invalidate_supplier_metrics
+    await invalidate_supplier_metrics(org_id, str(ret_create.supplier_id))
+
     # Retornar devolución hidratada
     return await get_supplier_return_by_id(return_id, org_id, db)
 
@@ -1476,7 +1479,15 @@ async def get_supplier_metrics(
     _perm=Depends(require_permission("purchasing.supplier.view")),
     db=Depends(get_db)
 ):
-    return await calculate_supplier_metrics(str(supplier_id), org_id, db)
+    from app.cache import cache
+    cache_key = f"supplier:metrics:{org_id}:{supplier_id}"
+    cached = await cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    result = await calculate_supplier_metrics(str(supplier_id), org_id, db)
+    await cache.set(cache_key, result, ttl=900)
+    return result
 
 @router.post("/suppliers/{supplier_id}/evaluations", response_model=SupplierEvaluationResponse, status_code=201)
 async def create_supplier_evaluation(

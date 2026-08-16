@@ -1419,8 +1419,10 @@ async def process_inventory_document(
             "processed_at": datetime.now(CARACAS_TZ).isoformat()
         }).eq("id", str(id)).execute()
         
-    from app.cache import invalidate_inventory
+    from app.cache import invalidate_inventory, invalidate_supplier_metrics
     await invalidate_inventory(org_id)
+    if header.get("supplier_id"):
+        await invalidate_supplier_metrics(org_id, str(header["supplier_id"]))
 
     final_doc = db.table("inventory_documents").select("*").eq("id", str(id)).execute()
     return final_doc.data[0]
@@ -1720,8 +1722,10 @@ async def cancel_inventory_document(
         "cancelled_at": datetime.now(CARACAS_TZ).isoformat()
     }).eq("id", str(id)).execute()
     
-    from app.cache import invalidate_inventory
+    from app.cache import invalidate_inventory, invalidate_supplier_metrics
     await invalidate_inventory(org_id)
+    if header.get("supplier_id"):
+        await invalidate_supplier_metrics(org_id, str(header["supplier_id"]))
 
     final_doc = db.table("inventory_documents").select("*").eq("id", str(id)).execute()
     return final_doc.data[0]
