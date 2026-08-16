@@ -75,14 +75,20 @@ async def get_checklists(venue_id: str, user=Depends(require_permission("checkli
         shift = await get_user_shift_identifier(user.id, venue_id, db)
         today = datetime.now(CARACAS_TZ).strftime("%Y-%m-%d")
 
+        from app.cache import cache
+
         # 1. Get all templates for this venue
-        templates_res = (
-            db.table("checklist_templates")
-            .select("*")
-            .eq("venue_id", venue_id)
-            .execute()
-        )
-        templates = templates_res.data or []
+        templates_cache_key = f"catalog:templates:{venue_id}"
+        templates = await cache.get(templates_cache_key)
+        if templates is None:
+            templates_res = (
+                db.table("checklist_templates")
+                .select("*")
+                .eq("venue_id", venue_id)
+                .execute()
+            )
+            templates = templates_res.data or []
+            await cache.set(templates_cache_key, templates, ttl=600)
 
         if not templates:
             return []
@@ -90,14 +96,20 @@ async def get_checklists(venue_id: str, user=Depends(require_permission("checkli
         template_ids = [t["id"] for t in templates]
 
         # 2. Get question counts per template
-        questions_res = (
-            db.table("questions")
-            .select("id, template_id")
-            .in_("template_id", template_ids)
-            .execute()
-        )
+        questions_cache_key = f"catalog:questions:{venue_id}"
+        questions_data = await cache.get(questions_cache_key)
+        if questions_data is None:
+            questions_res = (
+                db.table("questions")
+                .select("id, template_id")
+                .in_("template_id", template_ids)
+                .execute()
+            )
+            questions_data = questions_res.data or []
+            await cache.set(questions_cache_key, questions_data, ttl=600)
+
         questions_by_template: dict[str, int] = {}
-        for q in (questions_res.data or []):
+        for q in questions_data:
             tid = q["template_id"]
             questions_by_template[tid] = questions_by_template.get(tid, 0) + 1
 
@@ -637,6 +649,7 @@ async def list_templates(venue_id: str, user=Depends(require_permission("checkli
 
 @router.post("/admin/templates")
 async def create_template(body: CreateTemplateRequest, user=Depends(require_permission("checklists.manage_templates"))):
+    from app.cache import invalidate_checklist_templates
     db = get_db()
     payload = {
         "venue_id": body.venue_id,
@@ -658,11 +671,14 @@ async def create_template(body: CreateTemplateRequest, user=Depends(require_perm
         payload["prerequisite_template_id"] = body.prerequisite_template_id
 
     res = db.table("checklist_templates").insert(payload).execute()
+    if body.venue_id:
+        await invalidate_checklist_templates(body.venue_id)
     return res.data[0]
 
 
 @router.put("/admin/templates/{template_id}")
 async def update_template(template_id: str, body: CreateTemplateRequest, user=Depends(require_permission("checklists.manage_templates"))):
+    from app.cache import invalidate_checklist_templates
     db = get_db()
     payload = {
         "venue_id": body.venue_id,
@@ -684,13 +700,21 @@ async def update_template(template_id: str, body: CreateTemplateRequest, user=De
         payload["prerequisite_template_id"] = body.prerequisite_template_id
 
     res = db.table("checklist_templates").update(payload).eq("id", template_id).execute()
+    if body.venue_id:
+        await invalidate_checklist_templates(body.venue_id)
     return res.data[0] if res.data else {"ok": True}
 
 
 @router.delete("/admin/templates/{template_id}")
 async def delete_template(template_id: str, user=Depends(require_permission("checklists.manage_templates"))):
+    from app.cache import invalidate_checklist_templates
     db = get_db()
+    tmpl_res = db.table("checklist_templates").select("venue_id").eq("id", template_id).execute()
+    venue_id = tmpl_res.data[0]["venue_id"] if tmpl_res.data else None
+
     db.table("checklist_templates").delete().eq("id", template_id).execute()
+    if venue_id:
+        await invalidate_checklist_templates(venue_id)
     return {"ok": True}
 
 
@@ -709,7 +733,11 @@ async def list_questions(template_id: str, user=Depends(require_permission("chec
 
 @router.post("/admin/questions")
 async def create_question(body: CreateQuestionRequest, user=Depends(require_permission("checklists.manage_templates"))):
+    from app.cache import invalidate_checklist_templates
     db = get_db()
+    tmpl_res = db.table("checklist_templates").select("venue_id").eq("id", body.template_id).execute()
+    venue_id = tmpl_res.data[0]["venue_id"] if tmpl_res.data else None
+
     payload = {
         "template_id": body.template_id,
         "label": body.label,
@@ -720,12 +748,23 @@ async def create_question(body: CreateQuestionRequest, user=Depends(require_perm
     if body.config:
         payload["config"] = body.config
     res = db.table("questions").insert(payload).execute()
+    if venue_id:
+        await invalidate_checklist_templates(venue_id)
     return res.data[0]
 
 
 @router.put("/admin/questions/{question_id}")
 async def update_question(question_id: str, body: CreateQuestionRequest, user=Depends(require_permission("checklists.manage_templates"))):
+    from app.cache import invalidate_checklist_templates
     db = get_db()
+    venue_id = None
+    q_res = db.table("questions").select("template_id").eq("id", question_id).execute()
+    if q_res.data:
+        t_id = q_res.data[0]["template_id"]
+        tmpl_res = db.table("checklist_templates").select("venue_id").eq("id", t_id).execute()
+        if tmpl_res.data:
+            venue_id = tmpl_res.data[0]["venue_id"]
+
     payload = {
         "label": body.label,
         "type": body.type,
@@ -735,19 +774,39 @@ async def update_question(question_id: str, body: CreateQuestionRequest, user=De
     if body.config is not None:
         payload["config"] = body.config
     res = db.table("questions").update(payload).eq("id", question_id).execute()
+    if venue_id:
+        await invalidate_checklist_templates(venue_id)
     return res.data[0] if res.data else {"ok": True}
 
 
 @router.put("/admin/templates/{template_id}/questions/reorder")
 async def reorder_questions(template_id: str, body: ReorderQuestionsRequest, user=Depends(require_permission("checklists.manage_templates"))):
+    from app.cache import invalidate_checklist_templates
     db = get_db()
+    tmpl_res = db.table("checklist_templates").select("venue_id").eq("id", template_id).execute()
+    venue_id = tmpl_res.data[0]["venue_id"] if tmpl_res.data else None
+
     for item in body.questions:
         db.table("questions").update({"sort_order": item.sort_order}).eq("id", item.id).execute()
+
+    if venue_id:
+        await invalidate_checklist_templates(venue_id)
     return {"ok": True}
 
 
 @router.delete("/admin/questions/{question_id}")
 async def delete_question(question_id: str, user=Depends(require_permission("checklists.manage_templates"))):
+    from app.cache import invalidate_checklist_templates
     db = get_db()
+    venue_id = None
+    q_res = db.table("questions").select("template_id").eq("id", question_id).execute()
+    if q_res.data:
+        t_id = q_res.data[0]["template_id"]
+        tmpl_res = db.table("checklist_templates").select("venue_id").eq("id", t_id).execute()
+        if tmpl_res.data:
+            venue_id = tmpl_res.data[0]["venue_id"]
+
     db.table("questions").delete().eq("id", question_id).execute()
+    if venue_id:
+        await invalidate_checklist_templates(venue_id)
     return {"ok": True}
