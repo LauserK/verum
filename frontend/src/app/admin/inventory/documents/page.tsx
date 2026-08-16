@@ -888,6 +888,25 @@ export default function InventoryDocumentsPage() {
                   </div>
                 )}
 
+                <div>
+                  <p className="text-xs font-bold text-text-secondary uppercase">Registrado Por</p>
+                  <p className="font-semibold text-text-primary mt-0.5">{selectedDoc.creator_name || 'N/A'}</p>
+                </div>
+
+                {selectedDoc.processor_name && (
+                  <div>
+                    <p className="text-xs font-bold text-text-secondary uppercase">Procesado Por</p>
+                    <p className="font-semibold text-text-primary mt-0.5">{selectedDoc.processor_name}</p>
+                  </div>
+                )}
+
+                {selectedDoc.canceller_name && (
+                  <div>
+                    <p className="text-xs font-bold text-text-secondary uppercase">Anulado Por</p>
+                    <p className="font-semibold text-text-primary mt-0.5">{selectedDoc.canceller_name}</p>
+                  </div>
+                )}
+
                 <div className="col-span-full border-t border-border pt-3 mt-1">
                   <p className="text-xs font-bold text-text-secondary uppercase">Comentarios / Notas</p>
                   <p className="text-text-primary mt-1 text-xs italic">{selectedDoc.notes || 'Sin comentarios'}</p>
