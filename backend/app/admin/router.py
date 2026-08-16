@@ -773,6 +773,13 @@ async def get_admin_summary(
     org_id: str = Depends(get_active_org_id)
 ):
     try:
+        from app.cache import cache
+
+        cache_key = f"admin:summary:{org_id}:{venue_id or 'all'}"
+        cached = await cache.get(cache_key)
+        if cached is not None:
+            return cached
+
         # 1. Active Staff Count
         today_str = datetime.now(CARACAS_TZ).strftime("%Y-%m-%d")
         
@@ -843,12 +850,14 @@ async def get_admin_summary(
             abs_res = abs_query.execute()
             pending_absences = abs_res.count if abs_res.count is not None else 0
 
-        return {
+        result = {
             "active_staff": active_staff,
             "pending_tickets": pending_tickets,
             "critical_failures": critical_failures,
             "pending_absences": pending_absences,
             "today": today_str
         }
+        await cache.set(cache_key, result, ttl=30)
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
