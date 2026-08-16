@@ -55,6 +55,10 @@ async def create_warehouse(warehouse: WarehouseCreate, org_id: str = Depends(get
     res = db.table("warehouses").insert(data).execute()
     if not res.data:
         raise HTTPException(status_code=400, detail="Error creating warehouse")
+
+    from app.cache import invalidate_catalog_warehouses
+    await invalidate_catalog_warehouses(org_id)
+
     return res.data[0]
 
 @router.put("/inventory/warehouses/{warehouse_id}", response_model=WarehouseResponse, tags=["Inventory"])
@@ -79,12 +83,23 @@ async def update_warehouse(warehouse_id: UUID, warehouse: WarehouseUpdate, org_i
     if not res.data:
         raise HTTPException(status_code=404, detail="Warehouse not found or not in org")
 
+    from app.cache import invalidate_catalog_warehouses
+    await invalidate_catalog_warehouses(org_id)
+
     return res.data[0]
 
 @router.get("/inventory/warehouses", response_model=List[WarehouseResponse], tags=["Inventory"])
 async def list_warehouses(org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
+    from app.cache import cache
+    cache_key = f"catalog:warehouses:{org_id}"
+    cached = await cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     res = db.table("warehouses").select("*").eq("org_id", org_id).execute()
-    return res.data
+    warehouses = res.data or []
+    await cache.set(cache_key, warehouses, ttl=1800)
+    return warehouses
 
 @router.post("/inventory/items", response_model=ItemResponse, tags=["Inventory"])
 async def create_item(item: ItemCreate, org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.manage_items"))):
