@@ -233,6 +233,7 @@ async def invalidate_catalog_warehouses(org_id: str):
 async def invalidate_checklist_templates(venue_id: str):
     """Invalidate cached checklist templates for a venue."""
     await cache.delete(f"catalog:templates:{venue_id}")
+    await cache.delete(f"catalog:questions:{venue_id}")
 
 async def invalidate_admin_summary(org_id: str):
     """Invalidate cached admin dashboard summary."""
