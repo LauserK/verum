@@ -3,7 +3,6 @@ from typing import Optional
 from fastapi import Depends, HTTPException, status
 from database import get_db
 from auth_deps import get_current_user
-from app.cache import cache
 
 async def get_super_admin(current_user=Depends(get_current_user), db=Depends(get_db)):
     """
@@ -23,6 +22,7 @@ async def get_user_permission_context(profile_id: str, db, org_id: str = None) -
     Fetches user's permission context in minimal queries.
     Returns: { "is_superadmin": bool, "role_id": str|None, "is_admin": bool }
     """
+    from app.cache import cache
     cache_key = f"rbac:context:{org_id}:{profile_id}" if org_id else None
     if cache_key:
         cached = await cache.get(cache_key)
@@ -71,6 +71,7 @@ async def get_user_permission_context(profile_id: str, db, org_id: str = None) -
     return result
 
 async def _get_permission_id(permission_key: str, db, org_id: str = None) -> Optional[str]:
+    from app.cache import cache
     catalog_key = f"rbac:catalog:perms:{org_id or 'global'}"
     catalog = await cache.get(catalog_key)
     if catalog is None:
@@ -137,6 +138,7 @@ async def get_user_permissions(profile_id: str, db, org_id: str = None) -> list[
     """
     Returns the list of all permission keys that the user has.
     """
+    from app.cache import cache
     perm_context = await get_user_permission_context(profile_id, db, org_id)
     
     # Fetch all permissions from the catalog (using cache)

@@ -3,11 +3,11 @@ from types import SimpleNamespace
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from database import supabase
-from app.cache import cache, hash_token
 
 security = HTTPBearer()
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    from app.cache import cache, hash_token
     token = credentials.credentials
     token_hash = hash_token(token)
 
