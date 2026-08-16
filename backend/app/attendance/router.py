@@ -204,6 +204,9 @@ async def mark_attendance(body: MarkAttendanceRequest, current_user=Depends(get_
                 log_data["overtime_hours"] = 0
             
     res = db.table("attendance_logs").insert(log_data).execute()
+    from app.cache import invalidate_attendance
+    marked_date = res.data[0].get("marked_at", today_str)[:10] if res.data else today_str
+    await invalidate_attendance(log_data["venue_id"], marked_date)
     return res.data[0]
 
 
@@ -211,7 +214,13 @@ async def mark_attendance(body: MarkAttendanceRequest, current_user=Depends(get_
 
 @router.get("/attendance/live")
 async def get_live_attendance(venue_id: str, db=Depends(get_db), _=Depends(require_permission("attendance.view_team"))):   
+    from app.cache import cache
     today_str = datetime.now(CARACAS_TZ).strftime("%Y-%m-%d")
+    cache_key = f"attendance:live:{venue_id}:{today_str}"
+    cached = await cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     # Fetch all logs for today in this venue
     logs_res = db.table("attendance_logs").select("*, profiles!attendance_logs_profile_id_fkey(full_name)").eq("venue_id", venue_id).gte("marked_at", f"{today_str}T00:00:00-04:00").order("marked_at", desc=True).execute()
     
@@ -222,7 +231,9 @@ async def get_live_attendance(venue_id: str, db=Depends(get_db), _=Depends(requi
         if pid not in staff_status:
             staff_status[pid] = log
 
-    return list(staff_status.values())
+    result = list(staff_status.values())
+    await cache.set(cache_key, result, ttl=60)
+    return result
 
 
 @router.post("/attendance/absences")
@@ -338,6 +349,9 @@ async def add_manual_attendance(body: ManualAttendanceRequest, current_user=Depe
     })
     
     res = db.table("attendance_logs").insert(out_log).execute()
+    
+    from app.cache import invalidate_attendance
+    await invalidate_attendance(body.venue_id, target_date_str)
     
     return {"ok": True, "count": 2, "overtime_hours": overtime_hours, "minutes_late": minutes_late}
 
@@ -461,6 +475,9 @@ async def edit_attendance_day(body: EditAttendanceDayRequest, current_user=Depen
         else:
             db.table("attendance_logs").insert(out_payload).execute()
         updates_count += 1
+
+    from app.cache import invalidate_attendance
+    await invalidate_attendance(body.venue_id, work_date_str)
 
     return {"ok": True, "updated": updates_count}
 
