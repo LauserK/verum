@@ -252,7 +252,14 @@ async def get_kds_orders(
     db=Depends(get_db), 
     _=Depends(require_permission("production.view"))
 ):
+    from app.cache import cache
+    cache_key = f"kds:orders:{org_id}:{warehouse_id}"
+    cached = await cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     res = db.table("production_orders")        .select("*, items(name, uom_base(name)), recipes(id), uom_presentations:presentation_id(name, conversion_factor)")        .eq("org_id", org_id)        .eq("warehouse_id", str(warehouse_id))        .in_("status", ["pending", "in_progress", "paused"])        .order("priority", desc=True)        .order("scheduled_date")        .execute()
+    await cache.set(cache_key, res.data, ttl=60)
     return res.data
 
 @router.get("/production/orders/{order_id}", response_model=ProductionOrderDetailResponse)
@@ -338,6 +345,9 @@ async def create_production_order(
                 "qty_reserved": qty_planned
             }).execute()
 
+    from app.cache import invalidate_kds
+    await invalidate_kds(org_id, str(order.warehouse_id))
+
     return res.data[0]
 
 @router.patch("/production/orders/{order_id}/status", response_model=ProductionOrderResponse)
@@ -369,6 +379,9 @@ async def update_production_order_status(
                     new_reserved = max(0.0, current_reserved - qty_planned)
                     db.table("stock").update({"qty_reserved": new_reserved}).eq("id", stock_res.data[0]["id"]).execute()
                     
+    from app.cache import invalidate_kds
+    await invalidate_kds(org_id, warehouse_id)
+
     return res.data[0]
 
 @router.post("/production/orders/{order_id}/complete")
@@ -560,6 +573,11 @@ async def complete_production_order(
                 "item_id": produced_item_id,
                 "qty_base": qty_produced
             }).execute()
+
+        from app.cache import invalidate_kds
+        await invalidate_kds(org_id, origin_wh_id)
+        if target_wh_id != origin_wh_id:
+            await invalidate_kds(org_id, target_wh_id)
 
         return {"status": "success", "variance_pct": float(variance_pct)}
 
