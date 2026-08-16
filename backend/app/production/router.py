@@ -573,6 +573,13 @@ async def get_inventory_snapshot(
 ):
     if valuation_method not in ("peps", "last_cost"):
         valuation_method = "peps"
+
+    from app.cache import cache
+    cache_key = f"inv:snapshot:{org_id}:{warehouse_id or 'all'}:{date}:{valuation_method}"
+    cached = await cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     target_timestamp = f"{date}T23:59:59.999999-04:00"
     
     # Initialize all active items and warehouses of this organization to 0.0 stock and valuation
@@ -649,12 +656,19 @@ async def get_inventory_snapshot(
         items_list.append(data)
         total_val += data["valuation"]
         
-    return {
+    result = {
         "date": date,
         "valuation_method": valuation_method,
         "items": items_list,
         "total_valuation": round(total_val, 2)
     }
+
+    import datetime
+    is_historical = str(date) < datetime.date.today().isoformat()
+    ttl = 86400 if is_historical else 60
+    await cache.set(cache_key, result, ttl=ttl)
+
+    return result
 
 @router.get("/inventory/valuation", response_model=StockValuationResponse, tags=["Inventory"])
 async def get_inventory_valuation(
@@ -1190,6 +1204,9 @@ async def process_physical_inventory(
         "processed_at": datetime.now(timezone.utc).isoformat()
     }).eq("id", str(id)).execute()
 
+    from app.cache import invalidate_inventory
+    await invalidate_inventory(org_id)
+
     return await get_physical_inventory_detail(id, db)
 
 @router.post("/inventory/bulk-adjust-stock", response_model=BulkStockAdjustResponse, tags=["Inventory"])
@@ -1383,5 +1400,8 @@ async def bulk_adjust_stock(
         await recalculate_all_recipes(db, org_id)
     except Exception as ex:
         print(f"Error recalculating recipe costs after bulk adjust: {ex}")
+
+    from app.cache import invalidate_inventory
+    await invalidate_inventory(org_id)
 
     return BulkStockAdjustResponse(results=results)

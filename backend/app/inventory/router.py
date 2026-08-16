@@ -1419,6 +1419,9 @@ async def process_inventory_document(
             "processed_at": datetime.now(CARACAS_TZ).isoformat()
         }).eq("id", str(id)).execute()
         
+    from app.cache import invalidate_inventory
+    await invalidate_inventory(org_id)
+
     final_doc = db.table("inventory_documents").select("*").eq("id", str(id)).execute()
     return final_doc.data[0]
 
@@ -1514,6 +1517,9 @@ async def receive_transfer_document(
         "notes": req.notes if req.notes else header["notes"]
     }).eq("id", str(id)).execute()
     
+    from app.cache import invalidate_inventory
+    await invalidate_inventory(org_id)
+
     final_doc = db.table("inventory_documents").select("*").eq("id", str(id)).execute()
     return final_doc.data[0]
 
@@ -1714,5 +1720,8 @@ async def cancel_inventory_document(
         "cancelled_at": datetime.now(CARACAS_TZ).isoformat()
     }).eq("id", str(id)).execute()
     
+    from app.cache import invalidate_inventory
+    await invalidate_inventory(org_id)
+
     final_doc = db.table("inventory_documents").select("*").eq("id", str(id)).execute()
     return final_doc.data[0]
