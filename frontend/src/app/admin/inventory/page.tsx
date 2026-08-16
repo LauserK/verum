@@ -70,6 +70,9 @@ export default function InventoryDashboardPage() {
         <Link href="/admin/inventory/documents" className="px-4 py-2 bg-surface border border-border rounded-xl text-sm font-semibold hover:border-primary transition-colors flex items-center gap-2">
           <ClipboardList className="w-4 h-4 text-primary" /> Documentos de Inventario
         </Link>
+        <Link href="/admin/inventory/physical" className="px-4 py-2 bg-surface border border-border rounded-xl text-sm font-semibold hover:border-primary transition-colors flex items-center gap-2">
+          <ClipboardList className="w-4 h-4 text-primary" /> Conteos Físicos
+        </Link>
         <Link href="/admin/inventory/assets" className="px-4 py-2 bg-surface border border-border rounded-xl text-sm font-semibold hover:border-primary transition-colors flex items-center gap-2">
           <Box className="w-4 h-4 text-primary" /> Activos Fijos
         </Link>

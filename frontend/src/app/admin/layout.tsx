@@ -72,6 +72,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             items: [
                 { href: '/admin/inventory', labelEs: 'Dashboard', labelEn: 'Dashboard' },
                 { href: '/admin/inventory/documents', labelEs: 'Documentos', labelEn: 'Documents' },
+                { href: '/admin/inventory/physical', labelEs: 'Conteos Físicos', labelEn: 'Physical Counts' },
                 { href: '/admin/inventory/assets', labelEs: 'Activos Fijos', labelEn: 'Fixed Assets' },
                 { href: '/admin/inventory/tickets', labelEs: 'Tickets de Reparación', labelEn: 'Repair Tickets' },
                 { href: '/admin/inventory/utensils', labelEs: 'Utensilios', labelEn: 'Utensils' },

@@ -385,36 +385,38 @@ export default function MobileInventoryCount() {
     setSelectedPresId('')
   }
 
-  const handleProcess = async () => {
+  const handleSaveAndExit = async () => {
     if (!selectedWarehouseId) return
     if (lines.length === 0) return
 
     setSaving(true)
     try {
       let currentDraftId = draftId
+      const data = {
+        warehouse_id: selectedWarehouseId,
+        notes: 'Conteo físico desde dispositivo móvil',
+        lines: lines.map(l => ({
+          item_id: l.item_id,
+          qty_counted_base: l.qty_counted_base,
+          presentation_id: l.presentation_id,
+          qty_presentation: l.qty_presentation
+        }))
+      }
+
       if (!currentDraftId) {
-        const data = {
-          warehouse_id: selectedWarehouseId,
-          notes: 'Conteo físico desde dispositivo móvil',
-          lines: lines.map(l => ({
-            item_id: l.item_id,
-            qty_counted_base: l.qty_counted_base,
-            presentation_id: l.presentation_id,
-            qty_presentation: l.qty_presentation
-          }))
-        }
         const doc = (await adminApi.createPhysicalInventory(data)) as any
         currentDraftId = doc.id
         setDraftId(doc.id)
+      } else {
+        await adminApi.updatePhysicalInventory(currentDraftId, data)
       }
 
-      await adminApi.processPhysicalInventory(currentDraftId!)
-      showAlert('Inventario Procesado', 'El inventario físico ha sido procesado y el Kardex ha sido ajustado exitosamente.', () => {
-        router.push('/admin/inventory/physical')
+      showAlert('Borrador Guardado', 'El conteo físico ha sido guardado como borrador para revisión del administrador.', () => {
+        router.push('/inventory')
       })
     } catch (err) {
       console.error(err)
-      showAlert('Error', 'Ocurrió un error al intentar procesar el inventario físico.')
+      showAlert('Error', 'Ocurrió un error al intentar guardar el borrador de inventario.')
     } finally {
       setSaving(false)
     }
@@ -775,17 +777,17 @@ export default function MobileInventoryCount() {
       {!loading && selectedWarehouseId && lines.length > 0 && (
         <div className="fixed bottom-0 left-0 right-0 p-4 bg-surface border-t border-border flex gap-2">
           <button 
-            onClick={() => router.push('/admin/inventory/physical')}
+            onClick={() => router.push('/inventory')}
             className="flex-1 border border-border hover:bg-bg text-text-primary rounded-xl h-12 font-semibold text-sm flex items-center justify-center gap-2"
           >
             <ArrowRight className="w-4 h-4" /> Salir (Guardado)
           </button>
           <button 
             disabled={saving}
-            onClick={handleProcess}
+            onClick={handleSaveAndExit}
             className="flex-1 bg-success hover:bg-success-light text-text-inverse rounded-xl h-12 font-semibold text-sm flex items-center justify-center gap-2"
           >
-            <Send className="w-4 h-4" /> Procesar / Ajustar
+            <Send className="w-4 h-4" /> Finalizar Conteo
           </button>
         </div>
       )}
