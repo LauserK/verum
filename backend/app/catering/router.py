@@ -41,6 +41,12 @@ CARACAS_TZ = pytz.timezone("America/Caracas")
 
 @router.get("/production/recipes", response_model=List[RecipeBriefResponse])
 async def list_recipes(org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("production.view"))):
+    from app.cache import cache
+    cache_key = f"recipes:graph:{org_id}"
+    cached = await cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     res = db.table("recipes") \
         .select("*, items(name, code, type, uom_base(name))") \
         .eq("org_id", org_id) \
@@ -57,9 +63,10 @@ async def list_recipes(org_id: str = Depends(get_active_org_id), db=Depends(get_
             "item_type": r["items"]["type"],
             "uom_name": r["items"]["uom_base"]["name"] if r.get("items") and r["items"].get("uom_base") else None,
             "yield_qty_base": r["yield_qty_base"],
-            "safety_margin": Decimal(str(r.get("safety_margin") if r.get("safety_margin") is not None else 1.00)),
+            "safety_margin": float(r.get("safety_margin") if r.get("safety_margin") is not None else 1.00),
             "created_at": r["created_at"]
         })
+    await cache.set(cache_key, results, ttl=86400)
     return results
 
 @router.post("/production/recipes", response_model=RecipeResponse)
@@ -138,6 +145,9 @@ async def create_recipe(recipe: RecipeCreate, org_id: str = Depends(get_active_o
         new_cost = (total_cost / final_yield) * Decimal(str(recipe.safety_margin or 1.00))
         
         await update_item_cost_and_cascade(db, org_id, recipe.item_id, float(new_cost))
+
+    from app.cache import invalidate_recipes
+    await invalidate_recipes(org_id)
 
     return await get_recipe_by_item_id(recipe.item_id, db)
 
@@ -1118,3 +1128,6 @@ async def recalculate_all_recipes(db, org_id: str):
     visited = set()
     for r in (res.data or []):
         await recalculate_recipe_by_id(db, org_id, r["id"], visited)
+
+    from app.cache import invalidate_recipes
+    await invalidate_recipes(org_id)
