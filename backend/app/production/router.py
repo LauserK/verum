@@ -677,6 +677,12 @@ async def get_inventory_valuation(
     db=Depends(get_db),
     _=Depends(require_permission("inventory.view"))
 ):
+    from app.cache import cache
+    cache_key = f"inv:valuation:{org_id}:{warehouse_id or 'all'}"
+    cached = await cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     wh_res = db.table("warehouses").select("id, name").eq("org_id", org_id).execute()
     if not wh_res.data:
         return {"items": [], "total_valuation": 0.0}
@@ -743,10 +749,12 @@ async def get_inventory_valuation(
         items_list.append(data)
         total_val += data["valuation"]
         
-    return {
+    result = {
         "items": items_list,
         "total_valuation": round(total_val, 2)
     }
+    await cache.set(cache_key, result, ttl=180)
+    return result
 
 @router.get("/inventory/alerts/low-stock", response_model=List[LowStockAlertItem], tags=["Inventory"])
 async def get_low_stock_alerts(
@@ -755,6 +763,12 @@ async def get_low_stock_alerts(
     db=Depends(get_db),
     _=Depends(require_permission("inventory.view"))
 ):
+    from app.cache import cache
+    cache_key = f"inv:alerts:{org_id}:{warehouse_id or 'all'}"
+    cached = await cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     wh_res = db.table("warehouses").select("id, name").eq("org_id", org_id).execute()
     if not wh_res.data:
         return []
@@ -796,6 +810,7 @@ async def get_low_stock_alerts(
             })
             
     alerts.sort(key=lambda x: x["qty_available"])
+    await cache.set(cache_key, alerts, ttl=60)
     return alerts
 
 @router.get("/inventory/purchase-receipts", tags=["Inventory"])
