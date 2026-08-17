@@ -169,7 +169,8 @@ export default function ItemsPage() {
       ]);
       setItems(itemsData);
       setUoms(uomsData);
-      setCategories(catsData);
+      const sortedCats = [...(catsData || [])].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      setCategories(sortedCats);
       
       if (uomsData.length > 0 && !formData.base_uom_id) {
         setFormData(prev => ({ ...prev, base_uom_id: uomsData[0].id }));

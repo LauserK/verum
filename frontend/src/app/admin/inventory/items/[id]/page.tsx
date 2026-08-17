@@ -58,7 +58,8 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
       ]);
 
       setItem(itemData);
-      setCategories(catsData);
+      const sortedCats = [...(catsData || [])].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      setCategories(sortedCats);
       setUoms(uomsData);
       setPresentations(itemPresData);
       setAllGlobalPresentations(globalPresData);
