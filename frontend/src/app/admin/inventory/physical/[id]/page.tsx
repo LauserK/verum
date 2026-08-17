@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { adminApi } from '@/lib/api'
-import { Loader2, ArrowLeft, AlertTriangle, Play } from 'lucide-react'
+import { Loader2, ArrowLeft, AlertTriangle, Play, Save } from 'lucide-react'
 import Link from 'next/link'
 import ConfirmationModal from '@/components/ConfirmationModal'
 
@@ -13,6 +13,8 @@ export default function AdminPhysicalInventoryDetail() {
   const [detail, setDetail] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [processing, setProcessing] = useState(false)
+  const [editedLines, setEditedLines] = useState<any[]>([])
+  const [notes, setNotes] = useState('')
 
   // Modal state
   const [modalState, setModalState] = useState({
@@ -58,12 +60,63 @@ export default function AdminPhysicalInventoryDetail() {
 
   const loadDetail = async () => {
     try {
-      const data = await adminApi.getPhysicalInventoryDetail(params.id as string)
+      const data = await adminApi.getPhysicalInventoryDetail(params.id as string) as any
       setDetail(data)
+      setNotes(data.notes || '')
+      setEditedLines(data.lines || [])
     } catch (err) {
       console.error(err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleLineChange = (index: number, field: string, value: any) => {
+    const newLines = [...editedLines];
+    const line = { ...newLines[index] };
+    
+    if (field === 'qty_presentation') {
+      const qtyPres = parseFloat(value) || 0;
+      line.qty_presentation = qtyPres;
+      if (line.qty_counted_base && line.qty_presentation) {
+        const factor = Number(line.qty_counted_base) / Number(line.qty_presentation);
+        line.qty_counted_base = qtyPres * (factor || 1.0);
+      } else {
+        line.qty_counted_base = qtyPres;
+      }
+    } else if (field === 'qty_counted_base') {
+      line.qty_counted_base = parseFloat(value) || 0;
+    } else if (field === 'notes') {
+      line.notes = value;
+    }
+    
+    newLines[index] = line;
+    setEditedLines(newLines);
+  }
+
+  const handleSaveDraft = async () => {
+    setProcessing(true)
+    try {
+      const payload = {
+        warehouse_id: detail.warehouse_id,
+        notes: notes,
+        lines: editedLines.map(l => ({
+          item_id: l.item_id,
+          qty_counted_base: parseFloat(l.qty_counted_base) || 0,
+          presentation_id: l.presentation_id || null,
+          qty_presentation: l.qty_presentation !== null && l.qty_presentation !== undefined ? parseFloat(l.qty_presentation) : null,
+          notes: l.notes || ''
+        }))
+      }
+      await adminApi.updatePhysicalInventory(params.id as string, payload)
+      showAlert('Conteo Guardado', 'Los cambios en el borrador de conteo han sido guardados correctamente.', () => {
+        loadDetail()
+      })
+    } catch (err) {
+      console.error(err)
+      showAlert('Error', 'Ocurrió un error al intentar guardar los cambios del conteo.')
+    } finally {
+      setProcessing(false)
     }
   }
 
@@ -74,6 +127,20 @@ export default function AdminPhysicalInventoryDetail() {
       async () => {
         setProcessing(true)
         try {
+          // Guardar cambios automáticamente antes de procesar
+          const payload = {
+            warehouse_id: detail.warehouse_id,
+            notes: notes,
+            lines: editedLines.map(l => ({
+              item_id: l.item_id,
+              qty_counted_base: parseFloat(l.qty_counted_base) || 0,
+              presentation_id: l.presentation_id || null,
+              qty_presentation: l.qty_presentation !== null && l.qty_presentation !== undefined ? parseFloat(l.qty_presentation) : null,
+              notes: l.notes || ''
+            }))
+          }
+          await adminApi.updatePhysicalInventory(params.id as string, payload)
+
           await adminApi.processPhysicalInventory(params.id as string)
           showAlert('Ajustes Aplicados', 'Los ajustes de inventario han sido aplicados correctamente en la base de datos.', () => {
             loadDetail()
@@ -137,6 +204,21 @@ export default function AdminPhysicalInventoryDetail() {
         </div>
       </div>
 
+      {/* Document Notes */}
+      <div className="bg-surface p-4 rounded-xl border border-border">
+        <span className="text-xs text-text-secondary uppercase font-bold tracking-wider">Notas del Conteo</span>
+        {detail.status === 'draft' ? (
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Notas generales sobre este conteo físico..."
+            className="w-full mt-2 p-3 bg-surface border border-border rounded-xl text-sm outline-none focus:border-primary resize-none h-20"
+          />
+        ) : (
+          <p className="text-sm text-text-primary mt-2">{detail.notes || 'Sin observaciones.'}</p>
+        )}
+      </div>
+
       {/* Lines Table */}
       <div className="bg-surface rounded-2xl border border-border overflow-hidden">
         <div className="p-4 border-b border-border bg-bg">
@@ -154,27 +236,74 @@ export default function AdminPhysicalInventoryDetail() {
               </tr>
             </thead>
             <tbody>
-              {detail.lines.map((l: any) => {
-                const diff = l.qty_counted_base - l.qty_expected_base
+              {editedLines.map((l: any, index: number) => {
+                const diff = (l.qty_counted_base || 0) - (l.qty_expected_base || 0);
+                const hasPresentation = l.presentation_id && l.presentation_name;
+                
                 return (
-                  <tr key={l.id} className="border-b border-border hover:bg-surface-raised transition-colors text-sm">
+                  <tr key={l.id || l.item_id} className="border-b border-border hover:bg-surface-raised transition-colors text-sm">
                     <td className="p-4 font-semibold">{l.item_name}</td>
                     <td className="p-4">{l.qty_expected_base}</td>
+                    
+                    {/* Counted Cell (Editable if Draft) */}
                     <td className="p-4">
-                      {l.qty_counted_base} {l.presentation_name && `(${l.qty_presentation} ${l.presentation_name})`}
+                      {detail.status === 'draft' ? (
+                        <div className="flex items-center gap-2 max-w-[280px]">
+                          {hasPresentation ? (
+                            <div className="flex items-center gap-1.5 w-full">
+                              <input
+                                type="number"
+                                step="any"
+                                value={l.qty_presentation ?? 0}
+                                onChange={(e) => handleLineChange(index, 'qty_presentation', e.target.value)}
+                                className="w-16 bg-surface border border-border rounded-lg px-2 h-9 text-sm text-center outline-none focus:border-primary font-bold text-text-primary"
+                              />
+                              <span className="text-xs text-text-secondary truncate max-w-[60px]" title={l.presentation_name}>{l.presentation_name}</span>
+                              <span className="text-xs text-text-disabled whitespace-nowrap">({Number(l.qty_counted_base).toFixed(2)} base)</span>
+                            </div>
+                          ) : (
+                            <input
+                              type="number"
+                              step="any"
+                              value={l.qty_counted_base ?? 0}
+                              onChange={(e) => handleLineChange(index, 'qty_counted_base', e.target.value)}
+                              className="w-20 bg-surface border border-border rounded-lg px-2 h-9 text-sm text-center outline-none focus:border-primary font-bold text-text-primary"
+                            />
+                          )}
+                        </div>
+                      ) : (
+                        <span>
+                          {l.qty_counted_base} {l.presentation_name && `(${l.qty_presentation} ${l.presentation_name})`}
+                        </span>
+                      )}
                     </td>
+                    
                     <td className="p-4 font-bold">
                       {diff > 0 ? (
-                        <span className="text-success">+{diff}</span>
+                        <span className="text-success">+{diff.toFixed(2)}</span>
                       ) : diff < 0 ? (
-                        <span className="text-error">{diff}</span>
+                        <span className="text-error">{diff.toFixed(2)}</span>
                       ) : (
                         <span className="text-text-secondary">0</span>
                       )}
                     </td>
-                    <td className="p-4 text-text-secondary text-xs">{l.notes || '-'}</td>
+                    
+                    {/* Notes Cell (Editable if Draft) */}
+                    <td className="p-4">
+                      {detail.status === 'draft' ? (
+                        <input
+                          type="text"
+                          value={l.notes || ''}
+                          placeholder="Añadir nota de varianza..."
+                          onChange={(e) => handleLineChange(index, 'notes', e.target.value)}
+                          className="w-full bg-surface border border-border rounded-lg px-3 h-9 text-xs outline-none focus:border-primary text-text-primary"
+                        />
+                      ) : (
+                        <span className="text-text-secondary text-xs">{l.notes || '-'}</span>
+                      )}
+                    </td>
                   </tr>
-                )
+                );
               })}
             </tbody>
           </table>
@@ -183,7 +312,7 @@ export default function AdminPhysicalInventoryDetail() {
 
       {/* Review & Apply Adjustments */}
       {detail.status === 'draft' && (
-        <div className="bg-surface-raised p-6 rounded-2xl border border-border flex flex-col md:flex-row justify-between items-center gap-4">
+        <div className="bg-surface-raised p-6 rounded-2xl border border-border flex flex-col md:flex-row justify-between items-center gap-4 animate-in fade-in">
           <div className="flex gap-3">
             <AlertTriangle className="w-10 h-10 text-warning shrink-0" />
             <div>
@@ -193,19 +322,35 @@ export default function AdminPhysicalInventoryDetail() {
               </p>
             </div>
           </div>
-          <button
-            disabled={processing}
-            onClick={handleProcess}
-            className="w-full md:w-auto bg-success hover:bg-success/90 text-text-inverse rounded-xl h-12 px-6 font-bold flex items-center justify-center gap-2 transition-all shadow-md shrink-0"
-          >
-            {processing ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <>
-                <Play className="w-4 h-4 fill-current" /> Procesar y Ajustar Stock
-              </>
-            )}
-          </button>
+          
+          <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto shrink-0">
+            <button
+              disabled={processing}
+              onClick={handleSaveDraft}
+              className="w-full sm:w-auto border border-border bg-surface hover:bg-surface-raised text-text-primary rounded-xl h-12 px-6 font-bold flex items-center justify-center gap-2 transition-all shadow-sm"
+            >
+              {processing ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <>
+                  <Save className="w-4 h-4" /> Guardar Cambios
+                </>
+              )}
+            </button>
+            <button
+              disabled={processing}
+              onClick={handleProcess}
+              className="w-full sm:w-auto bg-success hover:bg-success/90 text-text-inverse rounded-xl h-12 px-6 font-bold flex items-center justify-center gap-2 transition-all shadow-md"
+            >
+              {processing ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <>
+                  <Play className="w-4 h-4 fill-current" /> Procesar y Ajustar Stock
+                </>
+              )}
+            </button>
+          </div>
         </div>
       )}
 
