@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { adminApi, StockMovement, InventoryItem, Warehouse } from '@/lib/api';
+import { adminApi, StockMovement, InventoryItem, Warehouse, ItemCategory } from '@/lib/api';
 import { Loader2, ArrowLeft, Printer, ArrowUpRight, ArrowDownRight, History, Search, Plus, ArrowRightLeft, Download, Package } from 'lucide-react';
 import Link from 'next/link';
 import { useReactToPrint } from 'react-to-print';
@@ -16,6 +16,7 @@ export default function KardexPage() {
   const [movements, setMovements] = useState<StockMovement[]>([]);
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [categories, setCategories] = useState<ItemCategory[]>([]);
   const [itemSearchQuery, setItemSearchQuery] = useState('');
   const [showItemSuggestions, setShowItemSuggestions] = useState(false);
   
@@ -79,12 +80,14 @@ export default function KardexPage() {
 
   async function loadInitialData() {
     try {
-      const [itemsData, whData] = await Promise.all([
+      const [itemsData, whData, catsData] = await Promise.all([
         adminApi.getInventoryItems(),
-        adminApi.getInventoryWarehouses()
+        adminApi.getInventoryWarehouses(),
+        adminApi.getItemCategories()
       ]);
       setItems(itemsData);
       setWarehouses(whData);
+      setCategories(catsData);
     } catch (error) {
       console.error('Error loading initial data:', error);
     }
@@ -119,7 +122,7 @@ export default function KardexPage() {
   const handleExportCSV = () => {
     if (movements.length === 0) return;
     
-    const csvHeaders = ['Fecha', 'Hora', 'Tipo', 'Código Artículo', 'Artículo', 'Almacén', 'Cantidad'];
+    const csvHeaders = ['Fecha', 'Hora', 'Tipo', 'Código Artículo', 'Artículo', 'Categoría', 'Almacén', 'Cantidad'];
     if (filters.item_id) {
       csvHeaders.push('Saldo Acumulado');
     }
@@ -130,6 +133,7 @@ export default function KardexPage() {
     movements.forEach(m => {
       const item = items.find(i => i.id === m.item_id);
       const wh = warehouses.find(w => w.id === m.warehouse_id);
+      const categoryName = categories.find(c => c.id === item?.category_id)?.name || 'Sin Categoría';
       const dateStr = new Date(m.created_at).toLocaleDateString();
       const timeStr = new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       
@@ -139,6 +143,7 @@ export default function KardexPage() {
         `"${tMov.t(m.movement_type)}"`,
         `"${item?.code || '---'}"`,
         `"${item?.name || 'Artículo'}"`,
+        `"${categoryName}"`,
         `"${wh?.name || 'Almacén'}"`,
         m.qty_base.toFixed(4)
       ];
