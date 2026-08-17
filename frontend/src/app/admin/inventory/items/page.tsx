@@ -54,7 +54,7 @@ function Row({ item, categories, uoms, t, openEdit, handleDelete }: {
                 </span>
             </td>
             <td className="p-4">
-            <span className="text-[10px] font-bold px-2 py-1 rounded-md bg-primary/5 text-primary uppercase tracking-wider border border-primary/10">
+            <span className="text-[9px] font-bold px-2 py-1 rounded-md bg-primary/5 text-primary uppercase tracking-wider border border-primary/10 whitespace-nowrap">
                 {t(`types.${item.type}`)}
             </span>
             </td>
