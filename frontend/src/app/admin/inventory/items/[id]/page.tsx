@@ -31,6 +31,34 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
   const [itemStock, setItemStock] = useState<any[]>([]);
   const [history, setHistory] = useState<StockMovement[]>([]);
 
+  const [editForm, setEditForm] = useState<any>({
+    name: '',
+    code: '',
+    category_id: '',
+    type: 'raw_material',
+    yield_alert_enabled: false,
+    yield_alert_threshold_pct: 0,
+    last_purchase_cost: 0,
+    margin_multiplier: 1.0,
+    yield_factor: 1.0
+  });
+
+  const previewProductionCost = (
+      (parseFloat(editForm.last_purchase_cost) || 0) * (parseFloat(editForm.margin_multiplier) || 1.0)
+  ) / (parseFloat(editForm.yield_factor) || 1.0);
+
+  const isDirty = item ? (
+      editForm.name !== item.name ||
+      editForm.code !== (item.code || '') ||
+      editForm.category_id !== (item.category_id || '') ||
+      editForm.type !== item.type ||
+      editForm.yield_alert_enabled !== (item.yield_alert_enabled || false) ||
+      parseFloat(editForm.yield_alert_threshold_pct) !== (item.yield_alert_threshold_pct || 0) ||
+      parseFloat(editForm.last_purchase_cost) !== (item.last_purchase_cost || 0) ||
+      parseFloat(editForm.margin_multiplier) !== (item.margin_multiplier || 1.0) ||
+      parseFloat(editForm.yield_factor) !== (item.yield_factor || 1.0)
+  ) : false;
+
   const [errorModal, setErrorModal] = useState<{ isOpen: boolean; message: string }>({
     isOpen: false,
     message: ''
@@ -58,6 +86,18 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
       ]);
 
       setItem(itemData);
+      setEditForm({
+          name: itemData.name,
+          code: itemData.code || '',
+          category_id: itemData.category_id || '',
+          type: itemData.type,
+          yield_alert_enabled: itemData.yield_alert_enabled || false,
+          yield_alert_threshold_pct: itemData.yield_alert_threshold_pct || 0,
+          last_purchase_cost: itemData.last_purchase_cost || 0,
+          margin_multiplier: itemData.margin_multiplier || 1.0,
+          yield_factor: itemData.yield_factor || 1.0
+      });
+
       const sortedCats = [...(catsData || [])].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
       setCategories(sortedCats);
       setUoms(uomsData);
@@ -74,13 +114,24 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
     }
   }
 
-  async function handleUpdateItem(formData: any) {
+  async function handleSaveChanges() {
     setSaving(true);
     try {
-      await adminApi.updateInventoryItem(id, formData);
+      const formattedData = {
+        name: editForm.name,
+        code: editForm.code,
+        category_id: editForm.category_id || null,
+        type: editForm.type,
+        yield_alert_enabled: editForm.yield_alert_enabled,
+        yield_alert_threshold_pct: parseFloat(editForm.yield_alert_threshold_pct) || 0,
+        last_purchase_cost: parseFloat(editForm.last_purchase_cost) || 0,
+        margin_multiplier: parseFloat(editForm.margin_multiplier) || 1.0,
+        yield_factor: parseFloat(editForm.yield_factor) || 1.0
+      };
+      await adminApi.updateInventoryItem(id, formattedData);
       await loadAllData();
     } catch (error: any) {
-      setErrorModal({ isOpen: true, message: error.message || 'Error al actualizar' });
+      setErrorModal({ isOpen: true, message: error.message || 'Error al guardar los cambios' });
     } finally {
       setSaving(false);
     }
@@ -184,8 +235,8 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
                           <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Nombre del Artículo</label>
                           <input 
                             type="text" 
-                            defaultValue={item.name}
-                            onBlur={(e) => handleUpdateItem({ name: e.target.value })}
+                            value={editForm.name || ''}
+                            onChange={(e) => setEditForm((prev: any) => ({ ...prev, name: e.target.value }))}
                             className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm outline-none focus:border-primary"
                           />
                       </div>
@@ -193,16 +244,16 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
                           <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Código Interno</label>
                           <input 
                             type="text" 
-                            defaultValue={item.code || ''}
-                            onBlur={(e) => handleUpdateItem({ code: e.target.value })}
+                            value={editForm.code || ''}
+                            onChange={(e) => setEditForm((prev: any) => ({ ...prev, code: e.target.value }))}
                             className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm outline-none focus:border-primary"
                           />
                       </div>
                       <div>
                           <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Categoría</label>
                           <select 
-                            value={item.category_id || ''}
-                            onChange={(e) => handleUpdateItem({ category_id: e.target.value || null })}
+                            value={editForm.category_id || ''}
+                            onChange={(e) => setEditForm((prev: any) => ({ ...prev, category_id: e.target.value }))}
                             className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm outline-none focus:border-primary"
                           >
                               <option value="">Sin categoría</option>
@@ -212,8 +263,8 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
                       <div>
                           <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Tipo Técnico</label>
                           <select 
-                            value={item.type}
-                            onChange={(e) => handleUpdateItem({ type: e.target.value })}
+                            value={editForm.type || ''}
+                            onChange={(e) => setEditForm((prev: any) => ({ ...prev, type: e.target.value }))}
                             className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm outline-none focus:border-primary"
                           >
                               <option value="raw_material">Materia Prima</option>
@@ -238,23 +289,23 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
                           <label className="relative inline-flex items-center cursor-pointer">
                               <input 
                                 type="checkbox" 
-                                checked={item.yield_alert_enabled} 
-                                onChange={(e) => handleUpdateItem({ yield_alert_enabled: e.target.checked })}
+                                checked={editForm.yield_alert_enabled || false} 
+                                onChange={(e) => setEditForm((prev: any) => ({ ...prev, yield_alert_enabled: e.target.checked }))}
                                 className="sr-only peer" 
                               />
                               <div className="w-11 h-6 bg-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
                           </label>
                       </div>
 
-                      {item.yield_alert_enabled && (
+                      {editForm.yield_alert_enabled && (
                           <div className="animate-in slide-in-from-right-2 duration-300">
                               <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Umbral de Varianza Permitido (%)</label>
                               <div className="relative">
                                   <input 
                                     type="number" 
                                     step="0.1"
-                                    defaultValue={item.yield_alert_threshold_pct || 0}
-                                    onBlur={(e) => handleUpdateItem({ yield_alert_threshold_pct: parseFloat(e.target.value) || 0 })}
+                                    value={editForm.yield_alert_threshold_pct ?? 0}
+                                    onChange={(e) => setEditForm((prev: any) => ({ ...prev, yield_alert_threshold_pct: e.target.value }))}
                                     className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm outline-none focus:border-primary font-bold text-primary"
                                   />
                                   <div className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-text-disabled">%</div>
@@ -276,8 +327,8 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
                                 type="number" 
                                 step="0.000001"
                                 min="0.0"
-                                defaultValue={item.last_purchase_cost || 0}
-                                onBlur={(e) => handleUpdateItem({ last_purchase_cost: parseFloat(e.target.value) || 0 })}
+                                value={editForm.last_purchase_cost ?? 0}
+                                onChange={(e) => setEditForm((prev: any) => ({ ...prev, last_purchase_cost: e.target.value }))}
                                 className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm outline-none focus:border-primary font-bold text-text-primary"
                               />
                           </div>
@@ -288,7 +339,7 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
                           <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-2">Costo de Producción ($ - Calculado)</label>
                           <div className="relative">
                               <div className="w-full bg-primary/5 border border-primary/20 rounded-xl px-4 h-11 text-sm flex items-center font-black text-primary">
-                                  ${item.production_cost !== null && item.production_cost !== undefined ? Number(item.production_cost).toFixed(4) : '0.0000'}
+                                  ${item ? Number(previewProductionCost).toFixed(4) : '0.0000'}
                               </div>
                           </div>
                           <p className="text-[10px] text-primary mt-2 px-1 font-medium">Costo real utilizado en el módulo de producción y recetas.</p>
@@ -301,8 +352,8 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
                                 type="number" 
                                 step="0.01"
                                 min="1.0"
-                                defaultValue={item.margin_multiplier || 1.0}
-                                onBlur={(e) => handleUpdateItem({ margin_multiplier: parseFloat(e.target.value) || 1.0 })}
+                                value={editForm.margin_multiplier ?? 1.0}
+                                onChange={(e) => setEditForm((prev: any) => ({ ...prev, margin_multiplier: e.target.value }))}
                                 className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm outline-none focus:border-primary font-bold text-primary"
                               />
                           </div>
@@ -316,14 +367,54 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
                                 step="0.01"
                                 min="0.01"
                                 max="1.0"
-                                defaultValue={item.yield_factor || 1.0}
-                                onBlur={(e) => handleUpdateItem({ yield_factor: parseFloat(e.target.value) || 1.0 })}
+                                value={editForm.yield_factor ?? 1.0}
+                                onChange={(e) => setEditForm((prev: any) => ({ ...prev, yield_factor: e.target.value }))}
                                 className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm outline-none focus:border-primary font-bold text-primary"
                               />
                           </div>
                           <p className="text-[10px] text-text-secondary mt-2 px-1">Rendimiento esperado del producto (ej: 0.50 = 50% utilizable).</p>
                       </div>
                   </div>
+
+                  {isDirty && (
+                      <div className="mt-8 flex justify-end gap-3 p-4 bg-surface-raised border border-border rounded-xl animate-in fade-in slide-in-from-bottom-2 duration-300">
+                          <button
+                            type="button"
+                            onClick={() => {
+                                setEditForm({
+                                    name: item.name,
+                                    code: item.code || '',
+                                    category_id: item.category_id || '',
+                                    type: item.type,
+                                    yield_alert_enabled: item.yield_alert_enabled || false,
+                                    yield_alert_threshold_pct: item.yield_alert_threshold_pct || 0,
+                                    last_purchase_cost: item.last_purchase_cost || 0,
+                                    margin_multiplier: item.margin_multiplier || 1.0,
+                                    yield_factor: item.yield_factor || 1.0
+                                });
+                            }}
+                            className="px-4 h-11 border border-border text-text-primary rounded-xl text-sm font-semibold hover:bg-bg transition-colors"
+                          >
+                              Descartar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSaveChanges}
+                            disabled={saving}
+                            className="px-6 h-11 bg-primary text-text-inverse rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-primary-hover disabled:opacity-50 transition-colors shadow-md shadow-primary/10"
+                          >
+                              {saving ? (
+                                  <>
+                                      <Loader2 className="w-4 h-4 animate-spin" /> Guardando...
+                                  </>
+                              ) : (
+                                  <>
+                                      <Save className="w-4 h-4" /> Guardar Cambios
+                                  </>
+                              )}
+                          </button>
+                      </div>
+                  )}
               </div>
           )}
 
