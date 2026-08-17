@@ -787,7 +787,15 @@ export default function MobileInventoryCount() {
             onClick={handleSaveAndExit}
             className="flex-1 bg-success hover:bg-success-light text-text-inverse rounded-xl h-12 font-semibold text-sm flex items-center justify-center gap-2"
           >
-            <Send className="w-4 h-4" /> Finalizar Conteo
+            {saving ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" /> Procesando...
+              </>
+            ) : (
+              <>
+                <Send className="w-4 h-4" /> Finalizar Conteo
+              </>
+            )}
           </button>
         </div>
       )}
