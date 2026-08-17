@@ -69,7 +69,12 @@ def test_create_item(authorized_client, mock_supabase):
         "is_active": True,
         "created_at": "2026-06-10T12:00:00Z"
     }])
-    mock_supabase.table().select().eq().execute.return_value = MagicMock(data=[{
+    
+    dup_check_mock = MagicMock()
+    dup_check_mock.eq.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(data=[])
+    
+    detail_fetch_mock = MagicMock()
+    detail_fetch_mock.eq.return_value.execute.return_value = MagicMock(data=[{
         "id": item_id,
         "org_id": ORG_ID,
         "code": "ITEM-001",
@@ -81,6 +86,13 @@ def test_create_item(authorized_client, mock_supabase):
         "created_at": "2026-06-10T12:00:00Z",
         "uom_base": {"name": "Gramos"}
     }])
+    
+    def select_side_effect(fields):
+        if fields == "id":
+            return dup_check_mock
+        return detail_fetch_mock
+        
+    mock_supabase.table().select.side_effect = select_side_effect
 
     response = authorized_client.post("/inventory/items", json={
         "code": "ITEM-001",
@@ -146,7 +158,20 @@ def test_update_item(authorized_client, mock_supabase):
         "is_active": True,
         "created_at": "2026-06-10T12:00:00Z"
     }])
-    mock_supabase.table().select().eq().execute.return_value = MagicMock(data=[{
+    
+    dup_check_mock = MagicMock()
+    dup_check_mock.eq.return_value.eq.return_value.eq.return_value.neq.return_value.execute.return_value = MagicMock(data=[])
+    
+    old_res_mock = MagicMock()
+    old_res_mock.eq.return_value.execute.return_value = MagicMock(data=[{
+        "last_purchase_cost": 10.0,
+        "margin_multiplier": 1.0,
+        "yield_factor": 1.0,
+        "production_cost": 10.0
+    }])
+    
+    detail_fetch_mock = MagicMock()
+    detail_fetch_mock.eq.return_value.execute.return_value = MagicMock(data=[{
         "id": item_id,
         "org_id": ORG_ID,
         "code": "ITEM-001-UPD",
@@ -158,6 +183,15 @@ def test_update_item(authorized_client, mock_supabase):
         "created_at": "2026-06-10T12:00:00Z",
         "uom_base": {"name": "Gramos"}
     }])
+    
+    def select_side_effect(fields):
+        if fields == "id":
+            return dup_check_mock
+        elif "last_purchase_cost" in fields:
+            return old_res_mock
+        return detail_fetch_mock
+        
+    mock_supabase.table().select.side_effect = select_side_effect
 
     response = authorized_client.patch(f"/inventory/items/{item_id}", json={
         "name": "Harina de Trigo Especial",
@@ -167,3 +201,27 @@ def test_update_item(authorized_client, mock_supabase):
     assert response.status_code == 200
     assert response.json()["name"] == "Harina de Trigo Especial"
     assert response.json()["code"] == "ITEM-001-UPD"
+
+def test_create_item_duplicate_sku(authorized_client, mock_supabase):
+    mock_supabase.table().select().eq().eq().eq().execute.return_value = MagicMock(data=[{"id": "existing-id"}])
+
+    response = authorized_client.post("/inventory/items", json={
+        "code": "ITEM-DUP",
+        "name": "Duplicado",
+        "type": "raw_material",
+        "base_uom_id": BASE_UOM_ID
+    }, headers={"X-Org-ID": ORG_ID})
+
+    assert response.status_code == 400
+    assert "Ya existe un artículo con este código SKU" in response.json()["detail"]
+
+def test_update_item_duplicate_sku(authorized_client, mock_supabase):
+    item_id = str(uuid.uuid4())
+    mock_supabase.table().select().eq().eq().eq().neq().execute.return_value = MagicMock(data=[{"id": "other-id"}])
+
+    response = authorized_client.patch(f"/inventory/items/{item_id}", json={
+        "code": "ITEM-DUP"
+    }, headers={"X-Org-ID": ORG_ID})
+
+    assert response.status_code == 400
+    assert "Ya existe otro artículo con este código SKU" in response.json()["detail"]

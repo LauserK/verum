@@ -103,6 +103,16 @@ async def list_warehouses(org_id: str = Depends(get_active_org_id), db=Depends(g
 
 @router.post("/inventory/items", response_model=ItemResponse, tags=["Inventory"])
 async def create_item(item: ItemCreate, org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.manage_items"))):
+    if item.code:
+        existing = db.table("items") \
+            .select("id") \
+            .eq("org_id", org_id) \
+            .eq("code", item.code) \
+            .eq("is_active", True) \
+            .execute()
+        if existing.data:
+            raise HTTPException(status_code=400, detail="Ya existe un artículo con este código SKU en la organización")
+
     data = {
         "org_id": org_id,
         "code": item.code,
@@ -207,6 +217,17 @@ async def update_item(
     db=Depends(get_db), 
     _=Depends(require_permission("inventory.manage_items"))
 ):
+    if item.code:
+        existing = db.table("items") \
+            .select("id") \
+            .eq("org_id", org_id) \
+            .eq("code", item.code) \
+            .eq("is_active", True) \
+            .neq("id", str(item_id)) \
+            .execute()
+        if existing.data:
+            raise HTTPException(status_code=400, detail="Ya existe otro artículo con este código SKU en la organización")
+
     # 1. Fetch current item state to calculate cost updates if margin/yield changes
     old_res = db.table("items").select("last_purchase_cost, margin_multiplier, yield_factor, production_cost").eq("id", str(item_id)).execute()
     if not old_res.data:
