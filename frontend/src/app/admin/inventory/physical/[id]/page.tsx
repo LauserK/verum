@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { adminApi } from '@/lib/api'
-import { Loader2, ArrowLeft, AlertTriangle, Play, Save } from 'lucide-react'
+import { Loader2, ArrowLeft, AlertTriangle, Play, Save, Search, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import ConfirmationModal from '@/components/ConfirmationModal'
 
@@ -15,6 +15,9 @@ export default function AdminPhysicalInventoryDetail() {
   const [processing, setProcessing] = useState(false)
   const [editedLines, setEditedLines] = useState<any[]>([])
   const [notes, setNotes] = useState('')
+  const [items, setItems] = useState<any[]>([])
+  const [searchQuery, setSearchQuery] = useState('')
+  const [showSuggestions, setShowSuggestions] = useState(false)
 
   // Modal state
   const [modalState, setModalState] = useState({
@@ -60,14 +63,55 @@ export default function AdminPhysicalInventoryDetail() {
 
   const loadDetail = async () => {
     try {
-      const data = await adminApi.getPhysicalInventoryDetail(params.id as string) as any
+      const [data, itemsData] = await Promise.all([
+        adminApi.getPhysicalInventoryDetail(params.id as string),
+        adminApi.getInventoryItems()
+      ]) as any
       setDetail(data)
       setNotes(data.notes || '')
       setEditedLines(data.lines || [])
+      setItems(itemsData || [])
     } catch (err) {
       console.error(err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleAddItemLine = async (item: any) => {
+    if (editedLines.some(l => l.item_id === item.id)) {
+      showAlert('Artículo duplicado', 'Este artículo ya se encuentra agregado al conteo físico.')
+      setSearchQuery('')
+      setShowSuggestions(false)
+      return
+    }
+
+    setProcessing(true)
+    try {
+      const stockRes = await adminApi.getItemStock(item.id) as any[]
+      const whStock = (stockRes || []).find((s: any) => s.warehouse_id === detail.warehouse_id)
+      const expected = whStock ? parseFloat(whStock.qty_base) || 0.0 : 0.0
+
+      const newLine = {
+        id: null,
+        item_id: item.id,
+        item_name: item.name,
+        qty_expected_base: expected,
+        qty_counted_base: 0.0,
+        presentation_id: null,
+        presentation_name: null,
+        qty_presentation: null,
+        notes: ''
+      }
+
+      setEditedLines(prev => [...prev, newLine])
+      setSearchQuery('')
+      setShowSuggestions(false)
+    } catch (err) {
+      console.error('Error adding item line:', err)
+      showAlert('Error', 'No se pudo obtener el stock teórico del artículo.')
+    } finally {
+      setProcessing(false)
     }
   }
 
@@ -221,8 +265,55 @@ export default function AdminPhysicalInventoryDetail() {
 
       {/* Lines Table */}
       <div className="bg-surface rounded-2xl border border-border overflow-hidden">
-        <div className="p-4 border-b border-border bg-bg">
+        <div className="p-4 border-b border-border bg-bg flex flex-col sm:flex-row justify-between items-center gap-3">
           <h2 className="text-base font-bold">Artículos Contados</h2>
+          
+          {detail.status === 'draft' && (
+            <div className="relative w-full sm:w-72">
+              <div className="relative">
+                <Search className="w-4 h-4 text-text-secondary absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Agregar artículo..."
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setShowSuggestions(true);
+                  }}
+                  onFocus={() => setShowSuggestions(true)}
+                  className="w-full pl-9 pr-4 h-9 bg-surface border border-border rounded-lg text-xs outline-none focus:border-primary text-text-primary"
+                />
+              </div>
+              
+              {showSuggestions && searchQuery.trim() !== '' && (
+                <div className="absolute right-0 z-10 w-full mt-1 bg-surface border border-border rounded-xl shadow-lg max-h-60 overflow-y-auto">
+                  {items
+                    .filter(item => 
+                      item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                      (item.code || '').toLowerCase().includes(searchQuery.toLowerCase())
+                    )
+                    .slice(0, 5)
+                    .map(item => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => handleAddItemLine(item)}
+                        className="w-full text-left px-4 py-2 hover:bg-surface-raised text-xs flex flex-col border-b border-border last:border-0 text-text-primary transition-colors cursor-pointer"
+                      >
+                        <span className="font-semibold">{item.name}</span>
+                        <span className="text-[10px] text-text-secondary">{item.code || 'Sin código'}</span>
+                      </button>
+                    ))}
+                  {items.filter(item => 
+                    item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                    (item.code || '').toLowerCase().includes(searchQuery.toLowerCase())
+                  ).length === 0 && (
+                    <div className="px-4 py-3 text-center text-text-disabled text-xs">No se encontraron artículos</div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -233,6 +324,7 @@ export default function AdminPhysicalInventoryDetail() {
                 <th className="p-4">Contado (Físico)</th>
                 <th className="p-4">Diferencia</th>
                 <th className="p-4">Notas</th>
+                {detail.status === 'draft' && <th className="p-4 text-right">Acción</th>}
               </tr>
             </thead>
             <tbody>
@@ -302,6 +394,22 @@ export default function AdminPhysicalInventoryDetail() {
                         <span className="text-text-secondary text-xs">{l.notes || '-'}</span>
                       )}
                     </td>
+
+                    {/* Action Cell (Editable if Draft) */}
+                    {detail.status === 'draft' && (
+                      <td className="p-4 text-right">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditedLines(prev => prev.filter((_, i) => i !== index));
+                          }}
+                          className="p-1.5 text-text-disabled hover:text-error hover:bg-error/10 rounded-lg transition-colors cursor-pointer"
+                          title="Quitar artículo del conteo"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 );
               })}

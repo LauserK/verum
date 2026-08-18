@@ -3,11 +3,17 @@
 import React, { useState, useEffect } from 'react'
 import { adminApi } from '@/lib/api'
 import Link from 'next/link'
-import { Plus, Loader2, FileText, CheckCircle, Clock } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Plus, Loader2, FileText, CheckCircle, Clock, X } from 'lucide-react'
 
 export default function AdminPhysicalInventoryList() {
+  const router = useRouter()
   const [counts, setCounts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [warehouses, setWarehouses] = useState<any[]>([])
+  const [selectedWhId, setSelectedWhId] = useState('')
+  const [creating, setCreating] = useState(false)
 
   useEffect(() => {
     loadCounts()
@@ -21,6 +27,40 @@ export default function AdminPhysicalInventoryList() {
       console.error(err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleOpenCreateModal = async () => {
+    setShowCreateModal(true)
+    if (warehouses.length === 0) {
+      try {
+        const whData = await adminApi.getInventoryWarehouses() as any[]
+        setWarehouses(whData || [])
+        if (whData && whData.length > 0) {
+          setSelectedWhId(whData[0].id)
+        }
+      } catch (err) {
+        console.error('Error loading warehouses:', err)
+      }
+    }
+  }
+
+  const handleCreateCount = async () => {
+    if (!selectedWhId) return
+    setCreating(true)
+    try {
+      const payload = {
+        warehouse_id: selectedWhId,
+        notes: 'Creado desde panel de administración',
+        lines: []
+      }
+      const newDoc = await adminApi.createPhysicalInventory(payload) as any
+      setShowCreateModal(false)
+      router.push(`/admin/inventory/physical/${newDoc.id}`)
+    } catch (err) {
+      console.error('Error creating physical count:', err)
+    } finally {
+      setCreating(false)
     }
   }
 
@@ -39,12 +79,12 @@ export default function AdminPhysicalInventoryList() {
           <h1 className="text-2xl font-bold">Conteos Físicos de Inventario</h1>
           <p className="text-sm text-text-secondary">Historial y borradores de auditorías físicas de almacenes</p>
         </div>
-        <Link 
-          href="/inventory/count" 
-          className="bg-primary hover:bg-primary-hover text-text-inverse rounded-xl h-11 px-4 font-semibold text-sm flex items-center gap-2 transition-colors"
+        <button 
+          onClick={handleOpenCreateModal} 
+          className="bg-primary hover:bg-primary-hover text-text-inverse rounded-xl h-11 px-4 font-semibold text-sm flex items-center gap-2 transition-colors cursor-pointer"
         >
           <Plus className="w-4 h-4" /> Nuevo Conteo Físico
-        </Link>
+        </button>
       </div>
 
       <div className="bg-surface rounded-2xl border border-border overflow-hidden">
@@ -104,6 +144,62 @@ export default function AdminPhysicalInventoryList() {
           </table>
         </div>
       </div>
+
+      {/* Warehouse Selector Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-surface rounded-2xl border border-border p-6 max-w-md w-full shadow-xl space-y-4 animate-in scale-in duration-200">
+            <div className="flex justify-between items-center">
+              <h2 className="text-lg font-bold text-text-primary">Nuevo Conteo Físico</h2>
+              <button 
+                onClick={() => setShowCreateModal(false)}
+                className="p-1 hover:bg-surface-raised rounded-lg text-text-secondary transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest">Almacén a contar</label>
+              <select
+                value={selectedWhId}
+                onChange={(e) => setSelectedWhId(e.target.value)}
+                className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm outline-none focus:border-primary text-text-primary"
+              >
+                {warehouses.length === 0 ? (
+                  <option>Cargando almacenes...</option>
+                ) : (
+                  warehouses.map(w => (
+                    <option key={w.id} value={w.id}>{w.name}</option>
+                  ))
+                )}
+              </select>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="flex-1 h-11 border border-border hover:bg-bg text-text-primary rounded-xl font-semibold text-sm transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleCreateCount}
+                disabled={creating || !selectedWhId}
+                className="flex-1 h-11 bg-primary text-text-inverse rounded-xl font-bold text-sm hover:bg-primary-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {creating ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4" /> Crear Borrador
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
