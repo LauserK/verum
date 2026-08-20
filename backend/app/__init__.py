@@ -16,6 +16,7 @@ from app.attendance.router import router as attendance_router
 from app.admin.router import router as admin_router
 from app.checklists.router import router as checklists_router
 from app.auth.router import router as auth_router
+from app.sales.router import router as sales_router
 
 
 @asynccontextmanager
@@ -58,5 +59,6 @@ def create_app() -> FastAPI:
     app.include_router(admin_router)
     app.include_router(checklists_router)
     app.include_router(auth_router)
+    app.include_router(sales_router)
 
     return app
