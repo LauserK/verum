@@ -6,6 +6,7 @@ import { settingsApi } from './api/settings'
 import { superAdminApi } from './api/superAdmin'
 import { productionApi } from './api/production'
 import { purchasingApi } from './api/purchasing'
+import { salesApi } from './api/sales'
 
 export * from './api/core'
 export * from './api/checklists'
@@ -15,6 +16,7 @@ export * from './api/settings'
 export * from './api/superAdmin'
 export * from './api/production'
 export * from './api/purchasing'
+export * from './api/sales'
 
 export {
     type Organization,
@@ -34,4 +36,6 @@ export const adminApi = {
     ...settingsApi,
     ...productionApi,
     ...purchasingApi,
+    ...salesApi,
 }
+

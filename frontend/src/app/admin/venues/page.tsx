@@ -9,8 +9,9 @@ import { useVenue } from '@/components/VenueContext'
 import { useProfile } from '@/components/ProfileContext'
 import {
     Plus, Trash2, Edit3, Save, X, Loader2, Clock,
-    Building2, ChevronRight, MapPin
+    Building2, ChevronRight, MapPin, Coins, Receipt
 } from 'lucide-react'
+import Link from 'next/link'
 
 export default function VenuesPage() {
     const { activeOrgId, isLoading: venueContextLoading } = useVenue()
@@ -193,17 +194,28 @@ export default function VenuesPage() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-text-primary mb-1">Estructura de la Empresa</h1>
-                    <div className="flex items-center gap-6 mt-2 overflow-x-auto">
-                        <span className="text-sm font-semibold text-primary border-b-2 border-primary pb-1 whitespace-nowrap">Sedes y Bloques</span>
-                    </div>
+                    <p className="text-sm text-text-secondary">Gestión de sedes, locales y configuración corporativa</p>
                 </div>
                 <button
                     onClick={() => setShowNewVenue(true)}
-                    className="flex items-center gap-2 bg-primary text-text-inverse px-4 h-10 rounded-xl text-sm font-medium hover:bg-primary-hover transition-colors"
+                    className="flex items-center justify-center gap-2 bg-primary text-text-inverse px-5 h-11 rounded-xl text-sm font-bold hover:bg-primary-hover transition-all shadow-lg shadow-primary/20 shrink-0 active:scale-95"
                 >
                     <Plus className="w-4 h-4" />
                     Nueva Sede
                 </button>
+            </div>
+
+            {/* Submenu Redirection Links */}
+            <div className="flex gap-3 overflow-x-auto pb-2">
+                <Link href="/admin/venues" className="px-4 py-2.5 bg-primary/10 text-primary border border-primary/20 rounded-xl text-sm font-bold transition-all flex items-center gap-2">
+                    <MapPin className="w-4 h-4" /> Sedes y Locales
+                </Link>
+                <Link href="/admin/venues/currencies" className="px-4 py-2.5 bg-surface border border-border rounded-xl text-sm font-semibold hover:border-primary transition-colors flex items-center gap-2">
+                    <Coins className="w-4 h-4 text-primary" /> Monedas y Tasas
+                </Link>
+                <Link href="/admin/venues/taxes" className="px-4 py-2.5 bg-surface border border-border rounded-xl text-sm font-semibold hover:border-primary transition-colors flex items-center gap-2">
+                    <Receipt className="w-4 h-4 text-primary" /> Impuestos y Alícuotas
+                </Link>
             </div>
 
             {/* Create Venue Form */}

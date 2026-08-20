@@ -3,6 +3,7 @@ from typing import List, Optional
 from database import get_db
 from auth_deps import get_current_user
 from app.deps import get_active_org_id, require_permission
+from app.cache import cache, invalidate_sales_config, invalidate_sales_catalog
 import app.sales.service as sales_svc
 from app.sales.schemas import (
     TenantBillingConfigUpdate, TenantBillingConfigOut,
@@ -12,7 +13,10 @@ from app.sales.schemas import (
     CustomerCreate, CustomerUpdate, CustomerOut,
     DocumentSequenceCreate, DocumentSequenceOut,
     InvoiceCreate, InvoiceOut, InvoiceVoid,
-    PaymentCreate, PaymentOut
+    PaymentCreate, PaymentOut,
+    CurrencyCreate, CurrencyUpdate, CurrencyOut,
+    ExchangeRateCreate, ExchangeRateOut,
+    TaxCreate, TaxUpdate, TaxOut
 )
 import app.sales.invoice_service as invoice_svc
 import app.sales.payment_service as payment_svc
@@ -27,7 +31,12 @@ async def get_config(
     db = Depends(get_db),
     _ = Depends(require_permission("sales.manage_config"))
 ):
-    return await sales_svc.get_billing_config(org_id, db)
+    cached = await cache.get(f"sales:config:{org_id}")
+    if cached:
+        return cached
+    res = await sales_svc.get_billing_config(org_id, db)
+    await cache.set(f"sales:config:{org_id}", res, ttl=300)
+    return res
 
 @router.patch("/config", response_model=TenantBillingConfigOut)
 async def update_config(
@@ -36,7 +45,9 @@ async def update_config(
     db = Depends(get_db),
     _ = Depends(require_permission("sales.manage_config"))
 ):
-    return await sales_svc.update_billing_config(org_id, payload, db)
+    res = await sales_svc.update_billing_config(org_id, payload, db)
+    await invalidate_sales_config(org_id)
+    return res
 
 @router.post("/payment-methods", response_model=PaymentMethodOut)
 async def create_payment_method(
@@ -45,7 +56,9 @@ async def create_payment_method(
     db = Depends(get_db),
     _ = Depends(require_permission("sales.manage_payment_methods"))
 ):
-    return await sales_svc.create_payment_method(org_id, payload, db)
+    res = await sales_svc.create_payment_method(org_id, payload, db)
+    await invalidate_sales_config(org_id)
+    return res
 
 @router.get("/payment-methods", response_model=List[PaymentMethodOut])
 async def list_payment_methods(
@@ -53,7 +66,12 @@ async def list_payment_methods(
     db = Depends(get_db),
     _ = Depends(require_permission("sales.manage_payment_methods"))
 ):
-    return await sales_svc.get_payment_methods(org_id, db)
+    cached = await cache.get(f"sales:payment_methods:{org_id}")
+    if cached:
+        return cached
+    res = await sales_svc.get_payment_methods(org_id, db)
+    await cache.set(f"sales:payment_methods:{org_id}", res, ttl=300)
+    return res
 
 @router.post("/workstations", response_model=WorkstationOut)
 async def create_workstation(
@@ -89,6 +107,7 @@ async def create_sale_item(
     # We must ensure components and variants exist in dict
     res["variants"] = res.get("sale_item_variants", [])
     res["components"] = res.get("sale_item_components", [])
+    await invalidate_sales_catalog(org_id)
     return res
 
 # --- Customers ---
@@ -212,6 +231,105 @@ async def add_payment(
     _ = Depends(require_permission("sales.manage_payments"))
 ):
     return await payment_svc.add_payment(org_id, invoice_id, payload, user.id, db)
+
+
+# --- Currencies & Exchange Rates ---
+
+@router.get("/currencies", response_model=List[CurrencyOut])
+async def list_currencies(
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_config"))
+):
+    return await sales_svc.list_currencies(org_id, db)
+
+@router.post("/currencies", response_model=CurrencyOut)
+async def create_currency(
+    payload: CurrencyCreate,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_config"))
+):
+    res = await sales_svc.create_currency(org_id, payload, db)
+    await invalidate_sales_config(org_id)
+    return res
+
+@router.patch("/currencies/{currency_id}", response_model=CurrencyOut)
+async def update_currency(
+    currency_id: str,
+    payload: CurrencyUpdate,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_config"))
+):
+    res = await sales_svc.update_currency(org_id, currency_id, payload, db)
+    await invalidate_sales_config(org_id)
+    return res
+
+@router.get("/exchange-rates", response_model=List[ExchangeRateOut])
+async def list_exchange_rates(
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_config"))
+):
+    return await sales_svc.list_latest_exchange_rates(org_id, db)
+
+@router.post("/exchange-rates", response_model=ExchangeRateOut)
+async def create_exchange_rate(
+    payload: ExchangeRateCreate,
+    org_id: str = Depends(get_active_org_id),
+    user = Depends(get_current_user),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_config"))
+):
+    res = await sales_svc.create_exchange_rate(org_id, payload, user.id, db)
+    await invalidate_sales_config(org_id)
+    return res
+
+# --- Taxes / Alícuotas ---
+
+@router.get("/taxes", response_model=List[TaxOut])
+async def list_taxes(
+    active_only: bool = False,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+):
+    return await sales_svc.list_taxes(org_id, db, active_only=active_only)
+
+@router.post("/taxes", response_model=TaxOut)
+async def create_tax(
+    payload: TaxCreate,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_config"))
+):
+    res = await sales_svc.create_tax(org_id, payload, db)
+    await invalidate_sales_config(org_id)
+    return res
+
+@router.patch("/taxes/{tax_id}", response_model=TaxOut)
+async def update_tax(
+    tax_id: str,
+    payload: TaxUpdate,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_config"))
+):
+    res = await sales_svc.update_tax(org_id, tax_id, payload, db)
+    await invalidate_sales_config(org_id)
+    return res
+
+@router.delete("/taxes/{tax_id}")
+async def delete_tax(
+    tax_id: str,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_config"))
+):
+    res = await sales_svc.delete_tax(org_id, tax_id, db)
+    await invalidate_sales_config(org_id)
+    return res
+
 
 
 

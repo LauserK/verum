@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, List, Literal, Any
+from typing import Optional, List, Literal, Any, Union
 from uuid import UUID
 from datetime import date as dt_date, datetime as dt_datetime
 from decimal import Decimal
@@ -178,10 +178,12 @@ class PaymentMethodOut(BaseModel):
 
 class TenantBillingConfigUpdate(BaseModel):
     default_tax_id: Optional[UUID] = None
-    surcharges: List[dict] = []
+    surcharges: Optional[List[dict]] = None
     withholding_enabled: Optional[bool] = None
     rounding_mode: Optional[Literal['none', 'round_half_up', 'round_up', 'round_down']] = None
     rounding_precision: Optional[int] = None
+    cash_rounding_multiple: Optional[Decimal] = None
+    cash_rounding_rule: Optional[Literal['nearest', 'up', 'down']] = None
     invoice_footer: Optional[str] = None
     invoice_notes: Optional[str] = None
 
@@ -190,9 +192,11 @@ class TenantBillingConfigOut(BaseModel):
     org_id: UUID
     default_tax_id: Optional[UUID] = None
     surcharges: List[dict] = []
-    withholding_enabled: bool
-    rounding_mode: str
-    rounding_precision: int
+    withholding_enabled: bool = False
+    rounding_mode: str = 'round_half_up'
+    rounding_precision: int = 2
+    cash_rounding_multiple: Decimal = Decimal('1.0')
+    cash_rounding_rule: str = 'nearest'
     invoice_footer: Optional[str] = None
     invoice_notes: Optional[str] = None
     created_at: dt_datetime
@@ -436,6 +440,66 @@ class PaymentOut(BaseModel):
     notes: Optional[str] = None
     recorded_by: Optional[UUID] = None
     created_at: dt_datetime
+
+
+class CurrencyCreate(BaseModel):
+    code: str
+    name: str
+    symbol: str
+    is_base: bool = False
+    is_active: bool = True
+
+class CurrencyUpdate(BaseModel):
+    name: Optional[str] = None
+    symbol: Optional[str] = None
+    is_base: Optional[bool] = None
+    is_active: Optional[bool] = None
+
+class CurrencyOut(BaseModel):
+    id: UUID
+    org_id: UUID
+    code: str
+    name: str
+    symbol: str
+    is_base: bool
+    is_active: bool
+    created_at: Optional[Union[dt_datetime, str]] = None
+    updated_at: Optional[Union[dt_datetime, str]] = None
+
+class ExchangeRateCreate(BaseModel):
+    from_currency: str
+    to_currency: str
+    rate: Decimal
+    effective_date: Optional[Union[dt_datetime, dt_date, str]] = None
+
+class ExchangeRateOut(BaseModel):
+    id: UUID
+    org_id: UUID
+    from_currency: str
+    to_currency: str
+    rate: Decimal
+    effective_date: Optional[Union[dt_datetime, str]] = None
+    created_at: Optional[Union[dt_datetime, str]] = None
+    created_by: Optional[UUID] = None
+
+class TaxCreate(BaseModel):
+    name: str
+    rate: Decimal
+    is_active: bool = True
+
+class TaxUpdate(BaseModel):
+    name: Optional[str] = None
+    rate: Optional[Decimal] = None
+    is_active: Optional[bool] = None
+
+class TaxOut(BaseModel):
+    id: UUID
+    org_id: Optional[UUID] = None
+    name: str
+    rate: Decimal
+    is_active: bool
+    created_at: Optional[Union[dt_datetime, str]] = None
+
 
 
 

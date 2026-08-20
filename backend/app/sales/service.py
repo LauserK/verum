@@ -21,6 +21,8 @@ async def update_billing_config(org_id: str, payload: TenantBillingConfigUpdate,
     update_data = payload.model_dump(exclude_unset=True)
     if not update_data:
         return await get_billing_config(org_id, db)
+    if "cash_rounding_multiple" in update_data and update_data["cash_rounding_multiple"] is not None:
+        update_data["cash_rounding_multiple"] = float(update_data["cash_rounding_multiple"])
     res = db.table("tenant_billing_config").update(update_data).eq("org_id", org_id).execute()
     if not res.data:
         raise HTTPException(404, "Billing config not found")
@@ -161,4 +163,81 @@ async def create_sequence(org_id: str, payload: DocumentSequenceCreate, db):
 async def list_sequences(org_id: str, db):
     res = db.table("document_sequences").select("*").eq("org_id", org_id).execute()
     return res.data
+
+
+# --- Currencies & Exchange Rates ---
+
+async def create_currency(org_id: str, payload, db):
+    data = payload.model_dump(exclude_unset=True)
+    data["org_id"] = org_id
+    res = db.table("currencies").insert(data).execute()
+    return res.data[0]
+
+async def list_currencies(org_id: str, db):
+    res = db.table("currencies").select("*").eq("org_id", org_id).order("code").execute()
+    return res.data
+
+async def update_currency(org_id: str, currency_id: str, payload, db):
+    data = payload.model_dump(exclude_unset=True)
+    res = db.table("currencies").update(data).eq("id", currency_id).eq("org_id", org_id).execute()
+    if not res.data:
+        raise HTTPException(404, "Currency not found")
+    return res.data[0]
+
+async def create_exchange_rate(org_id: str, payload, user_id: str, db):
+    data = payload.model_dump(exclude_unset=True)
+    data["org_id"] = org_id
+    data["created_by"] = user_id
+    if "rate" in data:
+        data["rate"] = float(data["rate"])
+    if not data.get("effective_date"):
+        data.pop("effective_date", None)
+    res = db.table("exchange_rates").insert(data).execute()
+    return res.data[0]
+
+async def list_latest_exchange_rates(org_id: str, db):
+    res = db.table("exchange_rates").select("*").eq("org_id", org_id).order("effective_date", desc=True).limit(50).execute()
+    return res.data
+
+# --- Taxes ---
+
+async def list_taxes(org_id: str, db, active_only: bool = False):
+    query = db.table("taxes").select("*").or_(f"org_id.is.null,org_id.eq.{org_id}").order("name")
+    if active_only:
+        query = query.eq("is_active", True)
+    res = query.execute()
+    return res.data or []
+
+async def create_tax(org_id: str, payload, db):
+    data = payload.model_dump(exclude_unset=True)
+    data["org_id"] = org_id
+    if "rate" in data:
+        val = float(data["rate"])
+        # If passed as integer/percentage (e.g. 16 for 16%), normalize to decimal (0.16)
+        if val > 1.0:
+            val = val / 100.0
+        data["rate"] = val
+    res = db.table("taxes").insert(data).execute()
+    return res.data[0]
+
+async def update_tax(org_id: str, tax_id: str, payload, db):
+    data = payload.model_dump(exclude_unset=True)
+    if "rate" in data and data["rate"] is not None:
+        val = float(data["rate"])
+        if val > 1.0:
+            val = val / 100.0
+        data["rate"] = val
+    # Only allow updating organization-specific taxes (not global system taxes)
+    res = db.table("taxes").update(data).eq("id", tax_id).eq("org_id", org_id).execute()
+    if not res.data:
+        raise HTTPException(404, "Tax not found or not authorized to modify (system taxes cannot be edited)")
+    return res.data[0]
+
+async def delete_tax(org_id: str, tax_id: str, db):
+    # Soft delete / deactivate org tax
+    res = db.table("taxes").update({"is_active": False}).eq("id", tax_id).eq("org_id", org_id).execute()
+    if not res.data:
+        raise HTTPException(404, "Tax not found or not authorized to modify (system taxes cannot be deleted)")
+    return {"message": "Tax deactivated successfully"}
+
 

@@ -40,6 +40,7 @@ VERSIONS = {
     "kds": 1,
     "attendance": 1,
     "recipes": 1,
+    "sales": 1,
 }
 
 
@@ -268,3 +269,13 @@ async def invalidate_attendance(venue_id: str, date: str):
 async def invalidate_recipes(org_id: str):
     """Invalidate cached recipe graph."""
     await cache.delete(f"recipes:graph:{org_id}")
+
+async def invalidate_sales_config(org_id: str):
+    """Invalidate cached sales billing config and payment methods."""
+    await cache.delete(f"sales:config:{org_id}")
+    await cache.delete(f"sales:payment_methods:{org_id}")
+
+async def invalidate_sales_catalog(org_id: str):
+    """Invalidate cached sales catalog categories, items, and price lists."""
+    await cache.delete_pattern(f"sales:catalog:{org_id}:*")
+
