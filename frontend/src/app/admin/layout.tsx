@@ -18,12 +18,20 @@ interface SubnavItem {
     labelEn?: string;
 }
 
+interface NavSection {
+    titleKey?: string;
+    titleEs?: string;
+    titleEn?: string;
+    items: SubnavItem[];
+}
+
 interface NavItem {
     href: string;
     labelKey?: string;
     labelEs?: string;
     labelEn?: string;
     icon: React.ComponentType<any>;
+    sections?: NavSection[];
     items?: SubnavItem[];
 }
 
@@ -69,17 +77,41 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             labelEs: 'Inventario',
             labelEn: 'Inventory',
             icon: Box,
-            items: [
-                { href: '/admin/inventory', labelEs: 'Dashboard', labelEn: 'Dashboard' },
-                { href: '/admin/inventory/documents', labelEs: 'Documentos', labelEn: 'Documents' },
-                { href: '/admin/inventory/physical', labelEs: 'Conteos Físicos', labelEn: 'Physical Counts' },
-                { href: '/admin/inventory/assets', labelEs: 'Activos Fijos', labelEn: 'Fixed Assets' },
-                { href: '/admin/inventory/tickets', labelEs: 'Tickets de Reparación', labelEn: 'Repair Tickets' },
-                { href: '/admin/inventory/utensils', labelEs: 'Utensilios', labelEn: 'Utensils' },
-                { href: '/admin/inventory/items', labelEs: 'Artículos', labelEn: 'Items' },
-                { href: '/admin/inventory/warehouses', labelEs: 'Almacenes', labelEn: 'Warehouses' },
-                { href: '/admin/inventory/kardex', labelEs: 'Kardex', labelEn: 'Kardex' },
-                { href: '/admin/inventory/snapshot', labelEs: 'Historial de Inventario', labelEn: 'Inventory History' },
+            sections: [
+                {
+                    titleEs: 'Operaciones',
+                    titleEn: 'Operations',
+                    items: [
+                        { href: '/admin/inventory', labelEs: 'Dashboard', labelEn: 'Dashboard' },
+                        { href: '/admin/inventory/documents', labelEs: 'Documentos', labelEn: 'Documents' },
+                        { href: '/admin/inventory/physical', labelEs: 'Conteos Físicos', labelEn: 'Physical Counts' },
+                        { href: '/admin/inventory/tickets', labelEs: 'Tickets de Reparación', labelEn: 'Repair Tickets' },
+                    ]
+                },
+                {
+                    titleEs: 'Catálogo & Activos',
+                    titleEn: 'Catalog & Assets',
+                    items: [
+                        { href: '/admin/inventory/items', labelEs: 'Artículos e Insumos', labelEn: 'Items & Supplies' },
+                        { href: '/admin/inventory/assets', labelEs: 'Activos Fijos', labelEn: 'Fixed Assets' },
+                        { href: '/admin/inventory/utensils', labelEs: 'Utensilios', labelEn: 'Utensils' },
+                    ]
+                },
+                {
+                    titleEs: 'Informes',
+                    titleEn: 'Reporting',
+                    items: [
+                        { href: '/admin/inventory/kardex', labelEs: 'Kardex Valorizado', labelEn: 'Valued Kardex' },
+                        { href: '/admin/inventory/snapshot', labelEs: 'Historial de Stock', labelEn: 'Stock History' },
+                    ]
+                },
+                {
+                    titleEs: 'Configuración',
+                    titleEn: 'Configuration',
+                    items: [
+                        { href: '/admin/inventory/warehouses', labelEs: 'Almacenes y Ubicaciones', labelEn: 'Warehouses & Locations' },
+                    ]
+                }
             ]
         },
         {
@@ -88,12 +120,24 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             labelEs: 'Producción',
             labelEn: 'Production',
             icon: ChefHat,
-            items: [
-                { href: '/admin/production', labelEs: 'Dashboard', labelEn: 'Dashboard' },
-                { href: '/production/kds?from=admin', labelEs: 'Tablero KDS', labelEn: 'KDS Board' },
-                { href: '/admin/production/recipes', labelEs: 'Recetas', labelEn: 'Recipes' },
-                { href: '/admin/production/orders', labelEs: 'Órdenes', labelEn: 'Orders' },
-                { href: '/admin/production/catering', labelEs: 'Catering & MRP', labelEn: 'Catering & MRP' },
+            sections: [
+                {
+                    titleEs: 'Operaciones',
+                    titleEn: 'Operations',
+                    items: [
+                        { href: '/admin/production', labelEs: 'Dashboard', labelEn: 'Dashboard' },
+                        { href: '/admin/production/orders', labelEs: 'Órdenes de Producción', labelEn: 'Production Orders' },
+                        { href: '/production/kds?from=admin', labelEs: 'Tablero KDS', labelEn: 'KDS Board' },
+                        { href: '/admin/production/catering', labelEs: 'Catering & MRP', labelEn: 'Catering & MRP' },
+                    ]
+                },
+                {
+                    titleEs: 'Recetas & Catálogo',
+                    titleEn: 'Recipes & Catalog',
+                    items: [
+                        { href: '/admin/production/recipes', labelEs: 'Recetas / Fichas Técnicas', labelEn: 'Recipes & Formulas' },
+                    ]
+                }
             ]
         },
         {
@@ -102,11 +146,23 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             labelEs: 'Asistencia',
             labelEn: 'Attendance',
             icon: Clock,
-            items: [
-                { href: '/admin/attendance', labelEs: 'Dashboard', labelEn: 'Dashboard' },
-                { href: '/admin/attendance/reports', labelEs: 'Reportes', labelEn: 'Reports' },
-                { href: '/admin/attendance/shifts', labelEs: 'Turnos', labelEn: 'Shifts' },
-                { href: '/admin/attendance/absences', labelEs: 'Ausencias', labelEn: 'Absences' },
+            sections: [
+                {
+                    titleEs: 'Operaciones',
+                    titleEn: 'Operations',
+                    items: [
+                        { href: '/admin/attendance', labelEs: 'Dashboard', labelEn: 'Dashboard' },
+                        { href: '/admin/attendance/shifts', labelEs: 'Turnos y Horarios', labelEn: 'Shifts & Schedules' },
+                        { href: '/admin/attendance/absences', labelEs: 'Ausencias y Permisos', labelEn: 'Absences & Leaves' },
+                    ]
+                },
+                {
+                    titleEs: 'Informes',
+                    titleEn: 'Reporting',
+                    items: [
+                        { href: '/admin/attendance/reports', labelEs: 'Reportes de Asistencia', labelEn: 'Attendance Reports' },
+                    ]
+                }
             ]
         },
         {
@@ -114,12 +170,30 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             labelEs: 'Compras',
             labelEn: 'Purchasing',
             icon: ShoppingCart,
-            items: [
-                { href: '/admin/suppliers', labelEs: 'Proveedores', labelEn: 'Suppliers' },
-                { href: '/admin/purchasing/orders', labelEs: 'Órdenes de Compra', labelEn: 'Purchase Orders' },
-                { href: '/admin/purchasing/invoices', labelEs: 'Facturas de Proveedores', labelEn: 'Supplier Invoices' },
-                { href: '/admin/purchasing/returns', labelEs: 'Devoluciones', labelEn: 'Returns' },
-                { href: '/admin/settings/purchasing', labelEs: 'Configuración', labelEn: 'Settings' },
+            sections: [
+                {
+                    titleEs: 'Operaciones',
+                    titleEn: 'Operations',
+                    items: [
+                        { href: '/admin/purchasing/orders', labelEs: 'Órdenes de Compra', labelEn: 'Purchase Orders' },
+                        { href: '/admin/purchasing/invoices', labelEs: 'Facturas de Proveedores', labelEn: 'Supplier Invoices' },
+                        { href: '/admin/purchasing/returns', labelEs: 'Devoluciones', labelEn: 'Returns' },
+                    ]
+                },
+                {
+                    titleEs: 'Proveedores',
+                    titleEn: 'Suppliers',
+                    items: [
+                        { href: '/admin/suppliers', labelEs: 'Directorio de Proveedores', labelEn: 'Suppliers Directory' },
+                    ]
+                },
+                {
+                    titleEs: 'Configuración',
+                    titleEn: 'Configuration',
+                    items: [
+                        { href: '/admin/settings/purchasing', labelEs: 'Políticas y Tolerancias', labelEn: 'Purchasing Settings' },
+                    ]
+                }
             ]
         },
         {
@@ -127,12 +201,31 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             labelEs: 'Ventas',
             labelEn: 'Sales',
             icon: ShoppingBag,
-            items: [
-                { href: '/admin/sales', labelEs: 'Dashboard', labelEn: 'Dashboard' },
-                { href: '/admin/sales/invoices', labelEs: 'Histórico de Facturas', labelEn: 'Invoices' },
-                { href: '/admin/sales/customers', labelEs: 'Clientes', labelEn: 'Customers' },
-                { href: '/admin/sales/config', labelEs: 'Configuración POS', labelEn: 'POS Settings' },
-                { href: '/pos/session', labelEs: 'Abrir Terminal POS', labelEn: 'Open POS' },
+            sections: [
+                {
+                    titleEs: 'Operaciones & Caja',
+                    titleEn: 'Operations & POS',
+                    items: [
+                        { href: '/admin/sales', labelEs: 'Dashboard', labelEn: 'Dashboard' },
+                        { href: '/admin/sales/invoices', labelEs: 'Histórico de Facturas', labelEn: 'Invoices History' },
+                        { href: '/pos/session', labelEs: 'Abrir Terminal POS', labelEn: 'Open POS Terminal' },
+                    ]
+                },
+                {
+                    titleEs: 'Clientes',
+                    titleEn: 'Customers',
+                    items: [
+                        { href: '/admin/sales/customers', labelEs: 'Directorio de Clientes', labelEn: 'Customers Directory' },
+                    ]
+                },
+                {
+                    titleEs: 'Configuración',
+                    titleEn: 'Configuration',
+                    items: [
+                        { href: '/admin/sales/config', labelEs: 'Configuración POS y Fiscal', labelEn: 'POS & Billing Settings' },
+                        { href: '/admin/settings/integrations', labelEs: 'Integraciones & Menú Digital', labelEn: 'Integrations & Digital Menu' },
+                    ]
+                }
             ]
         },
         {
@@ -166,11 +259,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         return language === 'es' ? (item.labelEs || '') : (item.labelEn || '')
     }
 
+    const getAllSubItems = (item: NavItem): SubnavItem[] => {
+        if (item.sections) {
+            return item.sections.flatMap(s => s.items)
+        }
+        return item.items || []
+    }
+
     const isItemActive = (item: NavItem) => {
         if (pathname === item.href) return true
         if (item.href !== '/admin/dashboard' && pathname.startsWith(item.href + '/')) return true
-        if (item.items) {
-            return item.items.some((sub) => {
+        const allSubs = getAllSubItems(item)
+        if (allSubs.length > 0) {
+            return allSubs.some((sub) => {
                 if (pathname === sub.href) return true
                 if (pathname.startsWith(sub.href + '/')) return true
                 return false
@@ -189,8 +290,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     // Auto-expand the active section on mount / pathname change
     useEffect(() => {
         const activeItem = NAV_ITEMS.find(item => {
-            if (!item.items) return false
-            return item.items.some(sub => pathname === sub.href || pathname.startsWith(sub.href + '/')) || pathname === item.href || pathname.startsWith(item.href + '/')
+            const allSubs = getAllSubItems(item)
+            if (allSubs.length === 0) return false
+            return allSubs.some(sub => pathname === sub.href || pathname.startsWith(sub.href + '/')) || pathname === item.href || pathname.startsWith(item.href + '/')
         })
         if (activeItem) {
             setExpandedMobileItems(prev => ({
@@ -281,7 +383,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                             {NAV_ITEMS.map((item) => {
                                 const active = isItemActive(item)
                                 const Icon = item.icon
-                                const hasSubmenu = !!item.items
+                                const hasSubmenu = !!(item.sections || item.items)
                                 const isExpanded = !!expandedMobileItems[item.href]
 
                                 return (
@@ -303,31 +405,60 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                                                     <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
                                                 </button>
 
-                                                {/* Accordion Panel with smooth height transition */}
+                                                {/* Accordion Panel */}
                                                 <div 
-                                                    className={`grid transition-all duration-200 ease-in-out pl-6
+                                                    className={`grid transition-all duration-200 ease-in-out pl-4
                                                         ${isExpanded ? 'grid-rows-[1fr] opacity-100 mt-1' : 'grid-rows-[0fr] opacity-0 overflow-hidden'}`}
                                                 >
-                                                    <div className="overflow-hidden space-y-1">
-                                                        {item.items?.map((sub) => {
-                                                            const isSubActive = pathname === sub.href || pathname.startsWith(sub.href + '/')
-                                                            return (
-                                                                <button
-                                                                    key={sub.href}
-                                                                    onClick={() => {
-                                                                        router.push(sub.href)
-                                                                        setIsMobileOpen(false)
-                                                                    }}
-                                                                    className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors block
-                                                                        ${isSubActive 
-                                                                            ? 'bg-primary/10 text-primary font-medium' 
-                                                                            : 'text-text-secondary hover:bg-surface-raised hover:text-text-primary'
-                                                                        }`}
-                                                                >
-                                                                    {getLocalizedLabel(sub)}
-                                                                </button>
-                                                            )
-                                                        })}
+                                                    <div className="overflow-hidden space-y-1 border-l-2 border-border pl-2 my-1">
+                                                        {item.sections ? (
+                                                            item.sections.map((section, sIdx) => (
+                                                                <div key={sIdx} className="space-y-1 pb-1">
+                                                                    <div className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary px-3 pt-2 pb-0.5">
+                                                                        {language === 'es' ? section.titleEs : section.titleEn}
+                                                                    </div>
+                                                                    {section.items.map((sub) => {
+                                                                        const isSubActive = pathname === sub.href || pathname.startsWith(sub.href + '/')
+                                                                        return (
+                                                                            <button
+                                                                                key={sub.href}
+                                                                                onClick={() => {
+                                                                                    router.push(sub.href)
+                                                                                    setIsMobileOpen(false)
+                                                                                }}
+                                                                                className={`w-full text-left px-3 py-1.5 rounded-lg text-sm transition-colors block
+                                                                                    ${isSubActive 
+                                                                                        ? 'bg-primary/10 text-primary font-medium' 
+                                                                                        : 'text-text-secondary hover:bg-surface-raised hover:text-text-primary'
+                                                                                    }`}
+                                                                            >
+                                                                                {getLocalizedLabel(sub)}
+                                                                            </button>
+                                                                        )
+                                                                    })}
+                                                                </div>
+                                                            ))
+                                                        ) : item.items ? (
+                                                            item.items.map((sub) => {
+                                                                const isSubActive = pathname === sub.href || pathname.startsWith(sub.href + '/')
+                                                                return (
+                                                                    <button
+                                                                        key={sub.href}
+                                                                        onClick={() => {
+                                                                            router.push(sub.href)
+                                                                            setIsMobileOpen(false)
+                                                                        }}
+                                                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors block
+                                                                            ${isSubActive 
+                                                                                ? 'bg-primary/10 text-primary font-medium' 
+                                                                                : 'text-text-secondary hover:bg-surface-raised hover:text-text-primary'
+                                                                            }`}
+                                                                    >
+                                                                        {getLocalizedLabel(sub)}
+                                                                    </button>
+                                                                )
+                                                            })
+                                                        ) : null}
                                                     </div>
                                                 </div>
                                             </>
@@ -400,9 +531,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 {NAV_ITEMS.map((item) => {
                     const active = isItemActive(item)
                     const Icon = item.icon
+                    const hasDropdown = !!(item.sections || item.items)
+
                     return (
                         <div key={item.href} className="relative flex items-center">
-                            {item.items ? (
+                            {hasDropdown ? (
                                 <>
                                     <button
                                         onClick={() => setActiveDropdown(activeDropdown === item.href ? null : item.href)}
@@ -418,26 +551,55 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                                     </button>
                                     
                                     {activeDropdown === item.href && (
-                                        <div className="absolute top-full left-0 mt-1 w-56 bg-surface border border-border rounded-xl shadow-xl z-50 py-1.5 animate-in fade-in slide-in-from-top-2 duration-200 ease-out">
-                                            {item.items.map((sub) => {
-                                                const isSubActive = pathname === sub.href || pathname.startsWith(sub.href + '/')
-                                                return (
-                                                    <button
-                                                        key={sub.href}
-                                                        onClick={() => {
-                                                            router.push(sub.href)
-                                                            setActiveDropdown(null)
-                                                        }}
-                                                        className={`w-full text-left px-4 py-2 text-sm transition-colors block
-                                                            ${isSubActive 
-                                                                ? 'bg-primary/5 text-primary font-medium' 
-                                                                : 'text-text-secondary hover:bg-surface-raised hover:text-text-primary'
-                                                            }`}
-                                                    >
-                                                        {getLocalizedLabel(sub)}
-                                                    </button>
-                                                )
-                                            })}
+                                        <div className="absolute top-full left-0 mt-1 w-60 max-h-[80vh] overflow-y-auto bg-surface border border-border rounded-xl shadow-xl z-50 py-1.5 animate-in fade-in slide-in-from-top-2 duration-200 ease-out">
+                                            {item.sections ? (
+                                                item.sections.map((section, sIdx) => (
+                                                    <div key={sIdx} className="border-t border-border first:border-t-0 py-1">
+                                                        <div className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary px-3 pt-1.5 pb-1">
+                                                            {language === 'es' ? section.titleEs : section.titleEn}
+                                                        </div>
+                                                        {section.items.map((sub) => {
+                                                            const isSubActive = pathname === sub.href || pathname.startsWith(sub.href + '/')
+                                                            return (
+                                                                <button
+                                                                    key={sub.href}
+                                                                    onClick={() => {
+                                                                        router.push(sub.href)
+                                                                        setActiveDropdown(null)
+                                                                    }}
+                                                                    className={`w-full text-left px-3.5 py-1.5 text-sm transition-colors block
+                                                                        ${isSubActive 
+                                                                            ? 'bg-primary/5 text-primary font-medium' 
+                                                                            : 'text-text-secondary hover:bg-surface-raised hover:text-text-primary'
+                                                                        }`}
+                                                                >
+                                                                    {getLocalizedLabel(sub)}
+                                                                </button>
+                                                            )
+                                                        })}
+                                                    </div>
+                                                ))
+                                            ) : item.items ? (
+                                                item.items.map((sub) => {
+                                                    const isSubActive = pathname === sub.href || pathname.startsWith(sub.href + '/')
+                                                    return (
+                                                        <button
+                                                            key={sub.href}
+                                                            onClick={() => {
+                                                                router.push(sub.href)
+                                                                setActiveDropdown(null)
+                                                            }}
+                                                            className={`w-full text-left px-3.5 py-2 text-sm transition-colors block
+                                                                ${isSubActive 
+                                                                    ? 'bg-primary/5 text-primary font-medium' 
+                                                                    : 'text-text-secondary hover:bg-surface-raised hover:text-text-primary'
+                                                                }`}
+                                                        >
+                                                            {getLocalizedLabel(sub)}
+                                                        </button>
+                                                    )
+                                                })
+                                            ) : null}
                                         </div>
                                     )}
                                 </>
