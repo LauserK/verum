@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse
-from deps import get_active_org_id
+from app.deps import get_active_org_id
 from database import get_db
 from app.integrations.service import get_integration_status, complete_handshake, disconnect_integration
 
