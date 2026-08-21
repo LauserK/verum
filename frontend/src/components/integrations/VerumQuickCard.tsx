@@ -62,11 +62,23 @@ export default function VerumQuickCard() {
         const left = window.screen.width / 2 - width / 2
         const top = window.screen.height / 2 - height / 2
 
-        window.open(
+        const popup = window.open(
             authUrl,
             'verum_quick_oauth',
             `width=${width},height=${height},top=${top},left=${left},scrollbars=yes`
         )
+
+        // Poll every second while popup is open to catch immediate link status
+        if (popup) {
+            const timer = setInterval(() => {
+                if (popup.closed) {
+                    clearInterval(timer)
+                    fetchStatus()
+                } else {
+                    fetchStatus()
+                }
+            }, 1500)
+        }
     }
 
     const handleDisconnect = async () => {
