@@ -40,3 +40,6 @@ CARACAS_TZ = pytz.timezone("America/Caracas")
 # Bootstrap the application via the factory
 from app import create_app
 app = create_app()
+
+from app.integrations.router import router as integrations_router
+app.include_router(integrations_router, prefix="/api", tags=["Integrations"])
