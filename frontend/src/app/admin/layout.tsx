@@ -207,6 +207,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     titleEn: 'Operations & POS',
                     items: [
                         { href: '/admin/sales', labelEs: 'Dashboard', labelEn: 'Dashboard' },
+                        { href: '/admin/sales/catalog', labelEs: 'Catálogo de Productos', labelEn: 'Sales Catalog' },
                         { href: '/admin/sales/invoices', labelEs: 'Histórico de Facturas', labelEn: 'Invoices History' },
                         { href: '/pos/session', labelEs: 'Abrir Terminal POS', labelEn: 'Open POS Terminal' },
                     ]
