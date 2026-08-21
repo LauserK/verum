@@ -49,3 +49,27 @@ Cuando un Tenant (Restaurante) activa la integraciÃ³n entre ambos sistemas, se e
 *   **AutenticaciÃ³n HMAC:** Todas las peticiones entre los sistemas deben incluir un header con firma criptogrÃ¡fica (HMAC-SHA256) usando un *Secret Key* compartido a nivel de Tenant/IntegraciÃ³n.
 *   **Idempotencia:** Ambos webhooks validarÃ¡n un identificador Ãºnico por evento (`event_id` o `order_id`). Si un evento ya fue procesado con Ã©xito (por reintentos de red), se devolverÃ¡ un `200 OK` sin duplicar el efecto.
 *   **Manejo de Errores y Reintentos:** En caso de fallas de red (5xx), el sistema emisor aplicarÃ¡ reintentos con backoff exponencial. Fallos de validaciÃ³n (4xx) se marcarÃ¡n como error de datos sin reintento automÃ¡tico.
+
+
+## 6. Milestones de Implementación
+
+**Milestone 1: Foundations & Security (Handshake)**
+* **VERUM & Quick:** Configuración de variables de entorno para los secrets HMAC de la integración.
+* **VerumQuick:** Lógica para garantizar la existencia de la Categoría Base (ej. 'Importados de VERUM').
+* **VERUM:** Script/Endpoint de inicialización para crear el Usuario de Integración ('VerumQuick System') y el Workstation Virtual ('VerumQuick POS').
+
+**Milestone 2: Sincronización de Catálogo (VERUM ? Quick)**
+* **VERUM (Backend):** Crear tabla \integration_events\. Intervenir los métodos de creación y actualización en \sales_svc\ para insertar eventos (Outbox).
+* **VerumQuick:** Crear el endpoint Webhook \/api/integrations/verum/webhook/product\ con middleware HMAC, lógica de resolución por \external_code\ y creación/actualización de productos.
+* **VERUM (Backend):** Implementar el Dispatcher (tarea programada) que consuma eventos pendientes de \integration_events\ y haga el \POST\ a Quick.
+
+**Milestone 3: Inyección de Órdenes (Quick ? VERUM)**
+* **VerumQuick:** Crear señal/tarea asíncrona tras confirmar una orden (estado pagado/confirmado) que construya un payload estándar y lo despache (POST HMAC) a VERUM.
+* **VERUM (Backend):** Crear el endpoint Webhook \/api/integrations/quick/webhook/order\.
+* **VERUM (Backend):** Lógica del Webhook para parsear la orden entrante, validarla, construir el payload \InvoiceCreate\ forzando el Workstation/User generados en Milestone 1, e insertar en la base de datos (con afectación de inventario).
+
+**Milestone 4: Resiliencia & Monitoreo**
+* Implementar reintentos en Dispatchers para errores HTTP 5xx.
+* Desactivar reintentos en errores 4xx (problema de datos) y marcarlos como 'failed'.
+* (Opcional) Reconciliación nocturna (cron job) para verificar derivas entre catálogos.
+
