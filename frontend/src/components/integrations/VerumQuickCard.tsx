@@ -12,7 +12,9 @@ interface IntegrationStatus {
 
 export default function VerumQuickCard() {
     const { activeVenueId } = useVenue()
-    const [quickUrl, setQuickUrl] = useState('http://localhost:8000')
+    const [quickUrl, setQuickUrl] = useState(
+        process.env.NEXT_PUBLIC_VERUM_QUICK_URL || 'http://localhost:8000'
+    )
     const [status, setStatus] = useState<IntegrationStatus>({ is_connected: false })
     const [loading, setLoading] = useState(true)
     const [actionLoading, setActionLoading] = useState(false)
