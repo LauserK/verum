@@ -1,6 +1,7 @@
 from typing import List, Optional
 from uuid import UUID
 from fastapi import HTTPException
+from app.integrations.outbox import enqueue_event
 from app.sales.schemas import (
     TenantBillingConfigUpdate, PaymentMethodCreate, WorkstationCreate,
     SaleItemCreate, SaleItemVariantCreate, SaleItemComponentCreate,
@@ -106,7 +107,16 @@ async def create_sale_item(org_id: str, payload: SaleItemCreate, db):
     if payload.modifier_group_ids:
         await _link_modifiers(item_id, payload.modifier_group_ids, db)
 
-    return await get_sale_item(item_id, org_id, db)
+    item_out = await get_sale_item(item_id, org_id, db)
+    
+    enqueue_event(
+        org_id=org_id,
+        event_type="product.created",
+        payload=item_out,
+        db=db
+    )
+
+    return item_out
 
 async def get_sale_item(item_id: str, org_id: str, db):
     # This is a simplified fetch, ideally it would join variants, components, etc.
