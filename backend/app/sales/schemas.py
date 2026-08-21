@@ -4,6 +4,32 @@ from uuid import UUID
 from datetime import date as dt_date, datetime as dt_datetime
 from decimal import Decimal
 
+# --- Categories ---
+
+class SaleCategoryCreate(BaseModel):
+    name: str
+    icon: str = 'lunch_dining'
+    image_url: Optional[str] = None
+    position: int = 0
+    is_active: bool = True
+
+class SaleCategoryUpdate(BaseModel):
+    name: Optional[str] = None
+    icon: Optional[str] = None
+    image_url: Optional[str] = None
+    position: Optional[int] = None
+    is_active: Optional[bool] = None
+
+class SaleCategoryOut(BaseModel):
+    id: UUID
+    org_id: UUID
+    name: str
+    icon: str
+    image_url: Optional[str] = None
+    position: int
+    is_active: bool
+    created_at: Optional[Union[dt_datetime, str]] = None
+
 # --- Components ---
 
 class SaleItemComponentCreate(BaseModel):
@@ -133,6 +159,26 @@ class SaleItemOut(BaseModel):
     components: List[SaleItemComponentOut] = []
     variants: List[SaleItemVariantOut] = []
     modifier_groups: List[SaleModifierGroupOut] = []
+
+class SaleItemUpdate(BaseModel):
+    category_id: Optional[UUID] = None
+    code: Optional[str] = None
+    name: Optional[str] = None
+    description: Optional[str] = None
+    sale_price: Optional[Decimal] = None
+    food_cost: Optional[Decimal] = None
+    tax_id: Optional[UUID] = None
+    tax_included: Optional[bool] = None
+    barcode: Optional[str] = None
+    image_url: Optional[str] = None
+    has_variants: Optional[bool] = None
+    variant_label: Optional[str] = None
+    is_active: Optional[bool] = None
+    is_featured: Optional[bool] = None
+    position: Optional[int] = None
+    components: Optional[List[SaleItemComponentCreate]] = None
+    variants: Optional[List[SaleItemVariantCreate]] = None
+    modifier_group_ids: Optional[List[UUID]] = None
 
 # --- Config: Workstations & Payment Methods ---
 

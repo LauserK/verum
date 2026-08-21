@@ -139,6 +139,133 @@ export const salesApi = {
     deleteTax: (id: string) => fetchWithAuth<{ message: string }>(`/sales/taxes/${id}`, {
         method: 'DELETE',
     }),
+
+    // Catalog: Categories
+    getSaleCategories: () => fetchWithAuth<SaleCategory[]>('/sales/categories'),
+    createSaleCategory: (data: Partial<SaleCategory>) => fetchWithAuth<SaleCategory>('/sales/categories', {
+        method: 'POST',
+        body: JSON.stringify(data),
+    }),
+    updateSaleCategory: (id: string, data: Partial<SaleCategory>) => fetchWithAuth<SaleCategory>(`/sales/categories/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    }),
+
+    // Catalog: Items
+    getSaleItems: (categoryId?: string, activeOnly?: boolean) => {
+        const params = new URLSearchParams()
+        if (categoryId) params.set('category_id', categoryId)
+        if (activeOnly) params.set('active_only', 'true')
+        const qs = params.toString()
+        return fetchWithAuth<SaleItem[]>(`/sales/items${qs ? `?${qs}` : ''}`)
+    },
+    getSaleItem: (id: string) => fetchWithAuth<SaleItem>(`/sales/items/${id}`),
+    createSaleItem: (data: Partial<SaleItem>) => fetchWithAuth<SaleItem>('/sales/items', {
+        method: 'POST',
+        body: JSON.stringify(data),
+    }),
+    updateSaleItem: (id: string, data: Partial<SaleItem>) => fetchWithAuth<SaleItem>(`/sales/items/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    }),
+    deleteSaleItem: (id: string) => fetchWithAuth<{ message: string }>(`/sales/items/${id}`, {
+        method: 'DELETE',
+    }),
+
+    // Catalog: Modifier Groups
+    getModifierGroups: () => fetchWithAuth<SaleModifierGroup[]>('/sales/modifier-groups'),
+    createModifierGroup: (data: Partial<SaleModifierGroup>) => fetchWithAuth<SaleModifierGroup>('/sales/modifier-groups', {
+        method: 'POST',
+        body: JSON.stringify(data),
+    }),
+}
+
+export interface SaleCategory {
+    id: string
+    org_id: string
+    name: string
+    icon: string
+    image_url?: string | null
+    position: number
+    is_active: boolean
+    created_at?: string
+}
+
+export interface SaleItemComponent {
+    id?: string
+    item_id: string
+    item_name?: string
+    item_code?: string
+    component_type: 'fixed_qty' | 'recipe_proportional'
+    quantity: number
+    label?: string | null
+    position?: number
+    recipe_yield?: number | null
+    recipe_ingredient_count?: number | null
+}
+
+export interface SaleItemVariant {
+    id?: string
+    sale_item_id?: string
+    name: string
+    price: number
+    food_cost?: number
+    external_code?: string | null
+    is_default?: boolean
+    position?: number
+    is_active?: boolean
+    components?: SaleItemComponent[]
+}
+
+export interface SaleModifierOption {
+    id?: string
+    group_id?: string
+    item_id?: string | null
+    name: string
+    price: number
+    food_cost?: number
+    external_code?: string | null
+    deduct_qty?: number | null
+    is_active?: boolean
+    position?: number
+}
+
+export interface SaleModifierGroup {
+    id: string
+    org_id?: string
+    name: string
+    min_selection: number
+    max_selection?: number | null
+    is_active: boolean
+    position: number
+    options?: SaleModifierOption[]
+}
+
+export interface SaleItem {
+    id: string
+    org_id: string
+    category_id?: string | null
+    category_name?: string | null
+    code?: string | null
+    name: string
+    description?: string
+    sale_price?: number | null
+    food_cost: number
+    tax_id?: string | null
+    tax_name?: string | null
+    tax_rate?: number | null
+    tax_included: boolean
+    barcode?: string | null
+    image_url?: string | null
+    has_variants: boolean
+    variant_label?: string
+    is_active: boolean
+    is_featured: boolean
+    position: number
+    components?: SaleItemComponent[]
+    variants?: SaleItemVariant[]
+    modifier_groups?: SaleModifierGroup[]
+    modifier_group_ids?: string[]
 }
 
 export interface Currency {

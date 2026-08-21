@@ -1,6 +1,6 @@
 'use client'
 
-import { ShoppingBag, Users, FileText, Settings, ArrowRight, BarChart } from 'lucide-react'
+import { ShoppingBag, Users, FileText, Settings, ArrowRight, BarChart, UtensilsCrossed } from 'lucide-react'
 import Link from 'next/link'
 import { useVenue } from '@/components/VenueContext'
 
@@ -18,6 +18,9 @@ export default function SalesDashboardPage() {
 
       {/* Submenu Redirection Links */}
       <div className="flex gap-3 overflow-x-auto pb-2">
+        <Link href="/admin/sales/catalog" className="px-4 py-2.5 bg-surface border border-border rounded-xl text-sm font-semibold hover:border-primary transition-colors flex items-center gap-2">
+          <UtensilsCrossed className="w-4 h-4 text-primary" /> Catálogo de Productos
+        </Link>
         <Link href="/admin/sales/invoices" className="px-4 py-2.5 bg-surface border border-border rounded-xl text-sm font-semibold hover:border-primary transition-colors flex items-center gap-2">
           <FileText className="w-4 h-4 text-primary" /> Histórico de Facturas
         </Link>
@@ -39,6 +42,10 @@ export default function SalesDashboardPage() {
                 <BarChart className="w-4 h-4" /> Accesos Rápidos
             </h2>
             <div className="space-y-3">
+                <Link href="/admin/sales/catalog" className="flex justify-between items-center p-3 bg-surface-raised rounded-xl border border-border hover:border-primary transition-colors group">
+                    <span className="text-sm font-medium">Gestionar Catálogo de Venta</span>
+                    <ArrowRight className="w-4 h-4 text-text-secondary group-hover:text-primary transition-colors" />
+                </Link>
                 <Link href="/admin/sales/invoices/new" className="flex justify-between items-center p-3 bg-surface-raised rounded-xl border border-border hover:border-primary transition-colors group">
                     <span className="text-sm font-medium">Crear Factura Manual (B2B)</span>
                     <ArrowRight className="w-4 h-4 text-text-secondary group-hover:text-primary transition-colors" />

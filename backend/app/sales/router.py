@@ -9,7 +9,9 @@ from app.sales.schemas import (
     TenantBillingConfigUpdate, TenantBillingConfigOut,
     PaymentMethodCreate, PaymentMethodOut,
     WorkstationCreate, WorkstationOut,
-    SaleItemCreate, SaleItemOut,
+    SaleCategoryCreate, SaleCategoryUpdate, SaleCategoryOut,
+    SaleItemCreate, SaleItemUpdate, SaleItemOut,
+    SaleModifierGroupCreate, SaleModifierGroupOut,
     CustomerCreate, CustomerUpdate, CustomerOut,
     DocumentSequenceCreate, DocumentSequenceOut,
     InvoiceCreate, InvoiceOut, InvoiceVoid,
@@ -91,7 +93,56 @@ async def list_workstations(
 ):
     return await sales_svc.get_workstations(org_id, venue_id, db)
 
-# --- Catalog ---
+# --- Catalog: Categories ---
+
+@router.get("/categories", response_model=List[SaleCategoryOut])
+async def list_categories(
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db)
+):
+    return await sales_svc.list_sale_categories(org_id, db)
+
+@router.post("/categories", response_model=SaleCategoryOut)
+async def create_category(
+    payload: SaleCategoryCreate,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_catalog"))
+):
+    res = await sales_svc.create_sale_category(org_id, payload, db)
+    await invalidate_sales_catalog(org_id)
+    return res
+
+@router.patch("/categories/{category_id}", response_model=SaleCategoryOut)
+async def update_category(
+    category_id: str,
+    payload: SaleCategoryUpdate,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_catalog"))
+):
+    res = await sales_svc.update_sale_category(org_id, category_id, payload, db)
+    await invalidate_sales_catalog(org_id)
+    return res
+
+# --- Catalog: Items ---
+
+@router.get("/items", response_model=List[SaleItemOut])
+async def list_sale_items(
+    category_id: Optional[str] = None,
+    active_only: bool = False,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db)
+):
+    return await sales_svc.list_sale_items(org_id, category_id, active_only, db)
+
+@router.get("/items/{item_id}", response_model=SaleItemOut)
+async def get_sale_item(
+    item_id: str,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db)
+):
+    return await sales_svc.get_sale_item(item_id, org_id, db)
 
 @router.post("/items", response_model=SaleItemOut)
 async def create_sale_item(
@@ -100,13 +151,50 @@ async def create_sale_item(
     db = Depends(get_db),
     _ = Depends(require_permission("sales.manage_catalog"))
 ):
-    # In a real scenario we need more complex mapping for output
     res = await sales_svc.create_sale_item(org_id, payload, db)
-    # Mapping raw DB response to SaleItemOut schema manually if needed
-    # For now, FastAPI will try to parse it
-    # We must ensure components and variants exist in dict
-    res["variants"] = res.get("sale_item_variants", [])
-    res["components"] = res.get("sale_item_components", [])
+    await invalidate_sales_catalog(org_id)
+    return res
+
+@router.patch("/items/{item_id}", response_model=SaleItemOut)
+async def update_sale_item(
+    item_id: str,
+    payload: SaleItemUpdate,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_catalog"))
+):
+    res = await sales_svc.update_sale_item(org_id, item_id, payload, db)
+    await invalidate_sales_catalog(org_id)
+    return res
+
+@router.delete("/items/{item_id}")
+async def delete_sale_item(
+    item_id: str,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_catalog"))
+):
+    res = await sales_svc.delete_sale_item(org_id, item_id, db)
+    await invalidate_sales_catalog(org_id)
+    return res
+
+# --- Catalog: Modifier Groups ---
+
+@router.get("/modifier-groups", response_model=List[SaleModifierGroupOut])
+async def list_modifier_groups(
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db)
+):
+    return await sales_svc.list_modifier_groups(org_id, db)
+
+@router.post("/modifier-groups", response_model=SaleModifierGroupOut)
+async def create_modifier_group(
+    payload: SaleModifierGroupCreate,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_catalog"))
+):
+    res = await sales_svc.create_modifier_group(org_id, payload, db)
     await invalidate_sales_catalog(org_id)
     return res
 

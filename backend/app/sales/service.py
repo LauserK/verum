@@ -4,7 +4,8 @@ from fastapi import HTTPException
 from app.integrations.outbox import enqueue_event
 from app.sales.schemas import (
     TenantBillingConfigUpdate, PaymentMethodCreate, WorkstationCreate,
-    SaleItemCreate, SaleItemVariantCreate, SaleItemComponentCreate,
+    SaleItemCreate, SaleItemUpdate, SaleItemVariantCreate, SaleItemComponentCreate,
+    SaleCategoryCreate, SaleCategoryUpdate, SaleModifierGroupCreate,
     CustomerCreate, CustomerUpdate, DocumentSequenceCreate
 )
 
@@ -54,6 +55,59 @@ async def get_workstations(org_id: str, venue_id: Optional[str], db):
 
 # --- Catalog Service ---
 
+# Categories
+async def list_sale_categories(org_id: str, db):
+    res = db.table("sale_categories").select("*").eq("org_id", org_id).order("position").execute()
+    return res.data or []
+
+async def create_sale_category(org_id: str, payload: SaleCategoryCreate, db):
+    data = payload.model_dump()
+    data["org_id"] = org_id
+    res = db.table("sale_categories").insert(data).execute()
+    return res.data[0]
+
+async def update_sale_category(org_id: str, category_id: str, payload: SaleCategoryUpdate, db):
+    data = payload.model_dump(exclude_unset=True)
+    if not data:
+        res = db.table("sale_categories").select("*").eq("id", category_id).eq("org_id", org_id).execute()
+        if not res.data:
+            raise HTTPException(404, "Category not found")
+        return res.data[0]
+    res = db.table("sale_categories").update(data).eq("id", category_id).eq("org_id", org_id).execute()
+    if not res.data:
+        raise HTTPException(404, "Category not found")
+    return res.data[0]
+
+# Modifiers
+async def list_modifier_groups(org_id: str, db):
+    res = db.table("sale_modifier_groups").select("*, options:sale_modifier_options(*)").eq("org_id", org_id).order("position").execute()
+    return res.data or []
+
+async def create_modifier_group(org_id: str, payload: SaleModifierGroupCreate, db):
+    data = payload.model_dump(exclude={"options"})
+    data["org_id"] = org_id
+    res = db.table("sale_modifier_groups").insert(data).execute()
+    group = res.data[0]
+    group_id = group["id"]
+    
+    if payload.options:
+        opt_data = []
+        for opt in payload.options:
+            od = opt.model_dump()
+            od["group_id"] = group_id
+            od["price"] = float(od["price"])
+            od["food_cost"] = float(od["food_cost"])
+            if od.get("item_id"):
+                od["item_id"] = str(od["item_id"])
+            if od.get("deduct_qty") is not None:
+                od["deduct_qty"] = float(od["deduct_qty"])
+            opt_data.append(od)
+        db.table("sale_modifier_options").insert(opt_data).execute()
+
+    res = db.table("sale_modifier_groups").select("*, options:sale_modifier_options(*)").eq("id", group_id).eq("org_id", org_id).execute()
+    return res.data[0]
+
+# Helper component & variant handlers
 async def _create_components(sale_item_id: str, variant_id: Optional[str], components: List[SaleItemComponentCreate], db):
     if not components:
         return
@@ -84,6 +138,186 @@ async def _link_modifiers(sale_item_id: str, modifier_group_ids: List[UUID], db)
         return
     data = [{"sale_item_id": sale_item_id, "group_id": str(gid)} for gid in modifier_group_ids]
     db.table("sale_item_modifier_groups").insert(data).execute()
+
+def _populate_item_relations(item: dict, all_categories: dict, all_taxes: dict, all_items: dict, all_variants: dict, all_components: dict, all_group_links: dict, all_groups: dict) -> dict:
+    item_id = item["id"]
+    
+    # Category
+    cat_id = item.get("category_id")
+    if cat_id and cat_id in all_categories:
+        item["category_name"] = all_categories[cat_id].get("name")
+    else:
+        item["category_name"] = None
+
+    # Tax
+    tax_id = item.get("tax_id")
+    if tax_id and tax_id in all_taxes:
+        item["tax_name"] = all_taxes[tax_id].get("name")
+        item["tax_rate"] = all_taxes[tax_id].get("rate")
+    else:
+        item["tax_name"] = None
+        item["tax_rate"] = None
+
+    # Components directly on the sale item (where variant_id is None)
+    item_comps = all_components.get((item_id, None), [])
+    for comp in item_comps:
+        raw_item = all_items.get(comp.get("item_id"))
+        if raw_item:
+            comp["item_name"] = raw_item.get("name")
+            comp["item_code"] = raw_item.get("code")
+    item["components"] = item_comps
+
+    # Variants
+    variants = all_variants.get(item_id, [])
+    for var in variants:
+        var_id = var["id"]
+        var_comps = all_components.get((item_id, var_id), [])
+        for comp in var_comps:
+            raw_item = all_items.get(comp.get("item_id"))
+            if raw_item:
+                comp["item_name"] = raw_item.get("name")
+                comp["item_code"] = raw_item.get("code")
+        var["components"] = var_comps
+    item["variants"] = variants
+
+    # Modifier Groups
+    linked_group_ids = all_group_links.get(item_id, [])
+    item["modifier_groups"] = [all_groups[gid] for gid in linked_group_ids if gid in all_groups]
+
+    return item
+
+async def list_sale_items(org_id: str, category_id: Optional[str], active_only: bool, db):
+    query = db.table("sale_items").select("*").eq("org_id", org_id)
+    if category_id:
+        query = query.eq("category_id", category_id)
+    if active_only:
+        query = query.eq("is_active", True)
+    
+    items_res = query.order("position").order("name").execute()
+    raw_items = items_res.data or []
+    if not raw_items:
+        return []
+
+    item_ids = [item["id"] for item in raw_items]
+
+    # Pre-fetch categories
+    cat_res = db.table("sale_categories").select("id, name").eq("org_id", org_id).execute()
+    categories = {c["id"]: c for c in (cat_res.data or [])}
+
+    # Pre-fetch taxes
+    tax_res = db.table("taxes").select("id, name, rate").or_(f"org_id.is.null,org_id.eq.{org_id}").execute()
+    taxes = {t["id"]: t for t in (tax_res.data or [])}
+
+    # Pre-fetch variants
+    var_res = db.table("sale_item_variants").select("*").in_("sale_item_id", item_ids).order("position").execute()
+    variants_by_item = {}
+    for var in (var_res.data or []):
+        variants_by_item.setdefault(var["sale_item_id"], []).append(var)
+
+    # Pre-fetch components
+    comp_res = db.table("sale_item_components").select("*").in_("sale_item_id", item_ids).order("position").execute()
+    components_by_key = {}
+    raw_inv_item_ids = set()
+    for comp in (comp_res.data or []):
+        components_by_key.setdefault((comp["sale_item_id"], comp.get("variant_id")), []).append(comp)
+        if comp.get("item_id"):
+            raw_inv_item_ids.add(comp["item_id"])
+
+    # Pre-fetch raw items for component names
+    raw_items_dict = {}
+    if raw_inv_item_ids:
+        inv_res = db.table("items").select("id, name, code").in_("id", list(raw_inv_item_ids)).execute()
+        raw_items_dict = {i["id"]: i for i in (inv_res.data or [])}
+
+    # Pre-fetch modifier links & modifier groups
+    mg_links_res = db.table("sale_item_modifier_groups").select("sale_item_id, group_id").in_("sale_item_id", item_ids).execute()
+    group_links = {}
+    used_group_ids = set()
+    for link in (mg_links_res.data or []):
+        group_links.setdefault(link["sale_item_id"], []).append(link["group_id"])
+        used_group_ids.add(link["group_id"])
+
+    groups_dict = {}
+    if used_group_ids:
+        mg_res = db.table("sale_modifier_groups").select("*, options:sale_modifier_options(*)").in_("id", list(used_group_ids)).execute()
+        groups_dict = {g["id"]: g for g in (mg_res.data or [])}
+
+    # Assemble
+    result = []
+    for item in raw_items:
+        populated = _populate_item_relations(
+            item=item,
+            all_categories=categories,
+            all_taxes=taxes,
+            all_items=raw_items_dict,
+            all_variants=variants_by_item,
+            all_components=components_by_key,
+            all_group_links=group_links,
+            all_groups=groups_dict
+        )
+        result.append(populated)
+
+    return result
+
+async def get_sale_item(item_id: str, org_id: str, db):
+    res = db.table("sale_items").select("*").eq("id", item_id).eq("org_id", org_id).execute()
+    if not res.data:
+        raise HTTPException(404, "Sale item not found")
+    item = res.data[0]
+
+    # Categories
+    categories = {}
+    if item.get("category_id"):
+        cat_res = db.table("sale_categories").select("id, name").eq("id", item["category_id"]).execute()
+        categories = {c["id"]: c for c in (cat_res.data or [])}
+
+    # Taxes
+    taxes = {}
+    if item.get("tax_id"):
+        tax_res = db.table("taxes").select("id, name, rate").eq("id", item["tax_id"]).execute()
+        taxes = {t["id"]: t for t in (tax_res.data or [])}
+
+    # Variants
+    var_res = db.table("sale_item_variants").select("*").eq("sale_item_id", item_id).order("position").execute()
+    variants_by_item = {item_id: var_res.data or []}
+
+    # Components
+    comp_res = db.table("sale_item_components").select("*").eq("sale_item_id", item_id).order("position").execute()
+    components_by_key = {}
+    raw_inv_item_ids = set()
+    for comp in (comp_res.data or []):
+        components_by_key.setdefault((comp["sale_item_id"], comp.get("variant_id")), []).append(comp)
+        if comp.get("item_id"):
+            raw_inv_item_ids.add(comp["item_id"])
+
+    raw_items_dict = {}
+    if raw_inv_item_ids:
+        inv_res = db.table("items").select("id, name, code").in_("id", list(raw_inv_item_ids)).execute()
+        raw_items_dict = {i["id"]: i for i in (inv_res.data or [])}
+
+    # Modifier links
+    mg_links_res = db.table("sale_item_modifier_groups").select("sale_item_id, group_id").eq("sale_item_id", item_id).execute()
+    group_links = {}
+    used_group_ids = set()
+    for link in (mg_links_res.data or []):
+        group_links.setdefault(link["sale_item_id"], []).append(link["group_id"])
+        used_group_ids.add(link["group_id"])
+
+    groups_dict = {}
+    if used_group_ids:
+        mg_res = db.table("sale_modifier_groups").select("*, options:sale_modifier_options(*)").in_("id", list(used_group_ids)).execute()
+        groups_dict = {g["id"]: g for g in (mg_res.data or [])}
+
+    return _populate_item_relations(
+        item=item,
+        all_categories=categories,
+        all_taxes=taxes,
+        all_items=raw_items_dict,
+        all_variants=variants_by_item,
+        all_components=components_by_key,
+        all_group_links=group_links,
+        all_groups=groups_dict
+    )
 
 async def create_sale_item(org_id: str, payload: SaleItemCreate, db):
     data = payload.model_dump(exclude={"components", "variants", "modifier_group_ids"})
@@ -118,12 +352,72 @@ async def create_sale_item(org_id: str, payload: SaleItemCreate, db):
 
     return item_out
 
-async def get_sale_item(item_id: str, org_id: str, db):
-    # This is a simplified fetch, ideally it would join variants, components, etc.
-    res = db.table("sale_items").select("*, sale_item_variants(*), sale_item_components(*)").eq("id", item_id).eq("org_id", org_id).execute()
-    if not res.data:
+async def update_sale_item(org_id: str, item_id: str, payload: SaleItemUpdate, db):
+    # Verify exists
+    existing = db.table("sale_items").select("id").eq("id", item_id).eq("org_id", org_id).execute()
+    if not existing.data:
         raise HTTPException(404, "Sale item not found")
-    return res.data[0]
+
+    update_data = payload.model_dump(exclude_unset=True, exclude={"components", "variants", "modifier_group_ids"})
+    if "sale_price" in update_data and update_data["sale_price"] is not None:
+        update_data["sale_price"] = float(update_data["sale_price"])
+    if "food_cost" in update_data and update_data["food_cost"] is not None:
+        update_data["food_cost"] = float(update_data["food_cost"])
+    if "category_id" in update_data and update_data["category_id"] is not None:
+        update_data["category_id"] = str(update_data["category_id"])
+    if "tax_id" in update_data and update_data["tax_id"] is not None:
+        update_data["tax_id"] = str(update_data["tax_id"])
+
+    if update_data:
+        db.table("sale_items").update(update_data).eq("id", item_id).eq("org_id", org_id).execute()
+
+    # Update variants if explicitly passed
+    if payload.variants is not None:
+        # Clear existing variants and components
+        db.table("sale_item_variants").delete().eq("sale_item_id", item_id).execute()
+        db.table("sale_item_components").delete().eq("sale_item_id", item_id).execute()
+        if payload.variants:
+            await _create_variants(item_id, payload.variants, db)
+
+    # Update base components if explicitly passed (and variants weren't updated)
+    if payload.components is not None and payload.variants is None:
+        db.table("sale_item_components").delete().eq("sale_item_id", item_id).is_("variant_id", "null").execute()
+        if payload.components:
+            await _create_components(item_id, None, payload.components, db)
+
+    # Update modifier groups if explicitly passed
+    if payload.modifier_group_ids is not None:
+        db.table("sale_item_modifier_groups").delete().eq("sale_item_id", item_id).execute()
+        if payload.modifier_group_ids:
+            await _link_modifiers(item_id, payload.modifier_group_ids, db)
+
+    item_out = await get_sale_item(item_id, org_id, db)
+
+    enqueue_event(
+        org_id=org_id,
+        event_type="product.updated",
+        payload=item_out,
+        db=db
+    )
+
+    return item_out
+
+async def delete_sale_item(org_id: str, item_id: str, db):
+    # Check exists
+    existing = db.table("sale_items").select("id").eq("id", item_id).eq("org_id", org_id).execute()
+    if not existing.data:
+        raise HTTPException(404, "Sale item not found")
+    
+    db.table("sale_items").delete().eq("id", item_id).eq("org_id", org_id).execute()
+    
+    enqueue_event(
+        org_id=org_id,
+        event_type="product.deleted",
+        payload={"id": item_id},
+        db=db
+    )
+    
+    return {"status": "deleted", "id": item_id}
 
 # --- Customers Service ---
 
