@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     REDIS_URL: Optional[str] = None
     VERUM_QUICK_URL: str = "http://localhost:8000"
     VERUM_QUICK_HMAC_SECRET: str
+    VERUM_QUICK_WEBHOOK_URL: Optional[str] = None
     
     class Config:
         env_file = ".env"
