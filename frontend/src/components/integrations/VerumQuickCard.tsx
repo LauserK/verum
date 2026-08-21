@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { CheckCircle2, RefreshCw, ExternalLink, Unlink, Store, AlertCircle } from 'lucide-react'
 import { useVenue } from '@/components/VenueContext'
+import { fetchWithAuth } from '@/lib/api'
 
 interface IntegrationStatus {
     is_connected: boolean
@@ -24,15 +25,10 @@ export default function VerumQuickCard() {
         try {
             setLoading(true)
             setError(null)
-            const res = await fetch('/api/integrations/quick/status')
-            if (res.ok) {
-                const data = await res.json()
-                setStatus(data)
-            } else {
-                setError('No se pudo verificar el estado de la integración.')
-            }
+            const data = await fetchWithAuth<IntegrationStatus>('/api/integrations/quick/status')
+            setStatus(data)
         } catch (err) {
-            setError('Error de conexión con el backend.')
+            setError('No se pudo verificar el estado de la integración.')
         } finally {
             setLoading(false)
         }
@@ -80,14 +76,10 @@ export default function VerumQuickCard() {
 
         try {
             setActionLoading(true)
-            const res = await fetch('/api/integrations/quick/disconnect', {
+            await fetchWithAuth('/api/integrations/quick/disconnect', {
                 method: 'POST'
             })
-            if (res.ok) {
-                await fetchStatus()
-            } else {
-                alert('No se pudo desconectar la integración.')
-            }
+            await fetchStatus()
         } catch (err) {
             alert('Error al intentar desconectar.')
         } finally {
