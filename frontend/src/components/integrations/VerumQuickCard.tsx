@@ -11,7 +11,7 @@ interface IntegrationStatus {
 }
 
 export default function VerumQuickCard() {
-    const { activeVenueId } = useVenue()
+    const { activeOrgId } = useVenue()
     const [quickUrl, setQuickUrl] = useState(
         process.env.NEXT_PUBLIC_VERUM_QUICK_URL || 'http://localhost:8000'
     )
@@ -53,8 +53,13 @@ export default function VerumQuickCard() {
 
     const handleConnect = () => {
         setError(null)
-        // Read active org from cookies or localStorage if needed, or pass placeholder
-        const authUrl = `${quickUrl.replace(/\/$/, '')}/integrations/verum/authorize/?org_id=default&redirect_uri=${encodeURIComponent(window.location.origin + '/api/integrations/quick/callback')}`
+        const orgIdToPass = activeOrgId || (typeof window !== 'undefined' ? localStorage.getItem('activeOrgId') : '') || ''
+        if (!orgIdToPass) {
+            setError('No se detectó una organización activa seleccionada.')
+            return
+        }
+
+        const authUrl = `${quickUrl.replace(/\/$/, '')}/integrations/verum/authorize/?org_id=${encodeURIComponent(orgIdToPass)}&redirect_uri=${encodeURIComponent(window.location.origin + '/api/integrations/quick/callback')}`
         
         const width = 520
         const height = 680
