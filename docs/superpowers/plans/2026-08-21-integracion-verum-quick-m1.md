@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     SUPABASE_URL: str
     SUPABASE_SERVICE_ROLE_KEY: str
     REDIS_URL: Optional[str] = None
-    VERUM_QUICK_HMAC_SECRET: str = "dev-hmac-secret-change-me"
+    VERUM_QUICK_HMAC_SECRET: str
     
     class Config:
         env_file = ".env"
