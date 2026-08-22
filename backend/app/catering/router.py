@@ -1085,6 +1085,13 @@ async def cascade_from_production_cost(db, org_id: str, item_id: UUID, visited_r
         parent_item_id = recipe["item_id"]
         await update_item_cost_and_cascade(db, org_id, parent_item_id, float(new_parent_cost), visited_recipes)
 
+    # Also cascade cost to any Sale Items (BOM) that use this inventory item
+    try:
+        from app.sales.service import cascade_sale_items_cost_from_inventory
+        await cascade_sale_items_cost_from_inventory(db, org_id, str(item_id))
+    except Exception as e:
+        print("[CASCADE TO SALE ITEMS ERROR]:", e)
+
 async def recalculate_recipe_by_id(db, org_id: str, recipe_id: UUID, visited: set = None):
     if visited is None:
         visited = set()
@@ -1140,6 +1147,12 @@ async def recalculate_recipe_by_id(db, org_id: str, recipe_id: UUID, visited: se
             "production_cost": float(prod_cost),
             "last_purchase_cost_updated_at": datetime.now(CARACAS_TZ).isoformat()
         }).eq("id", recipe["item_id"]).execute()
+
+        try:
+            from app.sales.service import cascade_sale_items_cost_from_inventory
+            await cascade_sale_items_cost_from_inventory(db, org_id, str(recipe["item_id"]))
+        except Exception as e:
+            print("[CASCADE TO SALE ITEMS ERROR IN RECALC]:", e)
 
 async def recalculate_all_recipes(db, org_id: str):
     res = db.table("recipes").select("id").eq("org_id", org_id).eq("is_active", True).execute()

@@ -367,10 +367,12 @@ async def create_sale_item(org_id: str, payload: SaleItemCreate, db):
     res = db.table("sale_items").insert(data).execute()
     item_id = res.data[0]["id"]
 
-    if payload.has_variants and payload.variants:
-        await _create_variants(item_id, payload.variants, db)
-    elif payload.components:
-        await _create_components(item_id, None, payload.components, db)
+    if payload.has_variants:
+        if payload.variants:
+            await _create_variants(item_id, payload.variants, db)
+    else:
+        if payload.components:
+            await _create_components(item_id, None, payload.components, db)
         
     if payload.modifier_group_ids:
         await _link_modifiers(item_id, payload.modifier_group_ids, db)
@@ -412,17 +414,16 @@ async def update_sale_item(org_id: str, item_id: str, payload: SaleItemUpdate, d
     if update_data:
         db.table("sale_items").update(update_data).eq("id", item_id).eq("org_id", org_id).execute()
 
-    # Update variants if explicitly passed
-    if payload.variants is not None:
-        # Clear existing variants and components
+    # Update variants if item has variants
+    if payload.has_variants:
         db.table("sale_item_variants").delete().eq("sale_item_id", item_id).execute()
         db.table("sale_item_components").delete().eq("sale_item_id", item_id).execute()
         if payload.variants:
             await _create_variants(item_id, payload.variants, db)
-
-    # Update base components if explicitly passed (and variants weren't updated)
-    if payload.components is not None and payload.variants is None:
-        db.table("sale_item_components").delete().eq("sale_item_id", item_id).is_("variant_id", "null").execute()
+    else:
+        # If product does NOT have variants, clear variants and save base BOM components
+        db.table("sale_item_variants").delete().eq("sale_item_id", item_id).execute()
+        db.table("sale_item_components").delete().eq("sale_item_id", item_id).execute()
         if payload.components:
             await _create_components(item_id, None, payload.components, db)
 
@@ -585,11 +586,48 @@ async def update_tax(org_id: str, tax_id: str, payload, db):
         raise HTTPException(404, "Tax not found or not authorized to modify (system taxes cannot be edited)")
     return res.data[0]
 
-async def delete_tax(org_id: str, tax_id: str, db):
-    # Soft delete / deactivate org tax
-    res = db.table("taxes").update({"is_active": False}).eq("id", tax_id).eq("org_id", org_id).execute()
-    if not res.data:
-        raise HTTPException(404, "Tax not found or not authorized to modify (system taxes cannot be deleted)")
-    return {"message": "Tax deactivated successfully"}
+# --- Cascade Cost from Inventory to Sale Items BOM ---
+
+async def cascade_sale_items_cost_from_inventory(db, org_id: str, item_id: str):
+    """
+    When an inventory item (raw material or sub-recipe) updates its cost,
+    recalculate the food_cost for all sale items that use this item in their BOM (sale_item_components).
+    """
+    # 1. Find all sale items that use this inventory item in their components
+    comp_res = db.table("sale_item_components").select("sale_item_id").eq("item_id", str(item_id)).execute()
+    affected_sale_item_ids = list(set(c["sale_item_id"] for c in (comp_res.data or []) if c.get("sale_item_id")))
+    
+    if not affected_sale_item_ids:
+        return
+        
+    # 2. For each affected sale item, fetch all its components and the latest costs of those inventory items
+    for sale_item_id in affected_sale_item_ids:
+        all_comps_res = db.table("sale_item_components").select("item_id, quantity, variant_id").eq("sale_item_id", sale_item_id).execute()
+        comps = all_comps_res.data or []
+        if not comps:
+            continue
+            
+        inv_ids = list(set(c["item_id"] for c in comps if c.get("item_id")))
+        inv_items_res = db.table("items").select("id, last_purchase_cost, production_cost").in_("id", inv_ids).execute()
+        inv_map = {i["id"]: (float(i.get("last_purchase_cost") or i.get("production_cost") or 0.0)) for i in (inv_items_res.data or [])}
+        
+        # Calculate total BOM food cost for base item (variant_id is null)
+        base_comps = [c for c in comps if not c.get("variant_id")]
+        if base_comps:
+            total_food_cost = sum(float(c.get("quantity") or 0) * inv_map.get(c["item_id"], 0.0) for c in base_comps)
+            db.table("sale_items").update({
+                "food_cost": round(total_food_cost, 2)
+            }).eq("id", sale_item_id).eq("org_id", org_id).execute()
+            
+        # Also update variants if variant-specific components exist
+        variants_res = db.table("sale_item_variants").select("id").eq("sale_item_id", sale_item_id).execute()
+        for var in (variants_res.data or []):
+            var_id = var["id"]
+            var_comps = [c for c in comps if c.get("variant_id") == var_id]
+            if var_comps:
+                var_food_cost = sum(float(c.get("quantity") or 0) * inv_map.get(c["item_id"], 0.0) for c in var_comps)
+                db.table("sale_item_variants").update({
+                    "food_cost": round(var_food_cost, 2)
+                }).eq("id", var_id).execute()
 
 

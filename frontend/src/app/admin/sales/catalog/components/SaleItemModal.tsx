@@ -423,6 +423,9 @@ export default function SaleItemModal({
         setError(null)
 
         try {
+            // Auto-calculate food_cost from BOM if components exist and foodCost is 0
+            const calculatedCost = bomCalculatedCost > 0 ? bomCalculatedCost : Number(foodCost) || 0
+
             const payload: any = {
                 name: name.trim(),
                 code: code.trim() || null,
@@ -430,7 +433,7 @@ export default function SaleItemModal({
                 category_id: categoryId || null,
                 description: description.trim(),
                 sale_price: salePrice !== '' ? Number(salePrice) : null,
-                food_cost: Number(foodCost) || 0,
+                food_cost: Number(foodCost) > 0 ? Number(foodCost) : calculatedCost,
                 tax_id: taxId || null,
                 tax_included: taxIncluded,
                 is_active: isActive,
