@@ -534,12 +534,17 @@ export default function SaleItemModal({
                                             onChange={(e) => setTaxId(e.target.value)}
                                             className="w-full h-11 px-3.5 bg-surface-raised border border-border rounded-xl text-text-primary text-sm focus:outline-none focus:border-primary transition-colors"
                                         >
-                                            <option value="">Exento / General del Tenant</option>
-                                            {taxes.map((t) => (
-                                                <option key={t.id} value={t.id}>
-                                                    {t.name} ({t.rate}%)
-                                                </option>
-                                            ))}
+                                            <option value="">Exento (0.00%)</option>
+                                            {taxes.map((t) => {
+                                                const rateNum = Number(t.rate)
+                                                // Handle if rate is stored as decimal 0.16 vs 16.0
+                                                const percentage = rateNum <= 1 && rateNum > 0 ? (rateNum * 100).toFixed(2) : rateNum.toFixed(2)
+                                                return (
+                                                    <option key={t.id} value={t.id}>
+                                                        {t.name} ({percentage}%)
+                                                    </option>
+                                                )
+                                            })}
                                         </select>
                                     </div>
                                 </div>
