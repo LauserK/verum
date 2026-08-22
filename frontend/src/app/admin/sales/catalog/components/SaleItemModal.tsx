@@ -159,6 +159,7 @@ export default function SaleItemModal({
     const [isSyncingQuick, setIsSyncingQuick] = useState(false)
     const [quickSyncSuccess, setQuickSyncSuccess] = useState(false)
     const [isSaveSuccess, setIsSaveSuccess] = useState(false)
+    const [isCostApplied, setIsCostApplied] = useState(false)
 
     // General form state
     const [name, setName] = useState('')
@@ -393,6 +394,10 @@ export default function SaleItemModal({
 
     const applyBomCostToItem = () => {
         setFoodCost(Number(bomCalculatedCost.toFixed(2)))
+        setIsCostApplied(true)
+        setTimeout(() => {
+            setIsCostApplied(false)
+        }, 2500)
     }
 
     // Handlers for Modifiers
@@ -1134,9 +1139,21 @@ export default function SaleItemModal({
                                         <button
                                             type="button"
                                             onClick={applyBomCostToItem}
-                                            className="px-3.5 py-2 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors"
+                                            className={`px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all duration-200 shadow-sm ${
+                                                isCostApplied
+                                                    ? 'bg-emerald-500 text-white shadow-emerald-500/25 scale-[1.02]'
+                                                    : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 hover:bg-emerald-500/20 hover:border-emerald-500/30'
+                                            }`}
                                         >
-                                            <Check className="w-4 h-4" /> Aplicar ${bomCalculatedCost.toFixed(2)} al Costo del Producto
+                                            {isCostApplied ? (
+                                                <>
+                                                    <Check className="w-4 h-4 stroke-[3]" /> ¡Costo Actualizado al Food Cost! (${bomCalculatedCost.toFixed(2)})
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Check className="w-4 h-4" /> Aplicar ${bomCalculatedCost.toFixed(2)} al Costo del Producto
+                                                </>
+                                            )}
                                         </button>
                                     </div>
                                 )}
