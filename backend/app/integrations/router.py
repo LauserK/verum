@@ -39,12 +39,20 @@ def disconnect(org_id: str = Depends(get_active_org_id), db = Depends(get_db)):
 @router.get("/integrations/quick/preview-catalog")
 def get_quick_catalog_preview(org_id: str = Depends(get_active_org_id), db = Depends(get_db)):
     from app.integrations.service import preview_quick_catalog
-    return preview_quick_catalog(org_id, db)
+    try:
+        return preview_quick_catalog(org_id, db)
+    except Exception as e:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail=str(e))
 
 @router.post("/integrations/quick/import-catalog")
 async def import_quick_catalog(payload: dict, org_id: str = Depends(get_active_org_id), db = Depends(get_db)):
     from app.integrations.service import execute_quick_catalog_import
-    return await execute_quick_catalog_import(org_id, payload, db)
+    try:
+        return await execute_quick_catalog_import(org_id, payload, db)
+    except Exception as e:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/integrations/quick/callback", response_class=HTMLResponse)
 def callback(org_id: str, company_id: str, secret: str, status: str, db = Depends(get_db)):

@@ -139,9 +139,16 @@ def fetch_quick_remote_catalog(org_id: str, db) -> Dict[str, Any]:
     secret = integration.get("secret", "")
     company_id = integration.get("company_id", "1")
 
-    export_url = os.environ.get("VERUM_QUICK_EXPORT_URL") or (
-        getattr(settings, "VERUM_QUICK_URL", "http://localhost:8000").rstrip("/") + "/integrations/api/verum/export-catalog"
-    )
+    # Derive export URL from settings
+    base_quick_url = "http://localhost:8080"
+    if getattr(settings, "VERUM_QUICK_WEBHOOK_URL", None):
+        # e.g., http://localhost:8080/integrations/api/verum/webhook/product -> http://localhost:8080
+        parts = settings.VERUM_QUICK_WEBHOOK_URL.split("/integrations/")
+        base_quick_url = parts[0]
+    elif getattr(settings, "VERUM_QUICK_URL", None):
+        base_quick_url = settings.VERUM_QUICK_URL.rstrip("/")
+
+    export_url = os.environ.get("VERUM_QUICK_EXPORT_URL") or f"{base_quick_url}/integrations/api/verum/export-catalog"
 
     signature = hmac.new(secret.encode("utf-8"), str(company_id).encode("utf-8"), hashlib.sha256).hexdigest()
     headers = {
@@ -154,15 +161,12 @@ def fetch_quick_remote_catalog(org_id: str, db) -> Dict[str, Any]:
             res = client.get(export_url, headers=headers)
             if res.status_code == 200:
                 return res.json()
+            else:
+                print(f"[QUICK EXPORT FETCH HTTP {res.status_code}]: {res.text} at {export_url}")
+                raise ValueError(f"VerumQuick respondió con error {res.status_code}: {res.text}")
     except Exception as e:
-        print(f"[QUICK EXPORT FETCH ERROR]: {e}")
-
-    # Fallback structure if mock/offline
-    return {
-        "categories": [],
-        "modifier_groups": [],
-        "products": []
-    }
+        print(f"[QUICK EXPORT FETCH ERROR]: {e} at {export_url}")
+        raise ValueError(f"No se pudo conectar a VerumQuick ({export_url}): {str(e)}")
 
 
 def preview_quick_catalog(org_id: str, db) -> Dict[str, Any]:
@@ -170,7 +174,8 @@ def preview_quick_catalog(org_id: str, db) -> Dict[str, Any]:
     Computes a preview diff of what will be imported from VerumQuick.
     """
     remote_data = fetch_quick_remote_catalog(org_id, db)
-    remote_cats = remote_data.get("categories", [])
+    raw_cats = remote_data.get("categories", [])
+    remote_cats = [c for c in raw_cats if c.get("name", "").strip().lower() != "importados de verum"]
     remote_mods = remote_data.get("modifier_groups", [])
     remote_prods = remote_data.get("products", [])
 
@@ -225,7 +230,8 @@ async def execute_quick_catalog_import(org_id: str, payload: Any, db) -> Dict[st
     from app.cache import invalidate_sales_catalog
 
     remote_data = fetch_quick_remote_catalog(org_id, db)
-    remote_cats = remote_data.get("categories", [])
+    raw_cats = remote_data.get("categories", [])
+    remote_cats = [c for c in raw_cats if c.get("name", "").strip().lower() != "importados de verum"]
     remote_mods = remote_data.get("modifier_groups", [])
     remote_prods = remote_data.get("products", [])
 
@@ -257,7 +263,8 @@ async def execute_quick_catalog_import(org_id: str, payload: Any, db) -> Dict[st
             ins = db.table("sale_categories").insert({
                 "org_id": org_id,
                 "name": c_name,
-                "description": c.get("description") or ""
+                "icon": "lunch_dining",
+                "is_active": True
             }).execute()
             if ins.data:
                 new_id = ins.data[0]["id"]
@@ -281,12 +288,23 @@ async def execute_quick_catalog_import(org_id: str, payload: Any, db) -> Dict[st
         if mg_lower in local_mod_by_name:
             verum_group_id = local_mod_by_name[mg_lower]
         else:
+            raw_max = mg.get("max_select")
+            if raw_max is None:
+                raw_max = mg.get("max_selection")
+            
+            # If max_selection is empty string, None or <= 0, store None (unlimited)
+            clean_max = None
+            if raw_max is not None and str(raw_max).strip() != "":
+                val = int(raw_max)
+                if val > 0:
+                    clean_max = val
+
             ins = db.table("sale_modifier_groups").insert({
                 "org_id": org_id,
                 "name": mg_name,
-                "min_select": mg.get("min_select", 0),
-                "max_select": mg.get("max_select", 1),
-                "is_required": mg.get("is_required", False)
+                "min_selection": int(mg.get("min_select") or mg.get("min_selection") or 0),
+                "max_selection": clean_max,
+                "is_active": True
             }).execute()
             if ins.data:
                 verum_group_id = ins.data[0]["id"]
@@ -303,14 +321,19 @@ async def execute_quick_catalog_import(org_id: str, payload: Any, db) -> Dict[st
                 opt_name = opt.get("name", "").strip()
                 if not opt_name:
                     continue
-                db.table("sale_modifier_options").insert({
-                    "group_id": verum_group_id,
-                    "name": opt_name,
-                    "price_delta": float(opt.get("price") or opt.get("price_delta") or 0.0),
-                    "is_default": opt.get("is_default", False),
-                    "position": opt_idx
-                }).execute()
-                stats["modifier_options_imported"] += 1
+                try:
+                    db.table("sale_modifier_options").insert({
+                        "group_id": verum_group_id,
+                        "name": opt_name,
+                        "price": float(opt.get("price") or opt.get("price_delta") or 0.0),
+                        "food_cost": float(opt.get("food_cost") or 0.0),
+                        "position": opt_idx,
+                        "is_active": True
+                    }).execute()
+                    stats["modifier_options_imported"] += 1
+                except Exception:
+                    # Ignore duplicate option names in group
+                    pass
 
     # 3. Products & Variants
     local_prods_res = db.table("sale_items").select("id, name, code").eq("org_id", org_id).execute()
