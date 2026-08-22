@@ -36,6 +36,16 @@ async def sync_product_manual(item_id: str, org_id: str = Depends(get_active_org
 def disconnect(org_id: str = Depends(get_active_org_id), db = Depends(get_db)):
     return disconnect_integration(org_id, db)
 
+@router.get("/integrations/quick/preview-catalog")
+def get_quick_catalog_preview(org_id: str = Depends(get_active_org_id), db = Depends(get_db)):
+    from app.integrations.service import preview_quick_catalog
+    return preview_quick_catalog(org_id, db)
+
+@router.post("/integrations/quick/import-catalog")
+async def import_quick_catalog(payload: dict, org_id: str = Depends(get_active_org_id), db = Depends(get_db)):
+    from app.integrations.service import execute_quick_catalog_import
+    return await execute_quick_catalog_import(org_id, payload, db)
+
 @router.get("/integrations/quick/callback", response_class=HTMLResponse)
 def callback(org_id: str, company_id: str, secret: str, status: str, db = Depends(get_db)):
     if status == "success":

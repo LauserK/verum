@@ -1,9 +1,10 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { CheckCircle2, RefreshCw, ExternalLink, Unlink, Store, AlertCircle } from 'lucide-react'
+import { CheckCircle2, RefreshCw, ExternalLink, Unlink, Store, AlertCircle, DownloadCloud } from 'lucide-react'
 import { useVenue } from '@/components/VenueContext'
 import { fetchWithAuth } from '@/lib/api'
+import QuickCatalogImportModal from './QuickCatalogImportModal'
 
 interface IntegrationStatus {
     is_connected: boolean
@@ -25,6 +26,7 @@ export default function VerumQuickCard() {
     const [loading, setLoading] = useState(true)
     const [actionLoading, setActionLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false)
 
     const fetchStatus = async () => {
         try {
@@ -236,14 +238,23 @@ export default function VerumQuickCard() {
                             Verificando...
                         </button>
                     ) : status.is_connected ? (
-                        <button
-                            onClick={handleDisconnect}
-                            disabled={actionLoading}
-                            className="px-4 py-2 bg-error/10 hover:bg-error/20 text-error border border-error/20 rounded-xl text-sm font-medium transition-colors flex items-center gap-2"
-                        >
-                            <Unlink className="w-4 h-4" />
-                            Desconectar
-                        </button>
+                        <>
+                            <button
+                                onClick={() => setIsImportModalOpen(true)}
+                                className="px-4 py-2 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 rounded-xl text-sm font-bold transition-all flex items-center gap-2"
+                            >
+                                <DownloadCloud className="w-4 h-4" />
+                                Importar Catálogo desde Quick
+                            </button>
+                            <button
+                                onClick={handleDisconnect}
+                                disabled={actionLoading}
+                                className="px-4 py-2 bg-error/10 hover:bg-error/20 text-error border border-error/20 rounded-xl text-sm font-medium transition-colors flex items-center gap-2"
+                            >
+                                <Unlink className="w-4 h-4" />
+                                Desconectar
+                            </button>
+                        </>
                     ) : (
                         <button
                             onClick={handleConnect}
@@ -255,6 +266,12 @@ export default function VerumQuickCard() {
                     )}
                 </div>
             </div>
+
+            <QuickCatalogImportModal
+                isOpen={isImportModalOpen}
+                onClose={() => setIsImportModalOpen(false)}
+                onSuccess={() => fetchStatus()}
+            />
         </div>
     )
 }
