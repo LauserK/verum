@@ -107,6 +107,40 @@ async def create_modifier_group(org_id: str, payload: SaleModifierGroupCreate, d
     res = db.table("sale_modifier_groups").select("*, options:sale_modifier_options(*)").eq("id", group_id).eq("org_id", org_id).execute()
     return res.data[0]
 
+async def update_modifier_group(org_id: str, group_id: str, payload: SaleModifierGroupCreate, db):
+    existing = db.table("sale_modifier_groups").select("id").eq("id", group_id).eq("org_id", org_id).execute()
+    if not existing.data:
+        raise HTTPException(404, "Modifier group not found")
+
+    data = payload.model_dump(exclude={"options"})
+    db.table("sale_modifier_groups").update(data).eq("id", group_id).eq("org_id", org_id).execute()
+
+    if payload.options is not None:
+        db.table("sale_modifier_options").delete().eq("group_id", group_id).execute()
+        if payload.options:
+            opt_data = []
+            for opt in payload.options:
+                od = opt.model_dump()
+                od["group_id"] = group_id
+                od["price"] = float(od["price"])
+                od["food_cost"] = float(od["food_cost"])
+                if od.get("item_id"):
+                    od["item_id"] = str(od["item_id"])
+                if od.get("deduct_qty") is not None:
+                    od["deduct_qty"] = float(od["deduct_qty"])
+                opt_data.append(od)
+            db.table("sale_modifier_options").insert(opt_data).execute()
+
+    res = db.table("sale_modifier_groups").select("*, options:sale_modifier_options(*)").eq("id", group_id).eq("org_id", org_id).execute()
+    return res.data[0]
+
+async def delete_modifier_group(org_id: str, group_id: str, db):
+    existing = db.table("sale_modifier_groups").select("id").eq("id", group_id).eq("org_id", org_id).execute()
+    if not existing.data:
+        raise HTTPException(404, "Modifier group not found")
+    db.table("sale_modifier_groups").delete().eq("id", group_id).eq("org_id", org_id).execute()
+    return {"status": "deleted", "id": group_id}
+
 # Helper component & variant handlers
 async def _create_components(sale_item_id: str, variant_id: Optional[str], components: List[SaleItemComponentCreate], db):
     if not components:
@@ -343,12 +377,19 @@ async def create_sale_item(org_id: str, payload: SaleItemCreate, db):
 
     item_out = await get_sale_item(item_id, org_id, db)
     
-    enqueue_event(
-        org_id=org_id,
-        event_type="product.created",
-        payload=item_out,
-        db=db
-    )
+    # Check if auto_sync_catalog is enabled in quick_integrations
+    try:
+        from app.integrations.service import get_integration_status
+        int_status = get_integration_status(org_id, db)
+        if int_status.get("is_connected") and int_status.get("config", {}).get("auto_sync_catalog", True):
+            enqueue_event(
+                org_id=org_id,
+                event_type="product.created",
+                payload=item_out,
+                db=db
+            )
+    except Exception as e:
+        print("[OUTBOX AUTO-SYNC] Note checking config:", e)
 
     return item_out
 
@@ -393,12 +434,19 @@ async def update_sale_item(org_id: str, item_id: str, payload: SaleItemUpdate, d
 
     item_out = await get_sale_item(item_id, org_id, db)
 
-    enqueue_event(
-        org_id=org_id,
-        event_type="product.updated",
-        payload=item_out,
-        db=db
-    )
+    # Check if auto_sync_catalog is enabled in quick_integrations
+    try:
+        from app.integrations.service import get_integration_status
+        int_status = get_integration_status(org_id, db)
+        if int_status.get("is_connected") and int_status.get("config", {}).get("auto_sync_catalog", True):
+            enqueue_event(
+                org_id=org_id,
+                event_type="product.updated",
+                payload=item_out,
+                db=db
+            )
+    except Exception as e:
+        print("[OUTBOX AUTO-SYNC] Note checking config:", e)
 
     return item_out
 

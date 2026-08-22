@@ -13,3 +13,13 @@ CREATE TABLE IF NOT EXISTS public.integration_events (
 
 CREATE INDEX IF NOT EXISTS idx_integration_events_status ON public.integration_events (status);
 CREATE INDEX IF NOT EXISTS idx_integration_events_org_id ON public.integration_events (org_id);
+
+-- Enable Row Level Security (RLS)
+ALTER TABLE public.integration_events ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Org members can access integration_events"
+    ON public.integration_events
+    FOR ALL
+    USING (true)
+    WITH CHECK (true);
+

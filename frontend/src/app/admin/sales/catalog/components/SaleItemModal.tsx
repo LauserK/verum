@@ -15,7 +15,12 @@ import {
     DollarSign,
     Check,
     HelpCircle,
-    ArrowUpRight
+    ArrowUpRight,
+    Search,
+    ChevronDown,
+    Sparkles,
+    Loader2,
+    CheckCircle2
 } from 'lucide-react'
 import {
     salesApi,
@@ -27,6 +32,7 @@ import {
     Tax
 } from '@/lib/api/sales'
 import { inventoryApi, InventoryItem } from '@/lib/api/inventory'
+import { fetchWithAuth } from '@/lib/api'
 
 interface SaleItemModalProps {
     isOpen: boolean
@@ -37,6 +43,102 @@ interface SaleItemModalProps {
 }
 
 type TabType = 'general' | 'variants' | 'bom' | 'modifiers'
+
+interface SearchableItemSelectProps {
+    items: InventoryItem[]
+    selectedId: string
+    onSelect: (item: InventoryItem) => void
+}
+
+function InventoryItemSearchSelect({ items, selectedId, onSelect }: SearchableItemSelectProps) {
+    const [isOpen, setIsOpen] = useState(false)
+    const [search, setSearch] = useState('')
+    const selectedItem = useMemo(() => items.find(i => i.id === selectedId), [items, selectedId])
+
+    const filtered = useMemo(() => {
+        if (!search.trim()) return items.slice(0, 30)
+        const q = search.toLowerCase()
+        return items
+            .filter(i => (i.name || '').toLowerCase().includes(q) || (i.code || '').toLowerCase().includes(q))
+            .slice(0, 30)
+    }, [items, search])
+
+    return (
+        <div className="relative">
+            <button
+                type="button"
+                onClick={() => {
+                    setIsOpen(!isOpen)
+                    setSearch('')
+                }}
+                className="w-full h-9 px-2.5 bg-surface-raised border border-border rounded-lg text-xs text-text-primary focus:outline-none focus:border-primary flex items-center justify-between gap-1.5 text-left truncate"
+            >
+                <span className="truncate">
+                    {selectedItem ? (
+                        <>
+                            <span className="font-semibold">{selectedItem.name}</span>{' '}
+                            {selectedItem.code && <span className="text-text-secondary font-mono text-[10px]">({selectedItem.code})</span>}
+                        </>
+                    ) : (
+                        <span className="text-text-secondary">Seleccionar insumo...</span>
+                    )}
+                </span>
+                <ChevronDown className={`w-3.5 h-3.5 text-text-secondary shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {isOpen && (
+                <>
+                    <div className="fixed inset-0 z-[60]" onClick={() => setIsOpen(false)} />
+                    <div className="absolute left-0 top-full mt-1 w-80 max-w-[90vw] bg-surface-raised border border-border rounded-xl shadow-2xl z-[70] overflow-hidden animate-in fade-in-50 zoom-in-95">
+                        <div className="p-2 border-b border-border bg-surface">
+                            <div className="relative">
+                                <Search className="w-3.5 h-3.5 text-text-secondary absolute left-2.5 top-1/2 -translate-y-1/2" />
+                                <input
+                                    type="text"
+                                    autoFocus
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                    placeholder="Buscar insumo o código..."
+                                    className="w-full h-8 pl-8 pr-2.5 bg-surface-raised border border-border rounded-lg text-xs text-text-primary focus:outline-none focus:border-primary"
+                                />
+                            </div>
+                        </div>
+                        <div className="max-h-64 overflow-y-auto divide-y divide-border/40 p-1">
+                            {filtered.length === 0 ? (
+                                <div className="p-3 text-center text-xs text-text-secondary">
+                                    No se encontraron artículos
+                                </div>
+                            ) : (
+                                filtered.map(item => (
+                                    <button
+                                        key={item.id}
+                                        type="button"
+                                        onClick={() => {
+                                            onSelect(item)
+                                            setIsOpen(false)
+                                        }}
+                                        className={`w-full p-2 text-left text-xs rounded-lg flex items-center justify-between hover:bg-primary/10 hover:text-primary transition-colors ${
+                                            item.id === selectedId ? 'bg-primary/15 text-primary font-semibold' : 'text-text-primary'
+                                        }`}
+                                    >
+                                        <div className="truncate pr-2">
+                                            <div className="truncate font-medium">{item.name}</div>
+                                            <div className="text-[10px] text-text-secondary flex gap-2">
+                                                {item.code && <span className="font-mono">{item.code}</span>}
+                                                {item.uom_name && <span>{item.uom_name}</span>}
+                                            </div>
+                                        </div>
+                                        {item.id === selectedId && <Check className="w-3.5 h-3.5 text-primary shrink-0" />}
+                                    </button>
+                                ))
+                            )}
+                        </div>
+                    </div>
+                </>
+            )}
+        </div>
+    )
+}
 
 export default function SaleItemModal({
     isOpen,
@@ -53,6 +155,10 @@ export default function SaleItemModal({
     const [taxes, setTaxes] = useState<Tax[]>([])
     const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([])
     const [modifierGroups, setModifierGroups] = useState<SaleModifierGroup[]>([])
+    const [isIntegrationConnected, setIsIntegrationConnected] = useState<boolean>(false)
+    const [isSyncingQuick, setIsSyncingQuick] = useState(false)
+    const [quickSyncSuccess, setQuickSyncSuccess] = useState(false)
+    const [isSaveSuccess, setIsSaveSuccess] = useState(false)
 
     // General form state
     const [name, setName] = useState('')
@@ -85,14 +191,16 @@ export default function SaleItemModal({
 
         const fetchSupportData = async () => {
             try {
-                const [taxesRes, invRes, modRes] = await Promise.all([
+                const [taxesRes, invRes, modRes, intStatusRes] = await Promise.all([
                     salesApi.getTaxes(true).catch(() => []),
                     inventoryApi.getInventoryItems().catch(() => []),
-                    salesApi.getModifierGroups().catch(() => [])
+                    salesApi.getModifierGroups().catch(() => []),
+                    fetchWithAuth<{ is_connected: boolean }>('/api/integrations/quick/status').catch(() => ({ is_connected: false }))
                 ])
                 setTaxes(taxesRes)
                 setInventoryItems(invRes)
                 setModifierGroups(modRes)
+                setIsIntegrationConnected(Boolean(intStatusRes?.is_connected))
             } catch (err) {
                 console.error('Error fetching supporting catalog data:', err)
             }
@@ -353,12 +461,16 @@ export default function SaleItemModal({
 
             if (item) {
                 await salesApi.updateSaleItem(item.id, payload)
+                setIsSaveSuccess(true)
+                setTimeout(() => {
+                    setIsSaveSuccess(false)
+                }, 3000)
             } else {
                 await salesApi.createSaleItem(payload)
+                onClose()
             }
 
             onSuccess()
-            onClose()
         } catch (err: unknown) {
             console.error('Error saving sale item:', err)
             setError(err instanceof Error ? err.message : 'Error al guardar el producto')
@@ -368,10 +480,10 @@ export default function SaleItemModal({
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-surface w-full max-w-4xl max-h-[90vh] flex flex-col rounded-2xl shadow-2xl border border-border overflow-hidden animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-surface w-full max-w-5xl h-[94vh] flex flex-col rounded-2xl shadow-2xl border border-border overflow-hidden animate-in zoom-in-95 duration-200 text-[13px]">
                 {/* Modal Header */}
-                <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-surface-raised/50 shrink-0">
+                <div className="flex items-center justify-between px-6 py-3.5 border-b border-border bg-surface-raised/50 shrink-0">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary font-bold">
                             <Utensils className="w-5 h-5" />
@@ -534,14 +646,17 @@ export default function SaleItemModal({
                                             onChange={(e) => setTaxId(e.target.value)}
                                             className="w-full h-11 px-3.5 bg-surface-raised border border-border rounded-xl text-text-primary text-sm focus:outline-none focus:border-primary transition-colors"
                                         >
-                                            <option value="">Exento (0.00%)</option>
+                                            {/* Si no existe un impuesto explícito con tasa 0% en la lista de la BD, mostramos la opción por defecto */}
+                                            {!taxes.some(t => Number(t.rate) === 0 || t.name.toLowerCase().includes('exento')) && (
+                                                <option value="">Exento (0.00%)</option>
+                                            )}
                                             {taxes.map((t) => {
                                                 const rateNum = Number(t.rate)
-                                                // Handle if rate is stored as decimal 0.16 vs 16.0
                                                 const percentage = rateNum <= 1 && rateNum > 0 ? (rateNum * 100).toFixed(2) : rateNum.toFixed(2)
+                                                const label = Number(percentage) === 0 ? 'Exento (0.00%)' : `${t.name} (${percentage}%)`
                                                 return (
                                                     <option key={t.id} value={t.id}>
-                                                        {t.name} ({percentage}%)
+                                                        {label}
                                                     </option>
                                                 )
                                             })}
@@ -892,8 +1007,8 @@ export default function SaleItemModal({
                                         </button>
                                     </div>
                                 ) : (
-                                    <div className="border border-border rounded-xl overflow-hidden bg-surface">
-                                        <div className="grid grid-cols-12 gap-2 p-3 bg-surface-raised text-[11px] font-bold text-text-secondary uppercase tracking-wider border-b border-border">
+                                    <div className="border border-border rounded-xl bg-surface">
+                                        <div className="grid grid-cols-12 gap-2 p-2.5 bg-surface-raised text-[11px] font-bold text-text-secondary uppercase tracking-wider border-b border-border rounded-t-xl">
                                             <div className="col-span-5">Insumo de Inventario</div>
                                             <div className="col-span-3">Tipo Descuento</div>
                                             <div className="col-span-2 text-right">Cant. Base</div>
@@ -910,17 +1025,13 @@ export default function SaleItemModal({
                                                 return (
                                                     <div key={idx} className="grid grid-cols-12 gap-2 p-3 items-center hover:bg-surface-raised/40 transition-colors">
                                                         <div className="col-span-5">
-                                                            <select
-                                                                value={comp.item_id}
-                                                                onChange={(e) => updateComponent(idx, 'item_id', e.target.value)}
-                                                                className="w-full h-9 px-2.5 bg-surface-raised border border-border rounded-lg text-xs text-text-primary focus:outline-none focus:border-primary"
-                                                            >
-                                                                {inventoryItems.map((item) => (
-                                                                    <option key={item.id} value={item.id}>
-                                                                        {item.name} {item.code ? `(${item.code})` : ''} - {item.uom_name || 'UOM'}
-                                                                    </option>
-                                                                ))}
-                                                            </select>
+                                                            <InventoryItemSearchSelect
+                                                                items={inventoryItems}
+                                                                selectedId={comp.item_id}
+                                                                onSelect={(selectedItem) => {
+                                                                    updateComponent(idx, 'item_id', selectedItem.id)
+                                                                }}
+                                                            />
                                                         </div>
                                                         <div className="col-span-3">
                                                             <select
@@ -1062,11 +1173,57 @@ export default function SaleItemModal({
 
                     {/* Modal Footer */}
                     <div className="flex items-center justify-between px-6 py-4 border-t border-border bg-surface-raised/50 shrink-0">
-                        <div className="text-xs text-text-secondary hidden sm:block">
-                            {hasVariants
-                                ? `${variants.length} variante(s) configurada(s)`
-                                : salePrice !== '' ? `Precio: $${Number(salePrice).toFixed(2)}` : 'Sin precio base'}
+                        <div className="flex items-center gap-3">
+                            {item && isIntegrationConnected && (
+                                <button
+                                    type="button"
+                                    onClick={async () => {
+                                        if (isSyncingQuick || quickSyncSuccess) return
+                                        try {
+                                            setIsSyncingQuick(true)
+                                            await fetchWithAuth(`/api/integrations/quick/sync-product/${item.id}`, { method: 'POST' })
+                                            setQuickSyncSuccess(true)
+                                            setTimeout(() => {
+                                                setQuickSyncSuccess(false)
+                                            }, 3000)
+                                        } catch (err: unknown) {
+                                            console.error('Error al enviar producto:', err)
+                                            setError(err instanceof Error ? err.message : 'Error al sincronizar con VerumQuick')
+                                        } finally {
+                                            setIsSyncingQuick(false)
+                                        }
+                                    }}
+                                    disabled={isSyncingQuick || isLoading}
+                                    className={`px-3.5 h-10 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm ${
+                                        quickSyncSuccess
+                                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 animate-in zoom-in-95'
+                                            : isSyncingQuick
+                                            ? 'bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 opacity-80 cursor-wait'
+                                            : 'bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20'
+                                    }`}
+                                >
+                                    {quickSyncSuccess ? (
+                                        <>
+                                            <CheckCircle2 className="w-4 h-4 text-emerald-400 stroke-[2.5]" />
+                                            <span>¡Enviado con Éxito!</span>
+                                        </>
+                                    ) : isSyncingQuick ? (
+                                        <>
+                                            <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" />
+                                            <span>Enviando...</span>
+                                        </>
+                                    ) : (
+                                        <span>Enviar a VerumQuick</span>
+                                    )}
+                                </button>
+                            )}
+                            <div className="text-xs text-text-secondary hidden md:block">
+                                {hasVariants
+                                    ? `${variants.length} variante(s)`
+                                    : salePrice !== '' ? `Precio: $${Number(salePrice).toFixed(2)}` : 'Sin precio base'}
+                            </div>
                         </div>
+
                         <div className="flex gap-3 ml-auto">
                             <button
                                 type="button"
@@ -1078,11 +1235,31 @@ export default function SaleItemModal({
                             </button>
                             <button
                                 type="submit"
-                                disabled={isLoading}
-                                className="px-6 h-11 bg-primary text-text-inverse hover:bg-primary-hover rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-2 shadow-lg shadow-primary/20 disabled:opacity-50"
+                                disabled={isLoading || isSaveSuccess}
+                                className={`px-6 h-11 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-lg disabled:opacity-75 ${
+                                    isSaveSuccess
+                                        ? 'bg-emerald-600 text-white shadow-emerald-500/20 animate-in zoom-in-95'
+                                        : isLoading
+                                        ? 'bg-primary/80 text-text-inverse shadow-primary/20 cursor-wait'
+                                        : 'bg-primary text-text-inverse hover:bg-primary-hover shadow-primary/20'
+                                }`}
                             >
-                                <Save className="w-4 h-4" />
-                                {isLoading ? 'Guardando...' : item ? 'Actualizar Producto' : 'Crear Producto'}
+                                {isSaveSuccess ? (
+                                    <>
+                                        <CheckCircle2 className="w-4 h-4 text-white stroke-[2.5]" />
+                                        <span>¡Guardado con Éxito!</span>
+                                    </>
+                                ) : isLoading ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        <span>Guardando...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Save className="w-4 h-4" />
+                                        <span>{item ? 'Actualizar Producto' : 'Crear Producto'}</span>
+                                    </>
+                                )}
                             </button>
                         </div>
                     </div>

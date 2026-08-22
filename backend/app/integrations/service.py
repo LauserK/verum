@@ -2,6 +2,11 @@ import uuid
 from typing import Optional, Dict, Any
 
 def get_integration_status(org_id: str, db) -> Dict[str, Any]:
+    default_config = {
+        "auto_sync_catalog": True,
+        "sync_prices": True,
+        "auto_inject_orders": True
+    }
     try:
         # Check quick_integrations table
         res = db.table("quick_integrations").select("*").eq("org_id", org_id).execute()
@@ -12,13 +17,18 @@ def get_integration_status(org_id: str, db) -> Dict[str, Any]:
                 ws_res = db.table("workstations").select("name").eq("id", row["workstation_id"]).execute()
                 if ws_res.data:
                     ws_name = ws_res.data[0]["name"]
+            
+            saved_config = row.get("config") or {}
+            merged_config = {**default_config, **saved_config}
+            
             return {
                 "is_connected": row.get("is_active", True),
                 "company_id": row.get("company_id"),
-                "workstation_name": ws_name
+                "workstation_name": ws_name,
+                "config": merged_config
             }
-    except Exception:
-        pass
+    except Exception as e:
+        print("[INTEGRATION STATUS ERROR]", e)
 
     # Fallback to check workstations
     try:
@@ -27,14 +37,30 @@ def get_integration_status(org_id: str, db) -> Dict[str, Any]:
         return {
             "is_connected": bool(ws_res.data),
             "company_id": "1",
-            "workstation_name": workstation_name
+            "workstation_name": workstation_name,
+            "config": default_config
         }
     except Exception:
         return {
             "is_connected": False,
             "company_id": None,
-            "workstation_name": ""
+            "workstation_name": "",
+            "config": default_config
         }
+
+def update_integration_config(org_id: str, new_config: Dict[str, Any], db) -> Dict[str, Any]:
+    current_status = get_integration_status(org_id, db)
+    current_config = current_status.get("config") or {}
+    updated_config = {**current_config, **new_config}
+    
+    try:
+        db.table("quick_integrations").update({
+            "config": updated_config
+        }).eq("org_id", org_id).execute()
+    except Exception as e:
+        print("Note on updating quick_integrations config:", e)
+        
+    return {"status": "success", "config": updated_config}
 
 def complete_handshake(org_id: str, company_id: str, secret: str, db) -> Dict[str, Any]:
     workstation_id = None

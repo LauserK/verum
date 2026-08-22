@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -5,6 +6,7 @@ from starlette.middleware.gzip import GZipMiddleware
 
 from app.cache import cache
 from config import settings
+from app.integrations.worker import start_outbox_worker_loop
 
 from app.purchasing.router import router as purchasing_router
 from app.transfers.router import router as transfers_router
@@ -23,8 +25,14 @@ from app.sales.router import router as sales_router
 async def lifespan(app: FastAPI):
     # Startup
     await cache.init(settings.REDIS_URL)
+    worker_task = asyncio.create_task(start_outbox_worker_loop())
     yield
     # Shutdown
+    worker_task.cancel()
+    try:
+        await worker_task
+    except asyncio.CancelledError:
+        pass
     await cache.close()
 
 

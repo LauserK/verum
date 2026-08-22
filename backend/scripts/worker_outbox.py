@@ -8,6 +8,7 @@ import time
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from database import supabase
+from config import settings
 import httpx
 
 def process_events():
@@ -18,15 +19,18 @@ def process_events():
         return
         
     for event in events:
+        event_id = event["id"]
         org_id = event["org_id"]
+        print(f"[WORKER] Processing pending event {event_id} ({event.get('event_type')})...")
         
         # Get integration secret and company_id
         integration_res = supabase.table("quick_integrations").select("*").eq("org_id", org_id).eq("is_active", True).execute()
         if not integration_res.data:
+            print(f"[WORKER ERROR] No active quick_integration found for org {org_id}")
             supabase.table("integration_events").update({
                 "status": "failed",
                 "error_message": "No active quick_integration found for org."
-            }).eq("id", event["id"]).execute()
+            }).eq("id", event_id).execute()
             continue
             
         integration = integration_res.data[0]
@@ -37,7 +41,7 @@ def process_events():
         payload_bytes = json.dumps(event["payload"]).encode('utf-8')
         signature = hmac.new(secret.encode('utf-8'), payload_bytes, hashlib.sha256).hexdigest()
         
-        webhook_url = os.environ.get("VERUM_QUICK_WEBHOOK_URL", "http://localhost:8000/api/integrations/verum/webhook/product")
+        webhook_url = getattr(settings, 'VERUM_QUICK_WEBHOOK_URL', None) or os.environ.get("VERUM_QUICK_WEBHOOK_URL", "http://localhost:8000/integrations/api/verum/webhook/product")
         
         headers = {
             "Content-Type": "application/json",

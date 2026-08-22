@@ -9,6 +9,11 @@ interface IntegrationStatus {
     is_connected: boolean
     company_id?: string | null
     workstation_name?: string | null
+    config?: {
+        auto_sync_catalog?: boolean
+        sync_prices?: boolean
+        auto_inject_orders?: boolean
+    }
 }
 
 export default function VerumQuickCard() {
@@ -136,13 +141,77 @@ export default function VerumQuickCard() {
 
             <div className="mt-6 pt-6 border-t border-border flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
                 {status.is_connected ? (
-                    <div className="flex flex-col sm:flex-row gap-4 sm:items-center text-sm text-text-secondary">
-                        <div>
-                            <span className="font-semibold text-text-primary">Compañía ID:</span> {status.company_id || 'Principal'}
+                    <div className="flex flex-col gap-4 w-full">
+                        <div className="flex flex-col sm:flex-row gap-4 sm:items-center text-sm text-text-secondary">
+                            <div>
+                                <span className="font-semibold text-text-primary">Compañía ID:</span> {status.company_id || 'Principal'}
+                            </div>
+                            <div className="hidden sm:block text-border">•</div>
+                            <div>
+                                <span className="font-semibold text-text-primary">Workstation POS:</span> {status.workstation_name || 'VerumQuick POS'}
+                            </div>
                         </div>
-                        <div className="hidden sm:block text-border">•</div>
-                        <div>
-                            <span className="font-semibold text-text-primary">Workstation POS:</span> {status.workstation_name || 'VerumQuick POS'}
+
+                        {/* Synchronization Preferences Toggles */}
+                        <div className="p-4 bg-surface-raised border border-border rounded-xl space-y-3">
+                            <h4 className="text-xs font-bold text-text-primary uppercase tracking-wider">
+                                Políticas de Sincronización
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                                <div className="flex items-center justify-between p-2.5 bg-surface border border-border rounded-lg">
+                                    <div>
+                                        <p className="text-xs font-semibold text-text-primary">Sincronización Automática</p>
+                                        <p className="text-[11px] text-text-secondary">Enviar a VerumQuick al crear/editar productos</p>
+                                    </div>
+                                    <label className="relative inline-flex items-center cursor-pointer ml-3">
+                                        <input
+                                            type="checkbox"
+                                            checked={status.config?.auto_sync_catalog ?? true}
+                                            onChange={async (e) => {
+                                                const val = e.target.checked
+                                                try {
+                                                    const res = await fetchWithAuth<{ status: string, config: any }>('/api/integrations/quick/config', {
+                                                        method: 'PATCH',
+                                                        body: JSON.stringify({ auto_sync_catalog: val })
+                                                    })
+                                                    setStatus(prev => ({ ...prev, config: res.config }))
+                                                } catch (err) {
+                                                    console.error('Error updating config:', err)
+                                                }
+                                            }}
+                                            className="sr-only peer"
+                                        />
+                                        <div className="w-9 h-5 bg-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+                                    </label>
+                                </div>
+
+                                <div className="flex items-center justify-between p-2.5 bg-surface border border-border rounded-lg">
+                                    <div>
+                                        <p className="text-xs font-semibold text-text-primary">Sincronizar Precios</p>
+                                        <p className="text-[11px] text-text-secondary">Actualizar precios digitales desde VERUM</p>
+                                    </div>
+                                    <label className="relative inline-flex items-center cursor-pointer ml-3">
+                                        <input
+                                            type="checkbox"
+                                            checked={status.config?.sync_prices ?? true}
+                                            onChange={async (e) => {
+                                                const val = e.target.checked
+                                                try {
+                                                    const res = await fetchWithAuth<{ status: string, config: any }>('/api/integrations/quick/config', {
+                                                        method: 'PATCH',
+                                                        body: JSON.stringify({ sync_prices: val })
+                                                    })
+                                                    setStatus(prev => ({ ...prev, config: res.config }))
+                                                } catch (err) {
+                                                    console.error('Error updating config:', err)
+                                                }
+                                            }}
+                                            className="sr-only peer"
+                                        />
+                                        <div className="w-9 h-5 bg-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+                                    </label>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 ) : (

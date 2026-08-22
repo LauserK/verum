@@ -178,6 +178,13 @@ export const salesApi = {
         method: 'POST',
         body: JSON.stringify(data),
     }),
+    updateModifierGroup: (id: string, data: Partial<SaleModifierGroup>) => fetchWithAuth<SaleModifierGroup>(`/sales/modifier-groups/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    }),
+    deleteModifierGroup: (id: string) => fetchWithAuth<{ status: string; id: string }>(`/sales/modifier-groups/${id}`, {
+        method: 'DELETE',
+    }),
 }
 
 export interface SaleCategory {

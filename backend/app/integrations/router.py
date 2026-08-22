@@ -2,13 +2,35 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse
 from app.deps import get_active_org_id
 from database import get_db
-from app.integrations.service import get_integration_status, complete_handshake, disconnect_integration
+from app.integrations.service import (
+    get_integration_status,
+    complete_handshake,
+    disconnect_integration,
+    update_integration_config
+)
+from app.integrations.outbox import enqueue_event
+import app.sales.service as sales_svc
 
 router = APIRouter()
 
 @router.get("/integrations/quick/status")
 def get_status(org_id: str = Depends(get_active_org_id), db = Depends(get_db)):
     return get_integration_status(org_id, db)
+
+@router.patch("/integrations/quick/config")
+def update_config(payload: dict, org_id: str = Depends(get_active_org_id), db = Depends(get_db)):
+    return update_integration_config(org_id, payload, db)
+
+@router.post("/integrations/quick/sync-product/{item_id}")
+async def sync_product_manual(item_id: str, org_id: str = Depends(get_active_org_id), db = Depends(get_db)):
+    item_out = await sales_svc.get_sale_item(item_id, org_id, db)
+    enqueue_event(
+        org_id=org_id,
+        event_type="product.updated",
+        payload=item_out,
+        db=db
+    )
+    return {"status": "enqueued", "item_id": item_id}
 
 @router.post("/integrations/quick/disconnect")
 def disconnect(org_id: str = Depends(get_active_org_id), db = Depends(get_db)):

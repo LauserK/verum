@@ -198,6 +198,29 @@ async def create_modifier_group(
     await invalidate_sales_catalog(org_id)
     return res
 
+@router.patch("/modifier-groups/{group_id}", response_model=SaleModifierGroupOut)
+async def update_modifier_group(
+    group_id: str,
+    payload: SaleModifierGroupCreate,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_catalog"))
+):
+    res = await sales_svc.update_modifier_group(org_id, group_id, payload, db)
+    await invalidate_sales_catalog(org_id)
+    return res
+
+@router.delete("/modifier-groups/{group_id}")
+async def delete_modifier_group(
+    group_id: str,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_catalog"))
+):
+    res = await sales_svc.delete_modifier_group(org_id, group_id, db)
+    await invalidate_sales_catalog(org_id)
+    return res
+
 # --- Customers ---
 
 @router.post("/customers", response_model=CustomerOut)
