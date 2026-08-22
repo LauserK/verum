@@ -1,23 +1,36 @@
-# VERUM.md: Sistema de Control Operativo
+# VERUM.md: Plataforma Integral de Gestión y Control Operativo
 
-## 1. Visión General del Proyecto
+> **Documento Maestro de Arquitectura y Especificación del Sistema**  
+> **Versión:** 3.0  
+> **Estado:** Activo / En Producción  
+> **Última Actualización:** Agosto 2026  
 
-Este proyecto es una plataforma de gestión operativa para restaurantes y empresas de servicios. Permite digitalizar procesos manuales mediante checklists dinámicos, captura de evidencia (fotos) y monitoreo en tiempo real desde un dashboard administrativo.
+---
 
-### Objetivos Principales:
+## 1. Visión General del Sistema
 
-* **Operatividad:** Ejecución de checklists rápidos desde móviles (PWA).
-* **Control:** Verificación de puntos críticos (temperaturas, limpieza, inventarios, notificaciones).
-* **Visibilidad:** Dashboard para gerencia con métricas de cumplimiento.
+**VERUM** es una plataforma integral de gestión y control operativo diseñada para empresas de gastronomía, servicios y retail (restaurantes, cocinas centrales, dark kitchens, catering, cadenas comerciales).
+
+El sistema digitaliza y conecta todos los eslabones de la cadena de valor operativa:
+1. **Control y Calidad (Checklists):** Auditorías operativas de apertura, línea, turno y cierre, captura de evidencias fotográficas, alertas de fallas críticas y control de puntos clave (temperaturas, higiene).
+2. **Inventario, Activos y Utensilios:** Control de activos fijos con trazabilidad QR y tickets de mantenimiento/reparación; auditorías y conteos ciegos de utensilios con flujo de verificación staff/supervisor.
+3. **Producción, Recetas & MRP:** Control de almacenes (PEPS/Kardex valorizado), recetas con costeo automático en cascada y rendimiento, órdenes de producción con KDS interactivo, planificación MRP/Catering y etiquetado Zebra ZPL.
+4. **Control de Asistencia & Personal:** Registro de jornadas (entrada/salida/pausas), turnos y horarios, cálculo de retrasos y horas extra, permisos/ausencias y reportes para nómina.
+5. **Compras y Proveedores (SRM):** Directorio de proveedores, órdenes de compra (PO), facturación de compras, flujo de recepción física con matching de 3 vías y devoluciones.
+6. **Ventas, Facturación & POS:** Catálogo de productos de venta (BOM de insumos y recetas vinculadas), facturación fiscal/libre, multimoneda con tasas cambiarias diarias, gestión de clientes y sesiones POS.
+7. **Integraciones Bidireccionales (VerumQuick):** Conexión OAuth 2.0 y sincronización vía Outbox Pattern con terminales externas / Menú Digital Quick.
 
 ---
 
 ## 2. Stack Tecnológico
 
-* **Frontend:** Next.js 14+ (App Router), Tailwind CSS, Shadcn/UI.
-* **Backend:** Python 3.11+, FastAPI, Pydantic v2, Pytest
-* **Base de Datos & Auth:** Supabase (PostgreSQL, Auth, Storage).
-* **Infraestructura:** Vercel (Frontend), Render (Backend), Supabase (Data).
+| Capa | Tecnologías |
+|---|---|
+| **Frontend** | Next.js 16 (App Router), React 19, Tailwind CSS v4, Lucide Icons, `next-intl` (i18n ES/EN), `@tanstack/react-query`, `@dnd-kit`, `browser-image-compression`, `html5-qrcode`, `react-to-print`, `xlsx`. |
+| **Backend** | Python 3.11+, FastAPI, Pydantic v2, Pydantic-Settings, Uvicorn, Pytest, Pytest-Asyncio, HTTPX. |
+| **Base de Datos & Auth** | Supabase (PostgreSQL 15+, Row Level Security - RLS, Supabase Auth, Supabase Storage). |
+| **Caché & Asincronía** | Redis (opcional/configurable vía `REDIS_URL`), `orjson`, Background Workers (`asyncio` outbox loop). |
+| **Infraestructura** | Vercel (Frontend SSR/Edge), Render (Backend FastAPI), Supabase Cloud. |
 
 ---
 
@@ -211,353 +224,265 @@ module.exports = {
 
 ---
 
-## 4. Arquitectura de Datos (Supabase SQL)
+## 3. Arquitectura Multi-Tenant y Seguridad
 
-El sistema debe seguir esta jerarquía relacional:
+### 3.1 Modelo Multi-Tenant y Multi-Sede
+* **Super Administrador:** Consola central (`/super-admin`) para aprovisionar organizaciones y administradores raíz.
+* **Organizaciones (`organizations`):** Empresas o franquicias aisladas (`org_id`).
+* **Sedes / Locales (`venues`):** Puntos de venta, sucursales físicas o almacenes dependientes de una organización.
+* **Contexto Activo:** El frontend envía el header `X-Org-ID` en cada solicitud; el backend resuelve automáticamente la pertenencia y alcance del usuario mediante `app.deps.get_active_org_id`.
 
-```sql
--- 1. Perfiles (Extiende Auth.Users)
-create table profiles (
-  id uuid references auth.users on delete cascade primary key,
-  full_name text,
-  role text check (role in ('admin', 'staff')),
-  organization_id uuid references organizations(id)
-);
+### 3.2 Sistema de Permisos Granular (RBAC + Overrides)
+El sistema utiliza una matriz de permisos de 2 capas:
+1. **Roles Personalizados (`custom_roles` + `role_permissions`):** Perfiles definidos por la organización (ej: *Jefe de Cocina*, *Cajero*, *Auditor*, *Gerente de Compras*) asociados a claves de permisos funcionales (`checklists.read`, `inventory.manage`, `production.kds`, `sales.pos`, `purchasing.orders`, etc.).
+2. **Overrides Individuales (`user_permission_overrides`):** Asignación explícita de `granted: true/false` por usuario y sede para habilitar o restringir acciones específicas.
+3. **Restricción de Marcaje Obligatorio (`attendance.force_clock_in`):** Si un usuario tiene asignada esta política, el sistema bloquea cualquier acción operativa (checklists, producción, inventario) arrojando `403 CLOCK_IN_REQUIRED` hasta que registre su entrada en el módulo de asistencia.
 
--- 2. Organizaciones y Sedes
-create table organizations (
-  id uuid default uuid_generate_v4() primary key,
-  name text not null
-);
+---
 
-create table venues (
-  id uuid default uuid_generate_v4() primary key,
-  org_id uuid references organizations(id),
-  name text not null,
-  address text
-);
+## 4. Módulos del Sistema y Arquitectura Funcional
 
--- 3. Checklists y Preguntas
-create table checklist_templates (
-  id uuid default uuid_generate_v4() primary key,
-  venue_id uuid references venues(id),
-  title text not null,
-  description text,
-  frequency text, -- 'daily', 'shift', 'weekly'
-  -- ✅ NUEVO: prerequisito para desbloquear este checklist
-  prerequisite_template_id uuid references checklist_templates(id) null
-);
+```
+                                  ┌─────────────────────────────┐
+                                  │      ORGANIZATIONS          │
+                                  └──────────────┬──────────────┘
+                                                 │
+                   ┌─────────────────────────────┼────────────────────────────┐
+                   │                             │                            │
+            ┌──────▼──────┐               ┌──────▼──────┐              ┌──────▼──────┐
+            │   VENUES    │               │  PROFILES   │              │CUSTOM_ROLES │
+            └──────┬──────┘               └──────┬──────┘              └──────┬──────┘
+                   │                             │                            │
+  ┌────────────────┼─────────────────────────────┼────────────────────────────┤
+  │                │                             │                            │
+┌─▼──────────────┐ │ ┌─────────────────────────┐ │ ┌────────────────────────┐ │ ┌──────────────────────┐
+│  CHECKLISTS    │ │ │ INVENTARIO & ALMACENES  │ │ │  PRODUCCIÓN & RECETAS  │ │ │  COMPRAS (SRM)       │
+├────────────────┤ │ ├─────────────────────────┤ │ ├────────────────────────┤ │ ├──────────────────────┤
+│• templates     │ │ │• warehouses             │ │ │• items (MP/SEMI/PT)    │ │ │• suppliers           │
+│• questions     │ │ │• stock_movements (PEPS) │ │ │• recipes & ingredients │ │ │• purchase_orders     │
+│• submissions   │ │ │• inventory_documents    │ │ │• production_orders     │ │ │• supplier_invoices   │
+│• answers       │ │ │• physical_inventories   │ │ │• catering_orders       │ │ │• srm_returns         │
+│                │ │ │• assets & utensils      │ │ │• kds_orders & stations │ │ │• supplier_evaluations│
+└────────────────┘ │ └─────────────────────────┘ │ └────────────────────────┘ │ └──────────────────────┘
+                   │                             │                            │
+                   │ ┌─────────────────────────┐ │ ┌────────────────────────┐ │ ┌──────────────────────┐
+                   └─►  ASISTENCIA & RRHH      │ └─►  VENTAS, POS & BILLING │ └─► INTEGRACIONES QUICK  │
+                     ├─────────────────────────┤   ├────────────────────────┤   ├──────────────────────┤
+                     │• employee_shifts        │   │• sales_items & combos  │   │• quick_integrations  │
+                     │• attendance_records     │   │• sales_invoices & items│   │• integration_events  │
+                     │• absence_requests       │   │• sales_payments        │   │  (Outbox Sync Worker)│
+                     │• break_records          │   │• currencies & rates    │   │                      │
+                     └─────────────────────────┘   └────────────────────────┘   └──────────────────────┘
+```
 
-create table questions (
-  id uuid default uuid_generate_v4() primary key,
-  template_id uuid references checklist_templates(id) on delete cascade,
-  label text not null,
-  -- ✅ AMPLIADO: nuevos tipos de pregunta visibles en el diseño
-  type text check (type in (
-    'check',        -- Checkbox simple ✓
-    'text',         -- Texto libre
-    'number',       -- Valor numérico
-    'photo',        -- Captura de imagen con label/etiqueta
-    'slider',       -- Rango numérico (ej: temperatura 80°C - 100°C)
-    'yes_no',       -- Botones Sí / No
-    'multi_option', -- Selección entre opciones (ej: Excellent / Good / Reject)
-    'select'        -- Dropdown (ej: Stock Source)
-  )),
-  is_required boolean default true,
-  -- ✅ NUEVO: configuración específica por tipo de pregunta (JSON)
-  -- Para 'slider':       { "min": 80, "max": 100, "unit": "°C", "target_min": 90, "target_max": 96 }
-  -- Para 'multi_option': { "options": ["Excellent", "Good", "Reject"] }
-  -- Para 'select':       { "options": ["In-house Bakery", "External Supplier"] }
-  -- Para 'photo':        { "label": "STATION 1" }
-  config jsonb null
-);
+### 4.1 Módulo 1: Checklists y Auditorías Operativas
+* **Plantillas & Preguntas:** Plantillas con programación horaria (`shift`, `frequency`, `available_from_time`, `due_time`), dependencias (`prerequisite_template_id`) y reusabilidad global (`is_reusable`). Tipos de pregunta: `check`, `text`, `number`, `photo`, `slider`, `yes_no`, `multi_option`, `select`.
+* **Flujo de Ejecución en 2 Pasos (Check → Review):**
+  1. *Step 1 (Check):* Diligenciamiento con **Auto-Save** en segundo plano (`useAutoSave` con debounce inteligente e inserción idempotente con `ON CONFLICT`).
+  2. *Step 2 (Review):* Resumen de hallazgos críticos/no críticos, galería de evidencias fotográficas etiquetadas, notas del auditor y confirmación final (`status: 'completed'`).
 
--- 4. Ejecuciones y Respuestas
-create table submissions (
-  id uuid default uuid_generate_v4() primary key,
-  template_id uuid references checklist_templates(id),
-  user_id uuid references profiles(id),
-  venue_id uuid references venues(id),
-  shift text, -- 'morning', 'mid', 'closing'
-  -- ✅ estado del submission para el flujo de 2 pasos (Check → Review)
-  status text check (status in ('draft', 'completed')) default 'draft',
-  -- ✅ notas del auditor al final de la revisión
-  auditor_notes text null,
-  -- ✅ confirmación explícita del auditor antes de submit
-  auditor_confirmed boolean default false,
-  -- ✅ AUTO-SAVE: timestamp del último guardado automático (para mostrar "Guardado hace X min")
-  last_saved_at timestamp with time zone null,
-  completed_at timestamp with time zone null -- null hasta que status = 'completed'
-);
+### 4.2 Módulo 2: Inventario, Activos y Utensilios
+* **Activos Fijos (`assets`):** Registro de maquinaria/equipos, generación de códigos QR imprimibles, tickets de mantenimiento/reparación multi-visita (`repair_tickets`, `ticket_visits`) y costos acumulados de mantenimiento.
+* **Control de Utensilios (`utensils`):** Cronogramas de conteo periódico (`count_schedules`), conteos ciegos configurables, registro de stock físico vs teórico y cálculo de mermas/pérdidas hormiga.
+* **Documentos de Inventario Unificados (`inventory_documents`):** Recepciones de mercancía, salidas/mermas por merma/daño/ajuste y traslados entre almacenes (`transfers`) con confirmación de recepción.
+* **Kardex y Valorización PEPS:** Valuación por capas de entrada (Primeras Entradas, Primeras Salidas), trazabilidad de lotes y snapshots de stock histórico.
+* **Conteos Físicos (`physical_inventories`):** Procesos de toma de inventario general por almacén con bloqueo, escaneo de códigos de barra e importación/exportación de planillas Excel.
 
-create table answers (
-  id uuid default uuid_generate_v4() primary key,
-  submission_id uuid references submissions(id) on delete cascade,
-  question_id uuid references questions(id),
-  value text, -- Almacena texto, número, opción seleccionada o link de foto en Storage
-  -- ✅ metadata de la foto (etiqueta como "STATION 1", "DINING ROOM")
-  photo_label text null,
-  -- ✅ distingue fallas críticas de no-críticas
-  is_critical_failure boolean default false,
-  is_non_critical_issue boolean default false,
-  -- ✅ AUTO-SAVE: permite upsert eficiente sin duplicar respuestas
-  -- Constraint: una sola respuesta por pregunta por submission
-  unique (submission_id, question_id)
-);
+### 4.3 Módulo 3: Producción, Fichas Técnicas & MRP
+* **Maestro de Artículos (`items`):** Clasificación en materia prima (`raw_material`), semiterminado (`semi_finished`), producto terminado (`finished`), empaque (`packaging`) y suministros (`supply`). Unidades de medida base (`g`, `ml`, `unit`) y factores de conversión por presentación.
+* **Recetas & Fichas Técnicas (`recipes`):** Árbol de ingredientes con cálculo automático de costo en cascada, porcentaje de merma/rendimiento, margen de seguridad y sub-recetas anidadas.
+* **Órdenes de Producción (`production_orders`):** Planificación por turnos y lotes. Deducción automática de inventario de materia prima según fórmula y acreditación de stock de producto terminado en almacén destino.
+* **Tablero KDS (`/production/kds`):** Pantalla táctil de cocina en tiempo real para visualizar órdenes pendientes, en preparación y listas, con actualización interactiva de estados.
+* **Catering & MRP:** Cálculo de requerimientos netos de insumos para eventos/pedidos proyectados, generación automática de lista de compras y órdenes de producción sugeridas.
+* **Etiquetado Zebra ZPL (`/admin/production/labels`):** Generación de etiquetas con código de barras, lote, fecha de elaboración y vencimiento para productos semielaborados o terminados.
 
--- ✅ AUTO-SAVE: índice para acelerar el upsert en cada respuesta guardada
-create index idx_answers_submission_question on answers (submission_id, question_id);
+### 4.4 Módulo 4: Control de Asistencia y Personal
+* **Turnos & Horarios (`employee_shifts`):** Asignación de jornadas con tolerancia de entrada, ventanas de marcación y días laborables.
+* **Marcaje Operativo (`/attendance`):** Marcación de Entrada, Pausa (almuerzo/descanso), Fin de Pausa y Salida.
+* **Cálculo Automático:** Detección de retrasos (minutos tarde), cálculo de horas extras trabajadas y estado de turno en vivo.
+* **Ausencias & Permisos (`absence_requests`):** Solicitudes de permisos médicos, vacaciones o ausencias justificadas con flujo de aprobación administrativa.
+* **Reportes de Asistencia:** Matriz de asistencia por rango de fechas, horas efectivas y exportación consolidada para liquidación de nómina.
+
+### 4.5 Módulo 5: Compras y Proveedores (SRM)
+* **Directorio de Proveedores (`suppliers`):** Fichas con RIF/Tax ID, condiciones comerciales (días de crédito), contactos y catálogo de precios negociados por insumo.
+* **Órdenes de Compra (`purchase_orders`):** Ciclo completo (Borrador → Aprobada → Enviada → Recibida Parcial/Total → Cancelada). Generación y descarga de PDF formal.
+* **Three-Way Matching:** Cruce y conciliación entre Orden de Compra (PO), Documento de Recepción física (Almacén) y Factura del Proveedor (`supplier_invoices`).
+* **Devoluciones a Proveedores (`srm_returns`):** Registro de mercancía rechazada con motivo, ajuste de cuenta y balance.
+
+### 4.6 Módulo 6: Ventas, Facturación & POS
+* **Catálogo de Ventas (`sales_items`):** Productos finales listos para la venta, combos y modificadores. Cada ítem puede vincularse a una receta de producción o a un insumo directo para deducción automática de stock en el momento de la venta.
+* **Monedas & Tasas Cambiarias (`currencies`, `exchange_rates`):** Manejo multimoneda (USD base, moneda local como VEF, COP, etc.) con registro diario de tasas oficiales/paralelas y políticas de redondeo.
+* **Facturación & Clientes (`sales_invoices`, `sales_customers`):** Emisión de comprobantes fiscales y recibos de venta con desglose de impuestos (`taxes`), numeración correlativa (`sales_sequences`) y registro de múltiples formas de pago (`sales_payments`: efectivo, tarjeta, transferencia, pago móvil).
+* **Terminal Punto de Venta (`/pos/session`):** Interfaz para apertura/cierre de caja, emisión rápida de comandas y cobro.
+
+### 4.7 Módulo 7: Integraciones Bidireccionales (VerumQuick)
+* **Handshake & Conexión OAuth 2.0:** Flujo de autorización vía popup y webhooks para enlazar sedes de VERUM con cuentas de Quick.
+* **Outbox Pattern Asíncrono:** Emisión de eventos (`catalog.sync`, `menu.update`, `stock.alert`) procesados por el worker en segundo plano con firmas HMAC seguras y reintentos automáticos.
+
+---
+
+## 5. Estructura del Repositorio
+
+```
+verum/
+├── backend/
+│   ├── app/
+│   │   ├── admin/          # Gestión de roles, permisos, usuarios y sedes
+│   │   ├── attendance/     # Marcajes, turnos, ausencias y reportes de RRHH
+│   │   ├── auth/           # Sincronización de perfiles Supabase Auth y sesión
+│   │   ├── catering/       # Módulos de catering y eventos
+│   │   ├── checklists/     # Plantillas, preguntas, auto-save y submissions
+│   │   ├── integrations/   # Handshake OAuth, eventos y worker Outbox de Quick
+│   │   ├── inventory/      # Activos fijos, tickets de reparación y utensilios
+│   │   ├── production/     # Insumos, recetas, almacenes, Kardex, KDS, MRP, docs
+│   │   ├── purchasing/     # Proveedores, órdenes de compra (SRM), facturas y matching
+│   │   ├── sales/          # Catálogo de venta, POS, facturación y pagos
+│   │   ├── superadmin/     # Panel de administración global multi-empresa
+│   │   ├── transfers/      # Traslados entre almacenes y confirmaciones
+│   │   ├── cache.py        # Adaptador Redis / orjson para cacheo rápido
+│   │   └── deps.py         # Dependencias de seguridad, permisos y Org ID
+│   ├── migrations/         # 70+ scripts SQL incrementales (001 a 069 + seeds)
+│   ├── tests/              # Suite de pruebas unitarias y de integración (Pytest)
+│   ├── main.py             # Entrypoint FastAPI y montaje de routers
+│   └── database.py         # Conexión cliente Supabase
+│
+├── frontend/
+│   ├── src/
+│   │   ├── app/
+│   │   │   ├── admin/      # Panel Admin (Checklists, Inventario, Producción, SRM, Ventas...)
+│   │   │   ├── attendance/ # Vista móvil de marcación de personal
+│   │   │   ├── checklist/  # Vista móvil de ejecución de checklists (Step 1 y 2)
+│   │   │   ├── dashboard/  # Portal principal operativo del empleado
+│   │   │   ├── inventory/  # Vistas operativas de conteo y escaneo QR
+│   │   │   ├── login/      # Autenticación y recuperación de credenciales
+│   │   │   ├── production/ # KDS de cocina y visualización de órdenes
+│   │   │   ├── super-admin/# Consola de administración multi-tenant global
+│   │   │   └── venue-selection/ # Selector de sede y contexto activo
+│   │   ├── components/     # UI Componentes Shadcn, I18n, Theme, Modales, Tablas
+│   │   ├── hooks/          # useAutoSave, useTheme, usePermissions, useVenue
+│   │   └── lib/            # Clientes API HTTP, Supabase client y tipados TypeScript
+│
+├── docs/                   # Especificaciones PRD detalladas y planes de arquitectura
+└── VERUM.md                # Este documento maestro
 ```
 
 ---
 
-## 4. Requerimientos de la API (FastAPI)
+## 6. Catálogo de Endpoints API (FastAPI)
 
-* **Endpoints Principales:**
-  * `POST /auth/sync`: Sincroniza el usuario de Supabase Auth con la tabla `profiles`.
-  * `GET /checklists/{venue_id}`: Obtiene las plantillas activas para un local, incluyendo su estado de bloqueo según `prerequisite_template_id` y las submissions del turno actual. Si existe un `draft` activo para el usuario, devuelve su `id` y las respuestas ya guardadas para poder reanudar.
-  * `POST /submissions`: Crea un nuevo submission en estado `draft` al momento en que el usuario **abre** el checklist. Devuelve el `submission_id` que el frontend usará para todos los auto-saves. Si ya existe un `draft` del mismo usuario para ese template en el turno actual, devuelve el existente (idempotente).
-  * `PUT /submissions/{id}/answers`: **Endpoint de auto-save.** Recibe un array de respuestas y ejecuta un `upsert` masivo sobre la tabla `answers` usando el constraint único `(submission_id, question_id)`. Actualiza `submissions.last_saved_at = now()`. Puede recibir una sola respuesta o varias a la vez.
-  * `PATCH /submissions/{id}`: Actualiza campos del submission: `status`, `auditor_notes`, `auditor_confirmed`. Al pasar `status: 'completed'`, registra `completed_at`, ejecuta lógica de alertas y desbloquea checklists dependientes.
-  * `GET /reports/compliance`: Calcula el % de tareas completadas para el Admin, incluyendo conteo de issues críticos y no-críticos.
+### 6.1 Autenticación y Contexto (`/auth`)
+* `POST /auth/sync`: Sincroniza el usuario de Supabase Auth con la tabla `profiles`.
+* `GET /auth/me`: Retorna los datos del perfil actual, organizaciones vinculadas y permisos resueltos.
 
-* **Lógica del Auto-Save (`PUT /submissions/{id}/answers`):**
-  * Usa `INSERT ... ON CONFLICT (submission_id, question_id) DO UPDATE SET value = EXCLUDED.value, ...` para evitar duplicados.
-  * Solo actualiza `last_saved_at` en `submissions`, **no cambia el `status`** (sigue en `draft`).
-  * Responde con `{ saved_at: "<timestamp>" }` para que el frontend actualice el indicador visual.
-  * Las fotos son la excepción: el frontend primero sube la imagen a Supabase Storage, obtiene la URL pública, y luego envía esa URL como `value` a este endpoint.
+### 6.2 Checklists (`/checklists`, `/submissions`)
+* `GET /checklists/{venue_id}`: Lista plantillas activas, cálculo de bloqueo por prerequisito y drafts en curso.
+* `POST /submissions`: Inicializa un submission en `draft` (idempotente).
+* `PUT /submissions/{id}/answers`: Auto-save masivo con upsert sobre `answers`.
+* `PATCH /submissions/{id}`: Finalización (`status: completed`), notas del auditor y alertas.
+* `GET /reports/compliance`: Estadísticas y métricas de cumplimiento para gerencia.
 
-* **Lógica de Alertas (solo al hacer `PATCH status: 'completed'`):**
-  * Si alguna `answer` tiene `is_critical_failure = true` → notificación inmediata al admin.
-  * Si hay respuestas con `is_non_critical_issue = true` → se incluyen en el resumen del Step 2 y en el reporte.
+### 6.3 Inventario & Activos (`/inventory`)
+* `GET/POST /inventory/assets`: Catálogo de activos y generación de etiquetas QR.
+* `GET/POST /inventory/tickets`: Creación y seguimiento de tickets de reparación.
+* `POST /inventory/tickets/{id}/visits`: Registro de visitas técnicas y repuestos.
+* `GET/POST /inventory/utensils`: Gestión de catálogo de utensilios y conteos periódicos.
+* `POST /inventory/schedules`: Configuración de cronogramas de conteo.
 
-* **Seguridad:** Todas las rutas deben validar el `Authorization: Bearer <JWT>` emitido por Supabase.
+### 6.4 Producción, Almacenes y Recetas (`/production`, `/warehouses`)
+* `GET/POST /production/items`: Maestro de artículos (materias primas, insumos, terminados).
+* `GET/POST /production/recipes`: Fichas técnicas, ingredientes y cálculo de costos.
+* `GET/POST /production/orders`: Órdenes de producción y cambio de estado en KDS.
+* `GET /production/kds`: Listado en tiempo real de comandas de producción para cocina.
+* `GET/POST /production/documents`: Emisión de documentos de inventario (ingreso, egreso, merma).
+* `GET/POST /inventory/transfers`: Solicitud, despacho y recepción de traslados.
+* `GET /production/kardex`: Reporte histórico de movimientos valorizados en PEPS.
+* `GET/POST /production/physical-inventories`: Auditorías de conteo físico y ajustes.
 
----
+### 6.5 Asistencia & RRHH (`/attendance`, `/employee-shifts`)
+* `GET/POST /employee-shifts`: Definición de turnos, horarios y asignación de personal.
+* `POST /attendance/clock-in`: Marcación de inicio de jornada laboral.
+* `POST /attendance/break-start` & `break-end`: Control de tiempos de descanso/almuerzo.
+* `POST /attendance/clock-out`: Marcación de fin de jornada y cálculo de horas extras.
+* `GET/POST /attendance/absences`: Registro y aprobación de solicitudes de ausencia/permisos.
+* `GET /attendance/reports`: Matriz consolidada de asistencia y horas trabajadas.
 
-## 5. Requerimientos del Frontend (Next.js)
+### 6.6 Compras y Proveedores (`/purchasing`, `/suppliers`)
+* `GET/POST /suppliers`: Directorio y catálogo de precios de proveedores.
+* `GET/POST /purchasing/orders`: Creación, aprobación y generación en PDF de Purchase Orders.
+* `POST /purchasing/match`: Conciliación de 3 vías (PO vs Remisión de Almacén vs Factura).
+* `GET/POST /purchasing/invoices`: Registro de facturas por pagar y comprobantes.
+* `GET/POST /purchasing/returns`: Registro y gestión de devoluciones a proveedores.
 
-* **Mobile First:** La interfaz de ejecución debe parecer una App nativa.
-* **PWA:** Configurar `next-pwa` para permitir la instalación en el escritorio del móvil.
-* **Client-Side Image Compression:** Usar `browser-image-compression` para reducir fotos a <200KB antes de subirlas a Supabase Storage.
-* **Estados de Carga:** Implementar Skeletons para las llamadas a la API de Render (mitigar el *cold start*).
+### 6.7 Ventas, Facturación & POS (`/sales`)
+* `GET/POST /sales/items`: Catálogo de productos para la venta y enlace de recetas BOM.
+* `GET/POST /sales/invoices`: Emisión de comprobantes fiscales, notas de crédito y ventas.
+* `POST /sales/invoices/{id}/payments`: Registro de pagos multimoneda.
+* `GET/POST /sales/currencies` & `/exchange-rates`: Tasa de cambio del día y monedas activas.
+* `GET/POST /sales/customers`: Directorio y registro de clientes.
 
-### Auto-Save Automático (estilo Google Forms)
-
-El guardado automático opera en el frontend mediante un hook `useAutoSave` que coordina todos los cambios del formulario:
-
-**Ciclo de vida:**
-1. El usuario abre el checklist → el frontend llama `POST /submissions` y guarda el `submission_id` en el estado del componente.
-2. Si `GET /checklists/{venue_id}` devuelve un `draft` activo, el frontend pre-carga las respuestas guardadas en el formulario (permite reanudar si el usuario cierra accidentalmente).
-3. Cada vez que el usuario modifica una respuesta, se encola en un buffer local.
-4. El hook dispara `PUT /submissions/{id}/answers` con el buffer acumulado según la estrategia del tipo de campo (ver abajo).
-5. La UI muestra un indicador de estado de guardado en la parte superior del formulario.
-
-**Estrategia de guardado por tipo de campo:**
-
-| Tipo de campo | Estrategia | Detalle |
-|---|---|---|
-| `check`, `yes_no`, `multi_option`, `select` | **Inmediato** | Se guarda en cuanto cambia el valor |
-| `text`, `number` | **Debounce 800ms** | Espera que el usuario deje de escribir |
-| `slider` | **Debounce 500ms** | Espera que suelte el slider |
-| `photo` | **Async en 2 pasos** | 1) Sube imagen a Supabase Storage → 2) Guarda URL via auto-save |
-
-**Indicador visual de estado (esquina superior del formulario):**
-
-```
-⏳ Guardando...     →  mientras hay requests en vuelo
-✓  Guardado         →  después del último request exitoso (desaparece a los 3s)
-⚠️  Sin conexión    →  si el request falla (reintenta automáticamente al reconectar)
-```
-
-**Hook sugerido (`useAutoSave`):**
-```typescript
-// hooks/useAutoSave.ts
-// - Recibe: submissionId, answers (map de question_id → value)
-// - Mantiene: saveStatus ('idle' | 'saving' | 'saved' | 'error')
-// - Expone: saveAnswer(questionId, value) — llamado por cada componente de pregunta
-// - Internamente usa useRef para el debounce timer y un Set de respuestas pendientes
-// - En caso de error: reintenta con backoff exponencial (1s, 2s, 4s, máx 3 intentos)
-```
-
-**Manejo de fotos (flujo especial):**
-```
-Usuario toma foto
-  → browser-image-compression (<200KB)
-  → upload a Supabase Storage (directamente desde el cliente con anon key)
-  → obtiene URL pública
-  → saveAnswer(questionId, { value: url, photo_label: label })
-  → PUT /submissions/{id}/answers
-```
-
-### Flujo de Ejecución de Checklist (2 Pasos)
-
-El formulario de checklist sigue un flujo de dos etapas, visible en el diseño:
-
-1. **Step 1 — Check:** El staff responde todas las preguntas del checklist. El auto-save opera en segundo plano durante toda esta etapa. Al presionar "Review Audit", el formulario navega al Step 2 (el `status` sigue en `draft`).
-2. **Step 2 — Review:** Pantalla de revisión final que muestra un resumen: foto de evidencia, metadata del turno, conteo de tareas completadas, lista de issues no-críticos, evidencias fotográficas con sus etiquetas, y notas del auditor. El staff debe confirmar (`auditor_confirmed = true`) y presionar "Submit Audit", que llama `PATCH /submissions/{id}` con `status: 'completed'`.
-
-| Tipo          | Componente UI                                      |
-|---------------|----------------------------------------------------|
-| `check`       | Checkbox con ícono de paloma                       |
-| `text`        | Input de texto                                     |
-| `number`      | Input numérico                                     |
-| `photo`       | Botón de captura + preview + campo de etiqueta     |
-| `slider`      | Slider con rango min/max, target y unidad          |
-| `yes_no`      | Botones toggle "Yes" / "No"                        |
-| `multi_option`| Botones de selección múltiple (ej: Excellent/Good/Reject) |
-| `select`      | Dropdown nativo                                    |
-
-### Dashboard de Checklists
-
-* Mostrar estado de cada checklist: `COMPLETED`, `IN PROGRESS` (con % y contador de tareas), `PENDING`, `LOCKED`.
-* Los checklists con `prerequisite_template_id` deben mostrarse bloqueados hasta que el submission de la plantilla previa esté en estado `completed`.
+### 6.8 Integraciones (`/api/integrations`)
+* `GET /api/integrations/quick/auth`: Inicialización de handshake OAuth con VerumQuick.
+* `POST /api/integrations/quick/webhook`: Recepción de eventos remotos con firma HMAC.
+* `POST /api/integrations/quick/sync`: Disparo forzado de sincronización de catálogo.
 
 ---
 
-## 6. Variables de Entorno (.env)
+## 7. Variables de Entorno (.env)
 
+**Backend (`backend/.env`):**
 ```env
-# Frontend
-NEXT_PUBLIC_SUPABASE_URL=your_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_key
-NEXT_PUBLIC_API_URL=your_render_url
+SUPABASE_URL=https://<tu-proyecto>.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=<tu-service-role-key>
+REDIS_URL=redis://localhost:6379/0  # Opcional para caché
+VERUM_QUICK_URL=https://app.verumquick.com
+VERUM_QUICK_HMAC_SECRET=<tu-secret-hmac>
+VERUM_QUICK_WEBHOOK_URL=http://localhost:8000/api/integrations/quick/webhook
+```
 
-# Backend
-SUPABASE_URL=your_url
-SUPABASE_SERVICE_ROLE_KEY=your_service_key
+**Frontend (`frontend/.env.local`):**
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://<tu-proyecto>.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<tu-anon-key>
+NEXT_PUBLIC_API_URL=http://localhost:8000
+NEXT_PUBLIC_VERUM_QUICK_URL=https://app.verumquick.com
 ```
 
 ---
 
-## 7. Plan de Implementación — Vertical Slices (Pequeñas Victorias)
+## 8. Guía de Ejecución y Pruebas
 
-El desarrollo se organiza en **milestones funcionales**: cada uno entrega algo que se puede ver y usar de punta a punta antes de pasar al siguiente. La infraestructura base (Supabase + FastAPI) se prepara una sola vez al inicio y luego se expande incrementalmente.
+### Servidor Backend (FastAPI):
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate  # En Windows: .venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
+```
 
----
+### Servidor Frontend (Next.js):
+```bash
+cd frontend
+npm install
+npm run dev -- --port 3000
+```
 
-### 🏗️ Prerequisito: Infraestructura Base (hacer una sola vez)
+### Ejecución de Pruebas Automatizadas (TDD):
+```bash
+# Backend (Pytest)
+cd backend
+pytest
 
-Antes del Milestone 1, preparar el entorno que todos los milestones usarán:
-
-- Crear proyecto en Supabase. Ejecutar **solo las tablas necesarias para el M1**: `organizations`, `venues`, `profiles`.
-- Crear proyecto FastAPI mínimo (un solo archivo `main.py`) con conexión a Supabase y middleware de validación JWT. Desplegar en Render.
-- Crear proyecto Next.js 14 con App Router, Tailwind y Shadcn/UI. Configurar variables de entorno.
-
-> ⚠️ No crear todas las tablas SQL de una vez. Cada milestone indica qué tablas o columnas nuevas agregar.
-
----
-
-### ✅ Milestone 1 — Login funcional
-**Victoria:** El staff puede iniciar sesión y ver una pantalla de bienvenida autenticada.
-
-**Tablas SQL a agregar:** `organizations`, `venues`, `profiles`
-
-**Backend:**
-- `POST /auth/sync` — Al primer login, crea el registro en `profiles` con `role: 'staff'`.
-
-**Frontend:**
-- Pantalla de Login con Employee ID y Password (Supabase Auth).
-- Redirect automático: si hay sesión activa → `/dashboard`; si no → `/login`.
-- Logout funcional.
-- Skeleton/loading state durante la autenticación.
-
-**Criterio de éxito:** Un usuario creado en Supabase Auth puede hacer login, ver su nombre en pantalla y hacer logout.
+# Script conjunto
+./run_tests.sh  # En Windows: .\run_tests.ps1
+```
 
 ---
 
-### ✅ Milestone 2 — Ver checklists en la pantalla principal
-**Victoria:** El staff ve la lista de checklists del día con sus estados (Pending, In Progress, Completed, Locked).
+## 9. Convenciones de Código y Calidad (Code Review Standards)
 
-**Tablas SQL a agregar:** `checklist_templates`, `questions`, `submissions` (solo columnas: `id`, `template_id`, `user_id`, `venue_id`, `shift`, `status`)
-
-**Backend:**
-- `GET /checklists/{venue_id}` — Devuelve las plantillas activas con su estado calculado para el turno actual. Lógica de bloqueo por `prerequisite_template_id`.
-
-**Frontend:**
-- Vista `/dashboard` con lista de checklists agrupados por turno.
-- Cards con estado visual: `COMPLETED` (verde), `IN PROGRESS` (azul + % + contador), `PENDING` (gris), `LOCKED` (candado).
-- Navbar inferior con tabs: Audits / History / Reports / Settings.
-- Datos de prueba: crear 2–3 `checklist_templates` y `questions` directamente en Supabase para testear.
-
-**Criterio de éxito:** La lista se carga desde la API real, refleja el estado correcto y el usuario bloqueado no puede acceder al checklist dependiente.
-
----
-
-### ✅ Milestone 3 — Llenar un checklist (sin auto-save)
-**Victoria:** El staff puede abrir un checklist, responder todas las preguntas y navegar entre ellas.
-
-**Tablas SQL a agregar:** Agregar a `questions` los campos: `config jsonb`. Agregar a `submissions`: `last_saved_at`, `auditor_notes`, `auditor_confirmed`, `completed_at`. Agregar tabla `answers` completa.
-
-**Backend:**
-- `POST /submissions` — Crea el draft al abrir el checklist (idempotente).
-- `GET /submissions/{id}` — Devuelve el submission con sus respuestas (para reanudar).
-
-**Frontend:**
-- Vista `/checklist/[id]` con Step 1 (Check): renderiza cada pregunta según su `type`.
-- Todos los componentes de preguntas: `check`, `text`, `number`, `yes_no`, `multi_option`, `select`, `slider`, `photo`.
-- Botón "Review Audit" navega al Step 2 (pantalla de revisión final).
-- Step 2: muestra resumen, notas del auditor, confirmación y botón "Submit Audit".
-- `PATCH /submissions/{id}` al hacer submit → `status: 'completed'`.
-
-**Criterio de éxito:** Se puede completar un checklist de punta a punta y su estado cambia a `COMPLETED` en el dashboard.
-
----
-
-### ✅ Milestone 4 — Auto-save automático
-**Victoria:** Cada respuesta se guarda en Supabase en segundo plano. Si el usuario cierra y reabre, retoma donde dejó.
-
-**Tablas SQL a agregar:** Agregar constraint `UNIQUE (submission_id, question_id)` a `answers` e índice `idx_answers_submission_question`.
-
-**Backend:**
-- `PUT /submissions/{id}/answers` — Upsert masivo de respuestas. Actualiza `last_saved_at`.
-
-**Frontend:**
-- Hook `useAutoSave` con estrategia por tipo de campo (inmediato / debounce 800ms / debounce 500ms).
-- Indicador visual: ⏳ Guardando → ✓ Guardado → ⚠️ Sin conexión.
-- Al abrir un checklist en progreso: pre-carga las respuestas guardadas.
-- Flujo de fotos: compresión → Supabase Storage → URL → auto-save.
-
-**Criterio de éxito:** Al cerrar el navegador a mitad de un checklist y volver, todas las respuestas previas están precargadas.
-
----
-
-### ✅ Milestone 5 — Panel Administrativo
-**Victoria:** El admin puede crear organizaciones, sedes y plantillas de checklist, y ver las respuestas enviadas.
-
-**Tablas SQL a agregar:** Ninguna (todas las tablas ya existen).
-
-**Backend:**
-- `POST /organizations` y `POST /venues` — Crear entidades.
-- `POST /checklist-templates` y `POST /questions` — Crear plantillas con preguntas.
-- `GET /reports/compliance` — % de cumplimiento, issues críticos y no-críticos por venue/turno/fecha.
-
-**Frontend:**
-- Rutas de admin (`/admin/*`) protegidas por `role: 'admin'`.
-- `/admin/organizations` — CRUD de organizaciones y sedes.
-- `/admin/templates` — Crear/editar plantillas de checklist y sus preguntas.
-- `/admin/submissions` — Ver respuestas enviadas por submission, con detalle de cada respuesta.
-- `/admin/dashboard` — Métricas de cumplimiento: % completado, heatmap por turno, conteo de issues.
-
-**Criterio de éxito:** El admin puede crear una plantilla nueva desde el panel, y el staff la ve en su dashboard al siguiente turno.
-
----
-
-### ✅ Milestone 6 — Optimización Final
-**Victoria:** La app se comporta como una app nativa instalable en el móvil.
-
-- Configurar `next-pwa` para instalación en homescreen.
-- Activar compresión de imágenes con `browser-image-compression` (<200KB).
-- Revisar y optimizar Skeletons en todas las vistas que llaman a Render (mitigar cold start).
-- Auditoría de performance en Lighthouse (target: PWA score > 90).
-
-
-## Code Review Standards
-After completing any implementation, review the code for:
-- Functions longer than 30 lines (likely doing too much)
-- Logic duplicated more than twice (extract to utility)
-- Any `any` type usage in TypeScript (replace with real types)
-- Components with more than 3 props that could be grouped into an object
-- Missing error handling on async operations
-
-Run /simplify before presenting code to the user.
+Toda nueva funcionalidad debe adherirse a los siguientes estándares:
+1. **Test-Driven Development (TDD):** Escribir pruebas unitarias/integración en `backend/tests/` que validen la regla de negocio antes de la implementación final.
+2. **Funciones concisas y modulares:** Métodos con un máximo recomendado de 30 líneas enfocados en una única responsabilidad.
+3. **TypeScript estricto:** Prohibido el uso del tipo `any`; modelar contratos e interfaces completas.
+4. **Respeto a la arquitectura de capas:** El frontend **nunca** realiza mutaciones o consultas directas a Supabase que evadan las reglas de negocio; toda operación transaccional se canaliza a través de los endpoints de FastAPI.
