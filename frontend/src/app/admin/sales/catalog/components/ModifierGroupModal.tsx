@@ -243,8 +243,16 @@ export default function ModifierGroupModal({
             }
 
             if (group) {
-                await salesApi.updateModifierGroup(group.id, payload)
+                const updatedGroup = await salesApi.updateModifierGroup(group.id, payload)
                 setIsSaveSuccess(true)
+                if (updatedGroup) {
+                    setName(updatedGroup.name || '')
+                    setMinSelection(updatedGroup.min_selection ?? 0)
+                    setMaxSelection(updatedGroup.max_selection != null && updatedGroup.max_selection > 0 ? updatedGroup.max_selection : '')
+                    setIsActive(Boolean(updatedGroup.is_active))
+                    setPosition(updatedGroup.position || 0)
+                    setOptions(updatedGroup.options ? updatedGroup.options.map(o => ({ ...o })) : [])
+                }
                 setTimeout(() => {
                     setIsSaveSuccess(false)
                 }, 3000)

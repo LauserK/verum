@@ -463,8 +463,50 @@ export default function SaleItemModal({
             }
 
             if (item) {
-                await salesApi.updateSaleItem(item.id, payload)
+                const updatedItem = await salesApi.updateSaleItem(item.id, payload)
                 setIsSaveSuccess(true)
+                // Update local modal state immediately with the fresh data returned from the server
+                if (updatedItem) {
+                    setName(updatedItem.name || '')
+                    setCode(updatedItem.code || '')
+                    setBarcode(updatedItem.barcode || '')
+                    setCategoryId(updatedItem.category_id || '')
+                    setDescription(updatedItem.description || '')
+                    setSalePrice(updatedItem.sale_price !== null && updatedItem.sale_price !== undefined ? updatedItem.sale_price : '')
+                    setFoodCost(updatedItem.food_cost ?? 0)
+                    setTaxId(updatedItem.tax_id || '')
+                    setTaxIncluded(updatedItem.tax_included ?? true)
+                    setIsActive(updatedItem.is_active ?? true)
+                    setIsFeatured(updatedItem.is_featured ?? false)
+                    setPosition(updatedItem.position || 0)
+                    setHasVariants(updatedItem.has_variants ?? false)
+                    setVariantLabel(updatedItem.variant_label || 'Presentación')
+                    if (updatedItem.variants && updatedItem.variants.length > 0) {
+                        setVariants(updatedItem.variants.map((v, idx) => ({
+                            id: v.id,
+                            name: v.name,
+                            price: Number(v.price) || 0,
+                            food_cost: Number(v.food_cost) || 0,
+                            external_code: v.external_code || '',
+                            is_default: v.is_default ?? idx === 0,
+                            position: v.position ?? idx,
+                            is_active: v.is_active ?? true,
+                            components: v.components || []
+                        })))
+                    }
+                    if (updatedItem.components && updatedItem.components.length > 0) {
+                        setComponents(updatedItem.components.map((c, idx) => ({
+                            id: c.id,
+                            item_id: c.item_id,
+                            item_name: c.item_name,
+                            item_code: c.item_code,
+                            component_type: c.component_type || 'fixed_qty',
+                            quantity: Number(c.quantity) || 1,
+                            label: c.label || '',
+                            position: c.position ?? idx
+                        })))
+                    }
+                }
                 setTimeout(() => {
                     setIsSaveSuccess(false)
                 }, 3000)
