@@ -184,8 +184,8 @@ export default function DashboardPage() {
     const { data: checklists = [], isLoading: isChecklistsLoading, error: checklistsError } = useQuery<ChecklistItem[]>({
         queryKey: ['checklists', selectedVenueId],
         queryFn: () => getChecklists(selectedVenueId!),
-        enabled: !!selectedVenueId && !isVenueLoading,
-        staleTime: 10_000,
+        enabled: !!selectedVenueId,
+        staleTime: 30_000,
     })
 
     const [mounted, setMounted] = useState(false)

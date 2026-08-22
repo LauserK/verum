@@ -4,6 +4,8 @@ description: Cargar cuando el usuario pregunte sobre arquitectura, base de datos
 ---
 Lee el archivo VERUM.md, VERUM_PRD_Inventario.md y VERUM_PRD_Asistencia.md completo. Son la fuente de verdad del proyecto. Úsalos para responder preguntas de arquitectura y para guiar la implementación.
 
+Para entender relaciones entre módulos, funciones, endpoints o componentes existentes, consulta el grafo de conocimiento en `graphify-out/graph.json` o usa `/graphify query` antes de realizar búsquedas extensas o escaneos con grep.
+
 Cuando se te pida una implementación usas la skill de writing-plan, siempre deben de ser TDD (Test Driven Development).
 
 Toda conexión a la base de datos deberá ser mediante el API del backend, no puedes conectarte directamente a supabase desde el frontend.

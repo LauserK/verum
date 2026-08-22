@@ -218,10 +218,15 @@ async def invalidate_auth_user(token_hash: str):
     """Invalidate cached auth token validation."""
     await cache.delete(f"auth:user:{token_hash}")
 
+async def invalidate_profile(user_id: str):
+    """Invalidate cached user profile and venues across all org variants."""
+    await cache.delete_pattern(f"auth:profile:{user_id}:*")
+
 async def invalidate_user_rbac(org_id: str, profile_id: str):
     """Invalidate cached RBAC context and resolved permissions for a user."""
     await cache.delete(f"rbac:context:{org_id}:{profile_id}")
     await cache.delete(f"rbac:perms:{org_id}:{profile_id}")
+    await cache.delete_pattern(f"auth:profile:{profile_id}:*")
 
 async def invalidate_rbac_catalog(org_id: str):
     """Invalidate cached permission catalog."""

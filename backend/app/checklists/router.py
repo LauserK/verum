@@ -114,15 +114,28 @@ async def get_checklists(venue_id: str, user=Depends(require_permission("checkli
             questions_by_template[tid] = questions_by_template.get(tid, 0) + 1
 
         # 3. Get today's submissions OR active submissions for the current venue
-        submissions_res = (
-            db.table("submissions")
-            .select("*")
-            .eq("venue_id", venue_id)
-            .in_("template_id", template_ids)
-            .execute()
-        )
+        # Filter at the DB level (today onwards OR status not completed) to avoid full table scan
+        try:
+            today_start = f"{today}T00:00:00"
+            submissions_res = (
+                db.table("submissions")
+                .select("*")
+                .eq("venue_id", venue_id)
+                .in_("template_id", template_ids)
+                .or_(f"created_at.gte.{today_start},status.neq.completed")
+                .execute()
+            )
+        except Exception:
+            # Fallback if or_ syntax varies
+            submissions_res = (
+                db.table("submissions")
+                .select("*")
+                .eq("venue_id", venue_id)
+                .in_("template_id", template_ids)
+                .execute()
+            )
         all_venue_submissions = submissions_res.data or []
-        all_today_submissions = [s for s in all_venue_submissions if s["created_at"].startswith(today) or s["status"] != "completed"]
+        all_today_submissions = [s for s in all_venue_submissions if s.get("created_at", "").startswith(today) or s.get("status") != "completed"]
         
         # 4. Map submissions to templates
         submissions_map: dict = {}

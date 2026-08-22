@@ -67,6 +67,12 @@ async def sync_user(user=Depends(get_current_user)):
 @router.get("/me", response_model=ProfileResponse)
 async def get_profile(x_org_id: Optional[str] = Header(None), user=Depends(get_current_user)):
     """Returns the authenticated user's profile with their venues grouped by organization."""
+    from app.cache import cache
+    cache_key = f"auth:profile:{user.id}:{x_org_id or 'default'}"
+    cached_profile = await cache.get(cache_key)
+    if cached_profile:
+        return cached_profile
+
     try:
         db = _get_db()
         result = db.table("profiles").select("*").eq("id", user.id).execute()
@@ -171,7 +177,7 @@ async def get_profile(x_org_id: Optional[str] = Header(None), user=Depends(get_c
         except Exception:
             user_permissions = []
 
-        return {
+        response_data = {
             "id": profile["id"],
             "full_name": profile.get("full_name"),
             "role": user_role,
@@ -183,6 +189,8 @@ async def get_profile(x_org_id: Optional[str] = Header(None), user=Depends(get_c
             "shift_name": shift_name,
             "permissions": user_permissions,
         }
+        await cache.set(cache_key, response_data, ttl=3600)
+        return response_data
     except HTTPException:
         raise
     except Exception as e:

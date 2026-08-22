@@ -21,16 +21,18 @@ const VenueContext = createContext<VenueContextType | undefined>(undefined)
 
 export function VenueProvider({ children }: { children: React.ReactNode }) {
   const { data: profile, isLoading: isProfileLoading } = useProfile()
-  const [activeOrgIdState, setActiveOrgIdStateState] = useState<string | null>(null)
-  const [selectedVenueIdState, setSelectedVenueIdStateState] = useState<string | null>(null)
-
-  // Load initial values from localStorage on mount (client-side only)
-  useEffect(() => {
-    const savedOrgId = localStorage.getItem('activeOrgId')
-    const savedVenueId = localStorage.getItem('selectedVenueId')
-    if (savedOrgId) setActiveOrgIdStateState(savedOrgId)
-    if (savedVenueId) setSelectedVenueIdStateState(savedVenueId)
-  }, [])
+  const [activeOrgIdState, setActiveOrgIdStateState] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('activeOrgId')
+    }
+    return null
+  })
+  const [selectedVenueIdState, setSelectedVenueIdStateState] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('selectedVenueId')
+    }
+    return null
+  })
 
   // Derive all other values during render
   const orgs = profile?.organizations || []
