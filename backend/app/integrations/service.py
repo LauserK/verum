@@ -447,6 +447,47 @@ async def execute_quick_catalog_import(org_id: str, payload: Any, db) -> Dict[st
         local_pms_res = db.table("payment_methods").select("id, name").eq("org_id", org_id).execute()
         local_pm_by_name = {pm["name"].lower(): pm["id"] for pm in (local_pms_res.data or []) if pm.get("name")}
 
+        # Ensure currencies referenced by remote payment methods exist in VERUM
+        local_currencies_res = db.table("currencies").select("id, code").or_(f"org_id.is.null,org_id.eq.{org_id}").execute()
+        local_curr_codes = {c["code"].upper() for c in (local_currencies_res.data or []) if c.get("code")}
+
+        for pm in remote_pms:
+            pm_curr = pm.get("currency_code")
+            if pm_curr:
+                curr_clean = pm_curr.strip().upper()
+                if curr_clean and curr_clean not in local_curr_codes:
+                    # Use symbol passed from Quick if available, otherwise check known symbols or fallback to code
+                    sym = pm.get("currency_symbol") or ("Bs." if curr_clean == "VES" else ("$" if curr_clean in ["USD", "COP", "MXN", "CLP"] else ("€" if curr_clean == "EUR" else ("£" if curr_clean == "GBP" else curr_clean))))
+                    
+                    # Human-friendly name dictionary with generic fallback
+                    known_names = {
+                        "VES": "Bolívares",
+                        "USD": "Dólares",
+                        "EUR": "Euros",
+                        "COP": "Pesos Colombianos",
+                        "MXN": "Pesos Mexicanos",
+                        "BRL": "Reales",
+                        "CLP": "Pesos Chilenos",
+                        "PEN": "Soles",
+                        "GBP": "Libras Esterlinas",
+                        "USDT": "Tether (USDT)",
+                        "BTC": "Bitcoin"
+                    }
+                    curr_name = known_names.get(curr_clean, f"Moneda ({curr_clean})")
+                    
+                    try:
+                        db.table("currencies").insert({
+                            "org_id": org_id,
+                            "code": curr_clean,
+                            "name": curr_name,
+                            "symbol": sym,
+                            "is_base": False,
+                            "is_active": True
+                        }).execute()
+                        local_curr_codes.add(curr_clean)
+                    except Exception as e:
+                        print(f"[CURRENCY AUTO-PROVISION ERROR]: {e}")
+
         for pm in remote_pms:
             pm_name = pm.get("name", "").strip()
             if not pm_name:
