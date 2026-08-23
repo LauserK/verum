@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import React from 'react'
 import { useRouter } from 'next/navigation'
@@ -16,6 +16,7 @@ import {
 import { usePosStore, PosMode } from '@/store/posStore'
 import { useProfile } from '@/hooks/useProfile'
 import PosCatalog from './components/PosCatalog'
+import PosCart from './components/PosCart'
 
 interface PosModeTab {
   id: PosMode
@@ -116,43 +117,9 @@ export default function PosTerminalPage() {
           <PosCatalog />
         </div>
 
-        {/* Right (30% width): Placeholder aside for Minuta/Cart (Task 4) */}
-        <aside className="w-[30%] h-full flex flex-col bg-surface border-l border-border/50 overflow-hidden">
-          {/* Cart Header */}
-          <div className="h-14 shrink-0 px-4 border-b border-border flex items-center justify-between bg-surface/50">
-            <div className="flex items-center gap-2">
-              <Receipt className="w-4 h-4 text-primary" />
-              <h3 className="text-sm font-bold text-text-primary">Comanda / Minuta</h3>
-            </div>
-            <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-lg bg-surface-raised border border-border text-text-secondary">
-              Ticket #1
-            </span>
-          </div>
-
-          {/* Cart Body Placeholder */}
-          <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-text-secondary">
-            <div className="w-12 h-12 rounded-2xl bg-surface-raised border border-border flex items-center justify-center mb-3">
-              <Receipt className="w-6 h-6 opacity-40 text-primary" />
-            </div>
-            <p className="text-xs font-bold text-text-primary">Orden Vacía</p>
-            <p className="text-[11px] text-text-secondary mt-1 max-w-[200px]">
-              Selecciona productos del catálogo a la izquierda para agregarlos al ticket.
-            </p>
-          </div>
-
-          {/* Cart Footer Placeholder */}
-          <div className="p-4 border-t border-border bg-surface-raised/40 space-y-3">
-            <div className="flex justify-between items-center text-xs text-text-secondary">
-              <span>Total Estimado</span>
-              <span className="text-lg font-black text-primary font-mono">$0.00</span>
-            </div>
-            <button
-              disabled
-              className="w-full py-3 rounded-xl bg-primary/40 text-text-inverse font-bold text-xs cursor-not-allowed text-center"
-            >
-              Cobrar Orden
-            </button>
-          </div>
+        {/* Right (30% width): Interactive Minuta/Cart */}
+        <aside className="w-[30%] h-full flex flex-col overflow-hidden">
+          <PosCart />
         </aside>
       </main>
     </div>
