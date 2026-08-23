@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Any, Dict
 from uuid import UUID
 from fastapi import HTTPException
 from app.integrations.outbox import enqueue_event

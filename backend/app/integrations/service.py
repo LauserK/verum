@@ -237,9 +237,15 @@ def preview_quick_catalog(org_id: str, db) -> Dict[str, Any]:
 
 async def execute_quick_catalog_import(org_id: str, payload: Any, db) -> Dict[str, Any]:
     """
-    Imports Categories, Modifier Groups, Options, Products and Variants from VerumQuick into VERUM.
+    Imports Categories, Modifier Groups, Options, Products, Variants and/or Payment Methods from VerumQuick into VERUM.
+    Allows granular selection via payload flags: import_products, import_payment_methods, overwrite_existing_prices.
     """
-    from app.cache import invalidate_sales_catalog
+    from app.cache import invalidate_sales_catalog, invalidate_sales_config
+
+    payload_dict = payload if isinstance(payload, dict) else (payload.model_dump() if hasattr(payload, "model_dump") else {})
+    import_products = payload_dict.get("import_products", True)
+    import_payment_methods = payload_dict.get("import_payment_methods", True)
+    overwrite_prices = payload_dict.get("overwrite_existing_prices", True)
 
     remote_data = fetch_quick_remote_catalog(org_id, db)
     raw_cats = remote_data.get("categories", [])
@@ -255,211 +261,218 @@ async def execute_quick_catalog_import(org_id: str, payload: Any, db) -> Dict[st
         "products_created": 0,
         "products_updated": 0,
         "variants_imported": 0,
-        "product_modifier_links_created": 0
+        "product_modifier_links_created": 0,
+        "payment_methods_imported": 0
     }
 
-    # 1. Categories Mapping
-    cat_id_map: Dict[Any, str] = {} # remote_id/name -> verum_id
-    local_cats_res = db.table("sale_categories").select("id, name").eq("org_id", org_id).execute()
-    local_cat_by_name = {c["name"].lower(): c["id"] for c in (local_cats_res.data or []) if c.get("name")}
+    if import_products:
+        # 1. Categories Mapping
+        cat_id_map: Dict[Any, str] = {} # remote_id/name -> verum_id
+        local_cats_res = db.table("sale_categories").select("id, name").eq("org_id", org_id).execute()
+        local_cat_by_name = {c["name"].lower(): c["id"] for c in (local_cats_res.data or []) if c.get("name")}
 
-    for c in remote_cats:
-        c_name = c.get("name", "").strip()
-        if not c_name:
-            continue
-        c_lower = c_name.lower()
-        if c_lower in local_cat_by_name:
-            cat_id_map[c.get("id")] = local_cat_by_name[c_lower]
-            cat_id_map[c_name] = local_cat_by_name[c_lower]
-        else:
-            ins = db.table("sale_categories").insert({
-                "org_id": org_id,
-                "name": c_name,
-                "icon": "lunch_dining",
-                "is_active": True
-            }).execute()
-            if ins.data:
-                new_id = ins.data[0]["id"]
-                local_cat_by_name[c_lower] = new_id
-                cat_id_map[c.get("id")] = new_id
-                cat_id_map[c_name] = new_id
-                stats["categories_imported"] += 1
-
-    # 2. Modifier Groups & Options Mapping
-    mod_id_map: Dict[Any, str] = {} # remote_id/name -> verum_id
-    local_mods_res = db.table("sale_modifier_groups").select("id, name").eq("org_id", org_id).execute()
-    local_mod_by_name = {m["name"].lower(): m["id"] for m in (local_mods_res.data or []) if m.get("name")}
-
-    for mg in remote_mods:
-        mg_name = mg.get("name", "").strip()
-        if not mg_name:
-            continue
-        mg_lower = mg_name.lower()
-        
-        verum_group_id = None
-        if mg_lower in local_mod_by_name:
-            verum_group_id = local_mod_by_name[mg_lower]
-        else:
-            raw_max = mg.get("max_select")
-            if raw_max is None:
-                raw_max = mg.get("max_selection")
-            
-            # If max_selection is empty string, None or <= 0, store None (unlimited)
-            clean_max = None
-            if raw_max is not None and str(raw_max).strip() != "":
-                val = int(raw_max)
-                if val > 0:
-                    clean_max = val
-
-            ins = db.table("sale_modifier_groups").insert({
-                "org_id": org_id,
-                "name": mg_name,
-                "min_selection": int(mg.get("min_select") or mg.get("min_selection") or 0),
-                "max_selection": clean_max,
-                "is_active": True
-            }).execute()
-            if ins.data:
-                verum_group_id = ins.data[0]["id"]
-                local_mod_by_name[mg_lower] = verum_group_id
-                stats["modifier_groups_imported"] += 1
-
-        if verum_group_id:
-            mod_id_map[mg.get("id")] = verum_group_id
-            mod_id_map[mg_name] = verum_group_id
-
-            # Insert Options
-            options = mg.get("modifiers") or mg.get("options") or []
-            for opt_idx, opt in enumerate(options):
-                opt_name = opt.get("name", "").strip()
-                if not opt_name:
-                    continue
-                try:
-                    db.table("sale_modifier_options").insert({
-                        "group_id": verum_group_id,
-                        "name": opt_name,
-                        "price": float(opt.get("price") or opt.get("price_delta") or 0.0),
-                        "food_cost": float(opt.get("food_cost") or 0.0),
-                        "position": opt_idx,
-                        "is_active": True
-                    }).execute()
-                    stats["modifier_options_imported"] += 1
-                except Exception:
-                    # Ignore duplicate option names in group
-                    pass
-
-    # 3. Products & Variants
-    local_prods_res = db.table("sale_items").select("id, name, code").eq("org_id", org_id).execute()
-    local_prod_by_code = {p["code"].lower(): p["id"] for p in (local_prods_res.data or []) if p.get("code")}
-    local_prod_by_name = {p["name"].lower(): p["id"] for p in (local_prods_res.data or []) if p.get("name")}
-
-    for p in remote_prods:
-        p_name = p.get("name", "").strip()
-        p_code = (p.get("code") or "").strip()
-        if not p_name:
-            continue
-
-        existing_item_id = None
-        if p_code and p_code.lower() in local_prod_by_code:
-            existing_item_id = local_prod_by_code[p_code.lower()]
-        elif p_name.lower() in local_prod_by_name:
-            existing_item_id = local_prod_by_name[p_name.lower()]
-
-        # Resolve category
-        category_id = cat_id_map.get(p.get("category_id")) or cat_id_map.get(p.get("category_name"))
-
-        has_variants = bool(p.get("variants"))
-        item_data = {
-            "name": p_name,
-            "code": p_code or None,
-            "sale_price": float(p.get("price") or p.get("sale_price") or 0.0),
-            "food_cost": float(p.get("food_cost") or 0.0),
-            "category_id": category_id,
-            "description": p.get("description") or "",
-            "has_variants": has_variants,
-            "is_active": p.get("is_active", True)
-        }
-
-        item_id = None
-        if existing_item_id:
-            db.table("sale_items").update(item_data).eq("id", existing_item_id).eq("org_id", org_id).execute()
-            item_id = existing_item_id
-            stats["products_updated"] += 1
-        else:
-            item_data["org_id"] = org_id
-            ins = db.table("sale_items").insert(item_data).execute()
-            if ins.data:
-                item_id = ins.data[0]["id"]
-                if p_code:
-                    local_prod_by_code[p_code.lower()] = item_id
-                local_prod_by_name[p_name.lower()] = item_id
-                stats["products_created"] += 1
-
-        if not item_id:
-            continue
-
-        # Link modifier groups
-        remote_mg_ids = p.get("modifier_group_ids") or []
-        for r_mg_id in remote_mg_ids:
-            mapped_group_id = mod_id_map.get(r_mg_id)
-            if mapped_group_id:
-                try:
-                    db.table("sale_item_modifier_groups").insert({
-                        "sale_item_id": item_id,
-                        "modifier_group_id": mapped_group_id
-                    }).execute()
-                    stats["product_modifier_links_created"] += 1
-                except Exception:
-                    pass
-
-        # Variants
-        if has_variants:
-            db.table("sale_item_variants").delete().eq("sale_item_id", item_id).execute()
-            for v_idx, v in enumerate(p.get("variants", [])):
-                v_name = v.get("name", "").strip()
-                if not v_name:
-                    continue
-                db.table("sale_item_variants").insert({
-                    "sale_item_id": item_id,
-                    "name": v_name,
-                    "price": float(v.get("price") or 0.0),
-                    "food_cost": float(v.get("food_cost") or 0.0),
-                    "external_code": v.get("external_code") or "",
-                    "is_default": v.get("is_default", v_idx == 0),
-                    "position": v_idx,
+        for c in remote_cats:
+            c_name = c.get("name", "").strip()
+            if not c_name:
+                continue
+            c_lower = c_name.lower()
+            if c_lower in local_cat_by_name:
+                cat_id_map[c.get("id")] = local_cat_by_name[c_lower]
+                cat_id_map[c_name] = local_cat_by_name[c_lower]
+            else:
+                ins = db.table("sale_categories").insert({
+                    "org_id": org_id,
+                    "name": c_name,
+                    "icon": "lunch_dining",
                     "is_active": True
                 }).execute()
-                stats["variants_imported"] += 1
+                if ins.data:
+                    new_id = ins.data[0]["id"]
+                    local_cat_by_name[c_lower] = new_id
+                    cat_id_map[c.get("id")] = new_id
+                    cat_id_map[c_name] = new_id
+                    stats["categories_imported"] += 1
+
+        # 2. Modifier Groups & Options Mapping
+        mod_id_map: Dict[Any, str] = {} # remote_id/name -> verum_id
+        local_mods_res = db.table("sale_modifier_groups").select("id, name").eq("org_id", org_id).execute()
+        local_mod_by_name = {m["name"].lower(): m["id"] for m in (local_mods_res.data or []) if m.get("name")}
+
+        for mg in remote_mods:
+            mg_name = mg.get("name", "").strip()
+            if not mg_name:
+                continue
+            mg_lower = mg_name.lower()
+            
+            verum_group_id = None
+            if mg_lower in local_mod_by_name:
+                verum_group_id = local_mod_by_name[mg_lower]
+            else:
+                raw_max = mg.get("max_select")
+                if raw_max is None:
+                    raw_max = mg.get("max_selection")
+                
+                # If max_selection is empty string, None or <= 0, store None (unlimited)
+                clean_max = None
+                if raw_max is not None and str(raw_max).strip() != "":
+                    val = int(raw_max)
+                    if val > 0:
+                        clean_max = val
+
+                ins = db.table("sale_modifier_groups").insert({
+                    "org_id": org_id,
+                    "name": mg_name,
+                    "min_selection": int(mg.get("min_select") or mg.get("min_selection") or 0),
+                    "max_selection": clean_max,
+                    "is_active": True
+                }).execute()
+                if ins.data:
+                    verum_group_id = ins.data[0]["id"]
+                    local_mod_by_name[mg_lower] = verum_group_id
+                    stats["modifier_groups_imported"] += 1
+
+            if verum_group_id:
+                mod_id_map[mg.get("id")] = verum_group_id
+                mod_id_map[mg_name] = verum_group_id
+
+                # Insert Options
+                options = mg.get("modifiers") or mg.get("options") or []
+                for opt_idx, opt in enumerate(options):
+                    opt_name = opt.get("name", "").strip()
+                    if not opt_name:
+                        continue
+                    try:
+                        db.table("sale_modifier_options").insert({
+                            "group_id": verum_group_id,
+                            "name": opt_name,
+                            "price": float(opt.get("price") or opt.get("price_delta") or 0.0),
+                            "food_cost": float(opt.get("food_cost") or 0.0),
+                            "position": opt_idx,
+                            "is_active": True
+                        }).execute()
+                        stats["modifier_options_imported"] += 1
+                    except Exception:
+                        # Ignore duplicate option names in group
+                        pass
+
+        # 3. Products & Variants
+        local_prods_res = db.table("sale_items").select("id, name, code").eq("org_id", org_id).execute()
+        local_prod_by_code = {p["code"].lower(): p["id"] for p in (local_prods_res.data or []) if p.get("code")}
+        local_prod_by_name = {p["name"].lower(): p["id"] for p in (local_prods_res.data or []) if p.get("name")}
+
+        for p in remote_prods:
+            p_name = p.get("name", "").strip()
+            p_code = (p.get("code") or "").strip()
+            if not p_name:
+                continue
+
+            existing_item_id = None
+            if p_code and p_code.lower() in local_prod_by_code:
+                existing_item_id = local_prod_by_code[p_code.lower()]
+            elif p_name.lower() in local_prod_by_name:
+                existing_item_id = local_prod_by_name[p_name.lower()]
+
+            # Resolve category
+            category_id = cat_id_map.get(p.get("category_id")) or cat_id_map.get(p.get("category_name"))
+
+            has_variants = bool(p.get("variants"))
+            item_data = {
+                "name": p_name,
+                "code": p_code or None,
+                "sale_price": float(p.get("price") or p.get("sale_price") or 0.0),
+                "food_cost": float(p.get("food_cost") or 0.0),
+                "category_id": category_id,
+                "description": p.get("description") or "",
+                "has_variants": has_variants,
+                "is_active": p.get("is_active", True)
+            }
+
+            item_id = None
+            if existing_item_id:
+                if not overwrite_prices:
+                    item_data.pop("sale_price", None)
+                db.table("sale_items").update(item_data).eq("id", existing_item_id).eq("org_id", org_id).execute()
+                item_id = existing_item_id
+                stats["products_updated"] += 1
+            else:
+                item_data["org_id"] = org_id
+                ins = db.table("sale_items").insert(item_data).execute()
+                if ins.data:
+                    item_id = ins.data[0]["id"]
+                    if p_code:
+                        local_prod_by_code[p_code.lower()] = item_id
+                    local_prod_by_name[p_name.lower()] = item_id
+                    stats["products_created"] += 1
+
+            if not item_id:
+                continue
+
+            # Link modifier groups
+            remote_mg_ids = p.get("modifier_group_ids") or []
+            for r_mg_id in remote_mg_ids:
+                mapped_group_id = mod_id_map.get(r_mg_id)
+                if mapped_group_id:
+                    try:
+                        db.table("sale_item_modifier_groups").insert({
+                            "sale_item_id": item_id,
+                            "modifier_group_id": mapped_group_id
+                        }).execute()
+                        stats["product_modifier_links_created"] += 1
+                    except Exception:
+                        pass
+
+            # Variants
+            if has_variants:
+                db.table("sale_item_variants").delete().eq("sale_item_id", item_id).execute()
+                for v_idx, v in enumerate(p.get("variants", [])):
+                    v_name = v.get("name", "").strip()
+                    if not v_name:
+                        continue
+                    db.table("sale_item_variants").insert({
+                        "sale_item_id": item_id,
+                        "name": v_name,
+                        "price": float(v.get("price") or 0.0),
+                        "food_cost": float(v.get("food_cost") or 0.0),
+                        "external_code": v.get("external_code") or "",
+                        "is_default": v.get("is_default", v_idx == 0),
+                        "position": v_idx,
+                        "is_active": True
+                    }).execute()
+                    stats["variants_imported"] += 1
 
     # 4. Payment Methods Import
-    from app.cache import invalidate_sales_config
-    remote_pms = remote_data.get("payment_methods", [])
-    local_pms_res = db.table("payment_methods").select("id, name").eq("org_id", org_id).execute()
-    local_pm_by_name = {pm["name"].lower(): pm["id"] for pm in (local_pms_res.data or []) if pm.get("name")}
+    if import_payment_methods:
+        from app.cache import invalidate_sales_config
+        remote_pms = remote_data.get("payment_methods", [])
+        local_pms_res = db.table("payment_methods").select("id, name").eq("org_id", org_id).execute()
+        local_pm_by_name = {pm["name"].lower(): pm["id"] for pm in (local_pms_res.data or []) if pm.get("name")}
 
-    for pm in remote_pms:
-        pm_name = pm.get("name", "").strip()
-        if not pm_name:
-            continue
-        pm_lower = pm_name.lower()
-        pm_data = {
-            "name": pm_name,
-            "method_type": pm.get("method_type", "other"),
-            "currency_code": pm.get("currency_code"),
-            "instructions": pm.get("instructions") or "",
-            "requires_reference": pm.get("requires_reference", True),
-            "is_active": pm.get("is_active", True),
-            "position": pm.get("position", 0)
-        }
+        for pm in remote_pms:
+            pm_name = pm.get("name", "").strip()
+            if not pm_name:
+                continue
+            pm_lower = pm_name.lower()
+            pm_data = {
+                "name": pm_name,
+                "method_type": pm.get("method_type", "other"),
+                "currency_code": pm.get("currency_code"),
+                "instructions": pm.get("instructions") or "",
+                "requires_reference": pm.get("requires_reference", True),
+                "is_active": pm.get("is_active", True),
+                "position": pm.get("position", 0)
+            }
 
-        if pm_lower in local_pm_by_name:
-            db.table("payment_methods").update(pm_data).eq("id", local_pm_by_name[pm_lower]).eq("org_id", org_id).execute()
-        else:
-            pm_data["org_id"] = org_id
-            db.table("payment_methods").insert(pm_data).execute()
-            stats["payment_methods_imported"] += 1
+            if pm_lower in local_pm_by_name:
+                db.table("payment_methods").update(pm_data).eq("id", local_pm_by_name[pm_lower]).eq("org_id", org_id).execute()
+            else:
+                pm_data["org_id"] = org_id
+                db.table("payment_methods").insert(pm_data).execute()
+                stats["payment_methods_imported"] += 1
+        await invalidate_sales_config(org_id)
 
-    await invalidate_sales_catalog(org_id)
-    await invalidate_sales_config(org_id)
+    if import_products:
+        await invalidate_sales_catalog(org_id)
+
     return stats
 
 

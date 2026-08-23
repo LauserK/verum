@@ -1,7 +1,16 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
-import { DownloadCloud, CheckCircle2, AlertCircle, RefreshCw, X, Layers, Sparkles } from "lucide-react"
+import { 
+    DownloadCloud, 
+    CheckCircle2, 
+    AlertCircle, 
+    RefreshCw, 
+    X, 
+    Layers, 
+    Sparkles, 
+    Check 
+} from "lucide-react"
 import { fetchWithAuth } from "@/lib/api"
 
 interface PreviewData {
@@ -48,6 +57,8 @@ export default function QuickCatalogImportModal({ isOpen, onClose, onSuccess }: 
     const [preview, setPreview] = useState<PreviewData | null>(null)
 
     // Options
+    const [importProducts, setImportProducts] = useState(true)
+    const [importPaymentMethods, setImportPaymentMethods] = useState(true)
     const [overwritePrices, setOverwritePrices] = useState(true)
     const [matchBy, setMatchBy] = useState("name_or_code")
 
@@ -80,6 +91,11 @@ export default function QuickCatalogImportModal({ isOpen, onClose, onSuccess }: 
     }, [isOpen])
 
     const handleExecuteImport = async () => {
+        if (!importProducts && !importPaymentMethods) {
+            setError("Debes seleccionar al menos una opción para importar (Productos o Métodos de Pago).")
+            return
+        }
+
         setStep("executing")
         setLoading(true)
         setError(null)
@@ -87,6 +103,8 @@ export default function QuickCatalogImportModal({ isOpen, onClose, onSuccess }: 
             const res = await fetchWithAuth<ImportResult>("/api/integrations/quick/import-catalog", {
                 method: "POST",
                 body: JSON.stringify({
+                    import_products: importProducts,
+                    import_payment_methods: importPaymentMethods,
                     overwrite_existing_prices: overwritePrices,
                     match_by: matchBy
                 })
@@ -118,7 +136,7 @@ export default function QuickCatalogImportModal({ isOpen, onClose, onSuccess }: 
                                 Importar Catálogo desde VerumQuick
                             </h2>
                             <p className="text-xs text-text-secondary">
-                                Migra categorías, modificadores y productos existentes a VERUM
+                                Migra categorías, modificadores, productos y métodos de pago a VERUM
                             </p>
                         </div>
                     </div>
@@ -186,37 +204,83 @@ export default function QuickCatalogImportModal({ isOpen, onClose, onSuccess }: 
 
                     {step === "options" && (
                         <div className="space-y-4">
-                            <h3 className="text-sm font-bold text-text-primary">Opciones de Importación</h3>
+                            <h3 className="text-sm font-bold text-text-primary">¿Qué deseas importar?</h3>
                             
-                            <label className="flex items-start gap-3 p-4 bg-surface-raised border border-border rounded-2xl cursor-pointer hover:border-primary/40 transition-colors">
-                                <input
-                                    type="checkbox"
-                                    checked={overwritePrices}
-                                    onChange={(e) => setOverwritePrices(e.target.checked)}
-                                    className="mt-1 w-4 h-4 rounded text-primary accent-primary cursor-pointer"
-                                />
-                                <div>
-                                    <p className="text-sm font-semibold text-text-primary">Actualizar Precios de Venta</p>
-                                    <p className="text-xs text-text-secondary mt-0.5">
-                                        Si un producto ya existe en VERUM, actualizar su precio de venta con el precio vigente en VerumQuick.
+                            {/* Option 1: Import Products */}
+                            <div 
+                                onClick={() => setImportProducts(!importProducts)}
+                                className={`flex items-start gap-3.5 p-4 rounded-2xl border transition-all duration-200 cursor-pointer ${
+                                    importProducts 
+                                        ? 'bg-primary/5 border-primary/40 shadow-sm' 
+                                        : 'bg-surface-raised border-border hover:border-border-strong'
+                                }`}
+                            >
+                                <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all duration-200 ${
+                                    importProducts
+                                        ? 'bg-primary border-primary text-white shadow-sm'
+                                        : 'border-border-strong bg-surface hover:border-primary/50'
+                                }`}>
+                                    {importProducts && <Check className="w-4 h-4 stroke-[3]" />}
+                                </div>
+                                <div className="flex-1 select-none">
+                                    <p className="text-sm font-bold text-text-primary">Importar Productos y Catálogo</p>
+                                    <p className="text-xs text-text-secondary mt-0.5 leading-relaxed">
+                                        Importa o actualiza productos, categorías, modificadores, opciones y variantes desde VerumQuick.
                                     </p>
                                 </div>
-                            </label>
+                            </div>
 
-                            <label className="flex items-start gap-3 p-4 bg-surface-raised border border-border rounded-2xl cursor-pointer hover:border-primary/40 transition-colors">
-                                <input
-                                    type="checkbox"
-                                    checked={true}
-                                    disabled
-                                    className="mt-1 w-4 h-4 rounded text-primary accent-primary opacity-60"
-                                />
-                                <div>
-                                    <p className="text-sm font-semibold text-text-primary">Vincular por Nombre / Código (Fusión Segura)</p>
-                                    <p className="text-xs text-text-secondary mt-0.5">
-                                        Evita duplicar productos y categorías existentes asociándoles los modificadores importados.
+                            {/* Sub-option: Overwrite Prices */}
+                            {importProducts && (
+                                <div className="ml-6 pl-4 border-l-2 border-primary/20 animate-in fade-in slide-in-from-top-2 duration-200 space-y-3">
+                                    <div 
+                                        onClick={() => setOverwritePrices(!overwritePrices)}
+                                        className={`flex items-start gap-3 p-3.5 rounded-xl border transition-all duration-200 cursor-pointer ${
+                                            overwritePrices 
+                                                ? 'bg-surface border-primary/30' 
+                                                : 'bg-surface/50 border-border hover:border-border-strong'
+                                        }`}
+                                    >
+                                        <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all duration-200 ${
+                                            overwritePrices
+                                                ? 'bg-primary border-primary text-white shadow-sm'
+                                                : 'border-border-strong bg-surface-raised hover:border-primary/50'
+                                        }`}>
+                                            {overwritePrices && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                                        </div>
+                                        <div className="flex-1 select-none">
+                                            <p className="text-xs font-bold text-text-primary">Actualizar Precios de Venta Existentes</p>
+                                            <p className="text-[11px] text-text-secondary mt-0.5 leading-relaxed">
+                                                Si el producto ya existe en VERUM, sobreescribe su precio de venta con el precio vigente en Quick.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Option 2: Import Payment Methods */}
+                            <div 
+                                onClick={() => setImportPaymentMethods(!importPaymentMethods)}
+                                className={`flex items-start gap-3.5 p-4 rounded-2xl border transition-all duration-200 cursor-pointer ${
+                                    importPaymentMethods 
+                                        ? 'bg-primary/5 border-primary/40 shadow-sm' 
+                                        : 'bg-surface-raised border-border hover:border-border-strong'
+                                }`}
+                            >
+                                <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all duration-200 ${
+                                    importPaymentMethods
+                                        ? 'bg-primary border-primary text-white shadow-sm'
+                                        : 'border-border-strong bg-surface hover:border-primary/50'
+                                }`}>
+                                    {importPaymentMethods && <Check className="w-4 h-4 stroke-[3]" />}
+                                </div>
+                                <div className="flex-1 select-none">
+                                    <p className="text-sm font-bold text-text-primary">Importar Métodos de Pago</p>
+                                    <p className="text-xs text-text-secondary mt-0.5 leading-relaxed">
+                                        Importa las formas de cobro configuradas en VerumQuick (Efectivo, Pago Móvil, Zelle, Transferencias, etc.).
                                     </p>
                                 </div>
-                            </label>
+                            </div>
                         </div>
                     )}
 
@@ -291,7 +355,7 @@ export default function QuickCatalogImportModal({ isOpen, onClose, onSuccess }: 
                             </button>
                             <button
                                 onClick={() => setStep("options")}
-                                disabled={!preview || preview.total_products === 0}
+                                disabled={!preview || ((preview.total_products || 0) === 0 && (preview.total_payment_methods || 0) === 0)}
                                 className="px-5 py-2.5 bg-primary hover:bg-primary-hover disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-sm transition-all"
                             >
                                 Continuar
@@ -309,7 +373,7 @@ export default function QuickCatalogImportModal({ isOpen, onClose, onSuccess }: 
                             </button>
                             <button
                                 onClick={handleExecuteImport}
-                                disabled={loading}
+                                disabled={loading || (!importProducts && !importPaymentMethods)}
                                 className="px-6 py-2.5 bg-primary hover:bg-primary-hover disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center gap-2"
                             >
                                 <DownloadCloud className="w-4 h-4" />
