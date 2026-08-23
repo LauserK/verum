@@ -58,6 +58,7 @@ export interface TenantBillingConfig {
 
 export interface PaymentMethod {
     id: string
+    org_id?: string
     name: string
     method_type: 'cash' | 'card' | 'bank_transfer' | 'mobile_payment' | 'digital_wallet' | 'crypto' | 'other'
     currency_code?: string | null
@@ -65,6 +66,7 @@ export interface PaymentMethod {
     is_active: boolean
     requires_reference?: boolean
     position?: number
+    sync_to_quick?: boolean
     created_at?: string
 }
 

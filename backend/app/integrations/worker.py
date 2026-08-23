@@ -38,10 +38,17 @@ async def process_outbox_events():
             payload_bytes = json.dumps(event["payload"]).encode('utf-8')
             signature = hmac.new(secret.encode('utf-8'), payload_bytes, hashlib.sha256).hexdigest()
             
-            webhook_url = getattr(settings, 'VERUM_QUICK_WEBHOOK_URL', None) or os.environ.get(
+            base_webhook_url = getattr(settings, 'VERUM_QUICK_WEBHOOK_URL', None) or os.environ.get(
                 "VERUM_QUICK_WEBHOOK_URL", 
                 "http://localhost:8000/integrations/api/verum/webhook/product"
             )
+
+            event_type = event.get("event_type", "")
+            if event_type.startswith("payment_method."):
+                # Replace product endpoint with payment endpoint
+                webhook_url = base_webhook_url.replace("/webhook/product", "/webhook/payment")
+            else:
+                webhook_url = base_webhook_url
             
             headers = {
                 "Content-Type": "application/json",

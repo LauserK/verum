@@ -31,20 +31,50 @@ async def update_billing_config(org_id: str, payload: TenantBillingConfigUpdate,
     return res.data[0]
 
 async def create_payment_method(org_id: str, payload: PaymentMethodCreate, db):
-    data = payload.model_dump()
+    sync_to_quick = getattr(payload, "sync_to_quick", False)
+    data = payload.model_dump(exclude={"sync_to_quick"})
     data["org_id"] = org_id
     res = db.table("payment_methods").insert(data).execute()
-    return res.data[0]
+    created = res.data[0]
+
+    if sync_to_quick:
+        try:
+            from app.integrations.outbox import enqueue_event
+            enqueue_event(
+                org_id=org_id,
+                event_type="payment_method.created",
+                payload=created,
+                db=db
+            )
+        except Exception as e:
+            print("[OUTBOX PAYMENT METHOD CREATE ERROR]:", e)
+
+    return created
 
 async def update_payment_method(org_id: str, method_id: str, payload: Any, db):
-    data = payload.model_dump(exclude_unset=True)
+    sync_to_quick = getattr(payload, "sync_to_quick", False) if hasattr(payload, "sync_to_quick") else (payload.get("sync_to_quick") if isinstance(payload, dict) else False)
+    data = payload.model_dump(exclude_unset=True, exclude={"sync_to_quick"}) if hasattr(payload, "model_dump") else {k: v for k, v in payload.items() if k != "sync_to_quick"}
     if not data:
         res = db.table("payment_methods").select("*").eq("id", method_id).eq("org_id", org_id).execute()
         return res.data[0] if res.data else None
     res = db.table("payment_methods").update(data).eq("id", method_id).eq("org_id", org_id).execute()
     if not res.data:
         raise HTTPException(404, "Payment method not found")
-    return res.data[0]
+    updated = res.data[0]
+
+    if sync_to_quick:
+        try:
+            from app.integrations.outbox import enqueue_event
+            enqueue_event(
+                org_id=org_id,
+                event_type="payment_method.updated",
+                payload=updated,
+                db=db
+            )
+        except Exception as e:
+            print("[OUTBOX PAYMENT METHOD UPDATE ERROR]:", e)
+
+    return updated
 
 async def delete_payment_method(org_id: str, method_id: str, db):
     res = db.table("payment_methods").delete().eq("id", method_id).eq("org_id", org_id).execute()

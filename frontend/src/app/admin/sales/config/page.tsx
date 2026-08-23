@@ -47,6 +47,9 @@ export default function SalesConfigPage() {
   const [savedSuccess, setSavedSuccess] = useState(false)
   const [configError, setConfigError] = useState<string | null>(null)
   
+  // Quick Integration connection state
+  const [isQuickConnected, setIsQuickConnected] = useState(false)
+
   // General form state
   const [form, setForm] = useState({
     default_currency: 'USD',
@@ -83,8 +86,22 @@ export default function SalesConfigPage() {
     currency_code: '',
     instructions: '',
     requires_reference: true,
-    is_active: true
+    is_active: true,
+    sync_to_quick: true
   })
+
+  // Check if VerumQuick integration is active
+  useEffect(() => {
+    import('@/lib/api').then(({ fetchWithAuth }) => {
+      fetchWithAuth<any>('/api/integrations/quick/status')
+        .then(res => {
+          if (res?.is_connected) {
+            setIsQuickConnected(true)
+          }
+        })
+        .catch(() => {})
+    })
+  }, [])
 
   useEffect(() => {
     if (config) {
@@ -184,7 +201,8 @@ export default function SalesConfigPage() {
       currency_code: '',
       instructions: '',
       requires_reference: true,
-      is_active: true
+      is_active: true,
+      sync_to_quick: isQuickConnected
     })
     setIsMethodModalOpen(true)
   }
@@ -198,7 +216,8 @@ export default function SalesConfigPage() {
       currency_code: method.currency_code || '',
       instructions: method.instructions || '',
       requires_reference: method.requires_reference ?? true,
-      is_active: method.is_active ?? true
+      is_active: method.is_active ?? true,
+      sync_to_quick: isQuickConnected
     })
     setIsMethodModalOpen(true)
   }
@@ -221,7 +240,8 @@ export default function SalesConfigPage() {
             currency_code: methodForm.currency_code || null,
             instructions: methodForm.instructions.trim(),
             requires_reference: methodForm.requires_reference,
-            is_active: methodForm.is_active
+            is_active: methodForm.is_active,
+            sync_to_quick: methodForm.sync_to_quick
           }
         })
       } else {
@@ -231,7 +251,8 @@ export default function SalesConfigPage() {
           currency_code: methodForm.currency_code || undefined,
           instructions: methodForm.instructions.trim(),
           requires_reference: methodForm.requires_reference,
-          is_active: methodForm.is_active
+          is_active: methodForm.is_active,
+          sync_to_quick: methodForm.sync_to_quick
         })
       }
       setIsMethodModalOpen(false)
@@ -904,6 +925,33 @@ export default function SalesConfigPage() {
                     Método de pago activo
                   </span>
                 </label>
+
+                {isQuickConnected && (
+                  <div 
+                    onClick={() => setMethodForm({...methodForm, sync_to_quick: !methodForm.sync_to_quick})}
+                    className={`flex items-start gap-3 p-3 rounded-xl border transition-all duration-200 cursor-pointer mt-2 ${
+                      methodForm.sync_to_quick 
+                        ? 'bg-primary/5 border-primary/40 shadow-sm' 
+                        : 'bg-surface-raised border-border hover:border-border-strong'
+                    }`}
+                  >
+                    <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all duration-200 ${
+                      methodForm.sync_to_quick
+                        ? 'bg-primary border-primary text-white shadow-sm'
+                        : 'border-border-strong bg-surface hover:border-primary/50'
+                    }`}>
+                      {methodForm.sync_to_quick && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                    </div>
+                    <div className="flex-1 select-none">
+                      <p className="text-xs font-bold text-text-primary flex items-center gap-1.5">
+                        <TrendingUp className="w-3.5 h-3.5 text-primary" /> Sincronizar en VerumQuick
+                      </p>
+                      <p className="text-[11px] text-text-secondary mt-0.5 leading-relaxed">
+                        Al guardar, se creará o actualizará automáticamente como forma de pago en tu POS de VerumQuick.
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-border">

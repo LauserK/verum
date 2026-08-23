@@ -209,6 +209,7 @@ class PaymentMethodCreate(BaseModel):
     is_active: bool = True
     requires_reference: bool = True
     position: int = 0
+    sync_to_quick: bool = False
 
 class PaymentMethodUpdate(BaseModel):
     name: Optional[str] = None
@@ -218,6 +219,7 @@ class PaymentMethodUpdate(BaseModel):
     is_active: Optional[bool] = None
     requires_reference: Optional[bool] = None
     position: Optional[int] = None
+    sync_to_quick: Optional[bool] = False
 
 class PaymentMethodOut(BaseModel):
     id: UUID
