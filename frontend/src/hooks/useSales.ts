@@ -9,7 +9,28 @@ export const salesKeys = {
     paymentMethods: () => [...salesKeys.all, 'payment-methods'] as const,
     taxes: (activeOnly?: boolean) => [...salesKeys.all, 'taxes', { activeOnly }] as const,
     floorPlans: (venueId?: string) => [...salesKeys.all, 'floor-plans', { venueId }] as const,
+    categories: () => [...salesKeys.all, 'categories'] as const,
+    items: (categoryId?: string, activeOnly?: boolean) => [...salesKeys.all, 'items', { categoryId, activeOnly }] as const,
 }
+
+// -- Catalog: Categories & Items --
+export function useCategories() {
+    return useQuery({
+        queryKey: salesKeys.categories(),
+        queryFn: salesApi.getSaleCategories,
+    })
+}
+
+export const useSaleCategories = useCategories
+
+export function useSalesItems(categoryId?: string, activeOnly: boolean = true) {
+    return useQuery({
+        queryKey: salesKeys.items(categoryId, activeOnly),
+        queryFn: () => salesApi.getSaleItems(categoryId === 'all' ? undefined : categoryId, activeOnly),
+    })
+}
+
+export const useSaleItems = useSalesItems
 
 // -- Customers --
 export function useCustomers() {
