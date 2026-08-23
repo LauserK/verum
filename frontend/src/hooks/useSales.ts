@@ -226,7 +226,62 @@ export function useCreateTable() {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: ({ planId, data }: { planId: string; data: Partial<TableItem> }) => salesApi.createTable(planId, data),
-        onSuccess: () => {
+        onMutate: async ({ planId, data }) => {
+            await queryClient.cancelQueries({ queryKey: ['sales', 'floor-plans'] })
+            const previousPlans = queryClient.getQueryData<FloorPlan[]>(['sales', 'floor-plans'])
+
+            const tempId = `temp-${Date.now()}`
+            const optimisticTable: TableItem = {
+                id: tempId,
+                floor_plan_id: planId,
+                name: data.name || 'Mesa',
+                shape: data.shape || 'rectangle',
+                x: data.x || 0,
+                y: data.y || 0,
+                width: data.width || 80,
+                height: data.height || 80,
+                capacity: data.capacity || 4,
+                is_active: data.is_active ?? true,
+                created_at: new Date().toISOString(),
+            }
+
+            queryClient.setQueriesData<FloorPlan[]>({ queryKey: ['sales', 'floor-plans'] }, (old) => {
+                if (!old) return old
+                return old.map((plan) => {
+                    if (plan.id === planId) {
+                        return {
+                            ...plan,
+                            tables: [...(plan.tables || []), optimisticTable],
+                        }
+                    }
+                    return plan
+                })
+            })
+
+            return { previousPlans, tempId }
+        },
+        onError: (_err, _vars, context) => {
+            if (context?.previousPlans) {
+                queryClient.setQueriesData({ queryKey: ['sales', 'floor-plans'] }, context.previousPlans)
+            }
+        },
+        onSuccess: (newTable, { planId }, context) => {
+            // Replace temporary optimistic table with actual database record
+            queryClient.setQueriesData<FloorPlan[]>({ queryKey: ['sales', 'floor-plans'] }, (old) => {
+                if (!old) return old
+                return old.map((plan) => {
+                    if (plan.id === planId) {
+                        const filtered = (plan.tables || []).filter((t) => t.id !== context?.tempId)
+                        return {
+                            ...plan,
+                            tables: [...filtered, newTable],
+                        }
+                    }
+                    return plan
+                })
+            })
+        },
+        onSettled: () => {
             queryClient.invalidateQueries({ queryKey: ['sales', 'floor-plans'] })
         },
     })
@@ -236,7 +291,26 @@ export function useUpdateTable() {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: ({ tableId, data }: { tableId: string; data: Partial<TableItem> }) => salesApi.updateTable(tableId, data),
-        onSuccess: () => {
+        onMutate: async ({ tableId, data }) => {
+            await queryClient.cancelQueries({ queryKey: ['sales', 'floor-plans'] })
+            const previousPlans = queryClient.getQueryData<FloorPlan[]>(['sales', 'floor-plans'])
+
+            queryClient.setQueriesData<FloorPlan[]>({ queryKey: ['sales', 'floor-plans'] }, (old) => {
+                if (!old) return old
+                return old.map((plan) => ({
+                    ...plan,
+                    tables: (plan.tables || []).map((t) => (t.id === tableId ? { ...t, ...data } : t)),
+                }))
+            })
+
+            return { previousPlans }
+        },
+        onError: (_err, _vars, context) => {
+            if (context?.previousPlans) {
+                queryClient.setQueriesData({ queryKey: ['sales', 'floor-plans'] }, context.previousPlans)
+            }
+        },
+        onSettled: () => {
             queryClient.invalidateQueries({ queryKey: ['sales', 'floor-plans'] })
         },
     })
@@ -246,7 +320,26 @@ export function useDeleteTable() {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: (tableId: string) => salesApi.deleteTable(tableId),
-        onSuccess: () => {
+        onMutate: async (tableId) => {
+            await queryClient.cancelQueries({ queryKey: ['sales', 'floor-plans'] })
+            const previousPlans = queryClient.getQueryData<FloorPlan[]>(['sales', 'floor-plans'])
+
+            queryClient.setQueriesData<FloorPlan[]>({ queryKey: ['sales', 'floor-plans'] }, (old) => {
+                if (!old) return old
+                return old.map((plan) => ({
+                    ...plan,
+                    tables: (plan.tables || []).filter((t) => t.id !== tableId),
+                }))
+            })
+
+            return { previousPlans }
+        },
+        onError: (_err, _vars, context) => {
+            if (context?.previousPlans) {
+                queryClient.setQueriesData({ queryKey: ['sales', 'floor-plans'] }, context.previousPlans)
+            }
+        },
+        onSettled: () => {
             queryClient.invalidateQueries({ queryKey: ['sales', 'floor-plans'] })
         },
     })

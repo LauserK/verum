@@ -144,7 +144,7 @@ export default function FloorPlansAdminPage() {
   }
 
   // Table Management Handlers
-  const handleAddTable = async () => {
+  const handleAddTable = () => {
     if (!selectedPlanId) return
     const tableNumber = currentTables.length + 1
     const newTableData: Partial<TableItem> = {
@@ -158,16 +158,22 @@ export default function FloorPlansAdminPage() {
       is_active: true,
     }
 
-    const created = await createTable.mutateAsync({
-      planId: selectedPlanId,
-      data: newTableData,
-    })
-    if (created?.id) {
-      setSelectedTableId(created.id)
-    }
+    createTable.mutate(
+      {
+        planId: selectedPlanId,
+        data: newTableData,
+      },
+      {
+        onSuccess: (created) => {
+          if (created?.id) {
+            setSelectedTableId(created.id)
+          }
+        },
+      }
+    )
   }
 
-  const handleDuplicateTable = async (table: TableItem) => {
+  const handleDuplicateTable = (table: TableItem) => {
     if (!selectedPlanId) return
     const newTableData: Partial<TableItem> = {
       name: `${table.name} (Copia)`,
@@ -180,13 +186,19 @@ export default function FloorPlansAdminPage() {
       is_active: table.is_active,
     }
 
-    const created = await createTable.mutateAsync({
-      planId: selectedPlanId,
-      data: newTableData,
-    })
-    if (created?.id) {
-      setSelectedTableId(created.id)
-    }
+    createTable.mutate(
+      {
+        planId: selectedPlanId,
+        data: newTableData,
+      },
+      {
+        onSuccess: (created) => {
+          if (created?.id) {
+            setSelectedTableId(created.id)
+          }
+        },
+      }
+    )
   }
 
   const handleUpdateTableField = async (tableId: string, field: keyof TableItem, value: any) => {
