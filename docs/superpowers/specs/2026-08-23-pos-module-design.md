@@ -61,3 +61,33 @@ El POS está desacoplado del hardware físico de impresión para evitar bloqueos
 ### 5.2 Manejo de Errores
 - Si la impresora falla (sin papel, apagada), el trabajo se marca como fallido.
 - El POS muestra una notificación de alerta al cajero, permitiendo solucionar el problema físico y "Reintentar", o cambiar el tipo de documento a "Nota de Entrega" si la máquina se dañó permanentemente.
+
+## 6. Milestones de Implementación
+
+Para ejecutar la construcción del módulo POS de manera ordenada, se proponen los siguientes hitos:
+
+- **Milestone 1: Admin & Configuraciones Base**
+  - Creador interactivo del Plano de Planta (Zonas, tamaños y posiciones de mesas).
+  - Configuración de Workstations (Estaciones de trabajo) y sus Modos de Venta permitidos.
+  - Configuración de métodos de pago, monedas base y requerimientos del cliente (CRM).
+
+- **Milestone 2: Base UI y Catálogo Rápido (POS Frontend)**
+  - Implementación del Layout Principal (Header, Menú Izquierdo, Panel Derecho de Minuta).
+  - Integración del Catálogo de Productos y selector de categorías.
+  - Gestión de Estado Local (Zustand/Context) para agregar, editar y eliminar items del "Borrador".
+
+- **Milestone 3: Checkout Multimoneda y Pagos**
+  - Pantalla inicial de cobro (Pago Completo, Pago Mixto, CXC).
+  - Calculadora de Pago Mixto con dualidad de monedas (Base/Secundaria) y conversión en tiempo real.
+  - Registro de pagos y cálculo de vueltos.
+
+- **Milestone 4: Servicio de Mesa, Asientos y Flujo Abierto**
+  - Desarrollo del mapa interactivo en el POS a partir de la configuración del Admin.
+  - Flujo de apertura de mesas, asignación de cliente y agrupación de pedidos por "Asientos".
+  - División de cuentas (Split bill) al momento de cobrar.
+  - Dejar órdenes en estado abierto para Pick-up/Delivery.
+
+- **Milestone 5: Integración de Spooler y Hardware**
+  - Lógica de emisión según la configuración de la estación (Fiscal / Nota de Entrega).
+  - Envío de comandos asíncronos al spooler local.
+  - Centro de notificaciones en el header para manejo de errores de hardware y reintentos.
