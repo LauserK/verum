@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { salesApi, Customer, CreateInvoicePayload, TenantBillingConfig, PaymentMethod, Tax } from '@/lib/api/sales'
+import { salesApi, Customer, CreateInvoicePayload, TenantBillingConfig, PaymentMethod, Tax, FloorPlan, TableItem } from '@/lib/api/sales'
 
 export const salesKeys = {
     all: ['sales'] as const,
@@ -8,6 +8,7 @@ export const salesKeys = {
     config: () => [...salesKeys.all, 'config'] as const,
     paymentMethods: () => [...salesKeys.all, 'payment-methods'] as const,
     taxes: (activeOnly?: boolean) => [...salesKeys.all, 'taxes', { activeOnly }] as const,
+    floorPlans: (venueId?: string) => [...salesKeys.all, 'floor-plans', { venueId }] as const,
 }
 
 // -- Customers --
@@ -179,6 +180,74 @@ export function useDeleteTax() {
         mutationFn: (id: string) => salesApi.deleteTax(id),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: salesKeys.all })
+        },
+    })
+}
+
+// -- Floor Plans & Tables --
+export function useFloorPlans(venueId?: string) {
+    return useQuery({
+        queryKey: salesKeys.floorPlans(venueId),
+        queryFn: () => salesApi.getFloorPlans(venueId),
+    })
+}
+
+export function useCreateFloorPlan() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (data: Partial<FloorPlan>) => salesApi.createFloorPlan(data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['sales', 'floor-plans'] })
+        },
+    })
+}
+
+export function useUpdateFloorPlan() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ id, data }: { id: string; data: Partial<FloorPlan> }) => salesApi.updateFloorPlan(id, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['sales', 'floor-plans'] })
+        },
+    })
+}
+
+export function useDeleteFloorPlan() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (id: string) => salesApi.deleteFloorPlan(id),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['sales', 'floor-plans'] })
+        },
+    })
+}
+
+export function useCreateTable() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ planId, data }: { planId: string; data: Partial<TableItem> }) => salesApi.createTable(planId, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['sales', 'floor-plans'] })
+        },
+    })
+}
+
+export function useUpdateTable() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ tableId, data }: { tableId: string; data: Partial<TableItem> }) => salesApi.updateTable(tableId, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['sales', 'floor-plans'] })
+        },
+    })
+}
+
+export function useDeleteTable() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (tableId: string) => salesApi.deleteTable(tableId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['sales', 'floor-plans'] })
         },
     })
 }

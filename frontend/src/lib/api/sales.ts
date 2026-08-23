@@ -194,7 +194,28 @@ export const salesApi = {
         method: 'PATCH',
         body: JSON.stringify(data),
     }),
-    deleteModifierGroup: (id: string) => fetchWithAuth<{ status: string; id: string }>(`/sales/modifier-groups/${id}`, {
+    // Floor Plans & Tables
+    getFloorPlans: (venueId?: string) => fetchWithAuth<FloorPlan[]>(`/sales/floor-plans${venueId ? `?venue_id=${venueId}` : ''}`),
+    createFloorPlan: (data: Partial<FloorPlan>) => fetchWithAuth<FloorPlan>('/sales/floor-plans', {
+        method: 'POST',
+        body: JSON.stringify(data),
+    }),
+    updateFloorPlan: (id: string, data: Partial<FloorPlan>) => fetchWithAuth<FloorPlan>(`/sales/floor-plans/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    }),
+    deleteFloorPlan: (id: string) => fetchWithAuth<{ status: string }>(`/sales/floor-plans/${id}`, {
+        method: 'DELETE',
+    }),
+    createTable: (planId: string, data: Partial<TableItem>) => fetchWithAuth<TableItem>(`/sales/floor-plans/${planId}/tables`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+    }),
+    updateTable: (tableId: string, data: Partial<TableItem>) => fetchWithAuth<TableItem>(`/sales/tables/${tableId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    }),
+    deleteTable: (tableId: string) => fetchWithAuth<{ status: string }>(`/sales/tables/${tableId}`, {
         method: 'DELETE',
     }),
 }
@@ -313,5 +334,31 @@ export interface Tax {
     rate: number
     is_active: boolean
     created_at?: string
+}
+
+export interface TableItem {
+    id: string
+    floor_plan_id: string
+    name: string
+    shape: 'rectangle' | 'circle'
+    x: number
+    y: number
+    width: number
+    height: number
+    capacity: number
+    is_active: boolean
+    created_at?: string
+}
+
+export interface FloorPlan {
+    id: string
+    org_id?: string
+    venue_id: string
+    name: string
+    width: number
+    height: number
+    tables?: TableItem[]
+    created_at?: string
+    updated_at?: string
 }
 
