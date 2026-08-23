@@ -32,12 +32,14 @@ import {
   AlertCircle,
   Copy,
   ChevronRight,
+  ChevronDown,
+  Building2,
 } from 'lucide-react'
 
 const GRID_SNAP = 10
 
 export default function FloorPlansAdminPage() {
-  const { selectedVenueId, selectedVenueName } = useVenue()
+  const { selectedVenueId, selectedVenueName, availableVenues, setSelectedVenueId } = useVenue()
   const { data: floorPlans = [], isLoading } = useFloorPlans(selectedVenueId || undefined)
 
   const createFloorPlan = useCreateFloorPlan()
@@ -337,12 +339,30 @@ export default function FloorPlansAdminPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <div className="flex items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2.5">
             <h1 className="text-2xl font-bold tracking-tight text-text-primary">Planos de Mesas</h1>
-            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-primary/10 text-primary border border-primary/20 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-              {selectedVenueName || 'Sede no seleccionada'}
-            </span>
+            
+            {/* Interactive Venue Switcher */}
+            <div className="relative inline-flex items-center">
+              <Building2 className="w-3.5 h-3.5 text-primary absolute left-3 pointer-events-none" />
+              <select
+                value={selectedVenueId || ''}
+                onChange={(e) => {
+                  setSelectedVenueId(e.target.value)
+                  setSelectedPlanId(null)
+                  setSelectedTableId(null)
+                }}
+                className="pl-8 pr-7 py-1.5 rounded-full text-xs font-semibold bg-primary/10 text-primary border border-primary/20 hover:bg-primary/15 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary appearance-none"
+                aria-label="Seleccionar sede"
+              >
+                {availableVenues.map((v) => (
+                  <option key={v.id} value={v.id} className="bg-surface text-text-primary">
+                    Sede: {v.name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 text-primary absolute right-2.5 pointer-events-none opacity-70" />
+            </div>
           </div>
           <p className="text-sm text-text-secondary mt-1 max-w-2xl">
             Diseña la distribución espacial interactiva de tu salón, terraza o barra para el Punto de Venta (POS).
