@@ -340,9 +340,9 @@ export default function FloorPlansAdminPage() {
         <div className="flex items-center gap-3">
           <button
             onClick={handleOpenCreateZone}
-            className="flex items-center gap-2 px-4 py-2.5 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary-hover shadow-sm hover:shadow transition-all active:scale-95 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-primary text-text-inverse hover:bg-primary-hover rounded-xl text-xs font-bold transition-all shadow-sm shadow-primary/20 active:scale-95 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
           >
-            <Plus className="w-4 h-4" /> Nueva Zona
+            <Plus className="w-3.5 h-3.5" /> Nueva Zona
           </button>
         </div>
       </div>
@@ -365,7 +365,7 @@ export default function FloorPlansAdminPage() {
               aria-selected={isSelected}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer border select-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
                 isSelected
-                  ? 'bg-primary text-white border-primary shadow-sm'
+                  ? 'bg-primary text-text-inverse border-primary shadow-sm shadow-primary/20'
                   : 'bg-surface text-text-secondary border-border hover:text-text-primary hover:border-text-secondary/30'
               }`}
               onClick={() => {
@@ -429,7 +429,7 @@ export default function FloorPlansAdminPage() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleAddTable}
-                  className="flex items-center gap-2 px-3.5 py-1.5 bg-primary text-white text-xs font-semibold rounded-lg hover:bg-primary-hover transition-all shadow-sm active:scale-95 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-text-inverse hover:bg-primary-hover rounded-lg text-xs font-bold transition-all shadow-sm shadow-primary/20 active:scale-95 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
                 >
                   <Plus className="w-3.5 h-3.5" /> Agregar Mesa
                 </button>
@@ -781,7 +781,7 @@ export default function FloorPlansAdminPage() {
           </p>
           <button
             onClick={handleOpenCreateZone}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary-hover shadow-sm hover:shadow transition-all active:scale-95"
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary text-text-inverse hover:bg-primary-hover rounded-xl text-xs font-bold transition-all shadow-sm shadow-primary/20 active:scale-95"
           >
             <Plus className="w-4 h-4" /> Crear Zona Ahora
           </button>
@@ -849,16 +849,16 @@ export default function FloorPlansAdminPage() {
                 <button
                   type="button"
                   onClick={() => setIsZoneModalOpen(false)}
-                  className="px-4 py-2.5 bg-surface-raised border border-border text-text-secondary hover:text-text-primary text-sm font-semibold rounded-xl transition-colors"
+                  className="px-4 py-2 bg-surface-raised border border-border text-text-secondary hover:text-text-primary text-xs font-semibold rounded-xl transition-colors"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={createFloorPlan.isPending || updateFloorPlan.isPending}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary-hover shadow-sm transition-all disabled:opacity-50 active:scale-95"
+                  className="flex items-center gap-1.5 px-4 py-2 bg-primary text-text-inverse hover:bg-primary-hover rounded-xl text-xs font-bold transition-all shadow-sm shadow-primary/20 disabled:opacity-50 active:scale-95"
                 >
-                  <Save className="w-4 h-4" /> Guardar Zona
+                  <Save className="w-3.5 h-3.5" /> Guardar Zona
                 </button>
               </div>
             </form>
