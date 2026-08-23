@@ -86,13 +86,13 @@ async def get_payment_methods(org_id: str, db):
     return res.data or []
 
 async def create_workstation(org_id: str, payload: WorkstationCreate, db):
-    data = payload.model_dump()
+    data = payload.model_dump(mode="json")
     data["org_id"] = org_id
     res = db.table("workstations").insert(data).execute()
     return res.data[0]
 
 async def update_workstation(org_id: str, workstation_id: str, payload: WorkstationUpdate, db):
-    update_data = payload.model_dump(exclude_unset=True)
+    update_data = payload.model_dump(mode="json", exclude_unset=True)
     if not update_data:
         res = db.table("workstations").select("*").eq("id", workstation_id).eq("org_id", org_id).execute()
         if not res.data:
@@ -729,10 +729,8 @@ async def get_floor_plan(org_id: str, plan_id: str, db: Any = None):
     return plan
 
 async def create_floor_plan(org_id: str, payload: FloorPlanCreate, db: Any = None):
-    data = payload.model_dump()
+    data = payload.model_dump(mode="json")
     data["org_id"] = org_id
-    if "venue_id" in data and data["venue_id"] is not None:
-        data["venue_id"] = str(data["venue_id"])
     res = db.table("floor_plans").insert(data).execute()
     if not res.data:
         raise HTTPException(400, "Could not create floor plan")
@@ -741,9 +739,7 @@ async def create_floor_plan(org_id: str, payload: FloorPlanCreate, db: Any = Non
     return plan
 
 async def update_floor_plan(org_id: str, plan_id: str, payload: FloorPlanUpdate, db: Any = None):
-    update_data = payload.model_dump(exclude_unset=True)
-    if "venue_id" in update_data and update_data["venue_id"] is not None:
-        update_data["venue_id"] = str(update_data["venue_id"])
+    update_data = payload.model_dump(mode="json", exclude_unset=True)
 
     if not update_data:
         return await get_floor_plan(org_id, plan_id, db)
@@ -767,7 +763,7 @@ async def create_table(org_id: str, plan_id: str, payload: TableCreate, db: Any 
     if not plan_res.data:
         raise HTTPException(404, "Floor plan not found")
 
-    data = payload.model_dump()
+    data = payload.model_dump(mode="json")
     data["floor_plan_id"] = plan_id
     res = db.table("tables").insert(data).execute()
     if not res.data:
@@ -775,7 +771,7 @@ async def create_table(org_id: str, plan_id: str, payload: TableCreate, db: Any 
     return res.data[0]
 
 async def update_table(org_id: str, table_id: str, payload: TableUpdate, db: Any = None):
-    update_data = payload.model_dump(exclude_unset=True)
+    update_data = payload.model_dump(mode="json", exclude_unset=True)
     if not update_data:
         res = db.table("tables").select("*").eq("id", table_id).execute()
         if not res.data:
