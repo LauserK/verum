@@ -6,7 +6,8 @@ from app.sales.schemas import (
     TenantBillingConfigUpdate, PaymentMethodCreate, WorkstationCreate,
     SaleItemCreate, SaleItemUpdate, SaleItemVariantCreate, SaleItemComponentCreate,
     SaleCategoryCreate, SaleCategoryUpdate, SaleModifierGroupCreate,
-    CustomerCreate, CustomerUpdate, DocumentSequenceCreate
+    CustomerCreate, CustomerUpdate, DocumentSequenceCreate,
+    FloorPlanCreate, FloorPlanUpdate, TableCreate, TableUpdate
 )
 
 # --- Config Service ---
@@ -673,5 +674,106 @@ async def cascade_sale_items_cost_from_inventory(db, org_id: str, item_id: str):
                 db.table("sale_item_variants").update({
                     "food_cost": round(var_food_cost, 2)
                 }).eq("id", var_id).execute()
+
+# --- Floor Plans & Tables ---
+
+async def list_floor_plans(org_id: str, venue_id: Optional[str] = None, db: Any = None):
+    query = db.table("floor_plans").select("*").eq("org_id", org_id)
+    if venue_id:
+        query = query.eq("venue_id", str(venue_id))
+    res = query.order("created_at").execute()
+    plans = res.data or []
+
+    if not plans:
+        return []
+
+    plan_ids = [p["id"] for p in plans]
+    tables_res = db.table("tables").select("*").in_("floor_plan_id", plan_ids).execute()
+    tables = tables_res.data or []
+
+    tables_by_plan: Dict[str, List[dict]] = {p["id"]: [] for p in plans}
+    for t in tables:
+        pid = str(t["floor_plan_id"])
+        if pid in tables_by_plan:
+            tables_by_plan[pid].append(t)
+
+    for p in plans:
+        p["tables"] = tables_by_plan.get(str(p["id"]), [])
+
+    return plans
+
+async def get_floor_plan(org_id: str, plan_id: str, db: Any = None):
+    res = db.table("floor_plans").select("*").eq("id", plan_id).eq("org_id", org_id).execute()
+    if not res.data:
+        raise HTTPException(404, "Floor plan not found")
+    plan = res.data[0]
+
+    tables_res = db.table("tables").select("*").eq("floor_plan_id", plan_id).execute()
+    plan["tables"] = tables_res.data or []
+    return plan
+
+async def create_floor_plan(org_id: str, payload: FloorPlanCreate, db: Any = None):
+    data = payload.model_dump()
+    data["org_id"] = org_id
+    if "venue_id" in data and data["venue_id"] is not None:
+        data["venue_id"] = str(data["venue_id"])
+    res = db.table("floor_plans").insert(data).execute()
+    if not res.data:
+        raise HTTPException(400, "Could not create floor plan")
+    plan = res.data[0]
+    plan["tables"] = []
+    return plan
+
+async def update_floor_plan(org_id: str, plan_id: str, payload: FloorPlanUpdate, db: Any = None):
+    update_data = payload.model_dump(exclude_unset=True)
+    if "venue_id" in update_data and update_data["venue_id"] is not None:
+        update_data["venue_id"] = str(update_data["venue_id"])
+
+    if not update_data:
+        return await get_floor_plan(org_id, plan_id, db)
+
+    res = db.table("floor_plans").update(update_data).eq("id", plan_id).eq("org_id", org_id).execute()
+    if not res.data:
+        raise HTTPException(404, "Floor plan not found")
+    plan = res.data[0]
+
+    tables_res = db.table("tables").select("*").eq("floor_plan_id", plan_id).execute()
+    plan["tables"] = tables_res.data or []
+    return plan
+
+async def delete_floor_plan(org_id: str, plan_id: str, db: Any = None):
+    res = db.table("floor_plans").delete().eq("id", plan_id).eq("org_id", org_id).execute()
+    return {"status": "deleted"}
+
+async def create_table(org_id: str, plan_id: str, payload: TableCreate, db: Any = None):
+    # Verify plan belongs to org
+    plan_res = db.table("floor_plans").select("id").eq("id", plan_id).eq("org_id", org_id).execute()
+    if not plan_res.data:
+        raise HTTPException(404, "Floor plan not found")
+
+    data = payload.model_dump()
+    data["floor_plan_id"] = plan_id
+    res = db.table("tables").insert(data).execute()
+    if not res.data:
+        raise HTTPException(400, "Could not create table")
+    return res.data[0]
+
+async def update_table(org_id: str, table_id: str, payload: TableUpdate, db: Any = None):
+    update_data = payload.model_dump(exclude_unset=True)
+    if not update_data:
+        res = db.table("tables").select("*").eq("id", table_id).execute()
+        if not res.data:
+            raise HTTPException(404, "Table not found")
+        return res.data[0]
+
+    res = db.table("tables").update(update_data).eq("id", table_id).execute()
+    if not res.data:
+        raise HTTPException(404, "Table not found")
+    return res.data[0]
+
+async def delete_table(org_id: str, table_id: str, db: Any = None):
+    res = db.table("tables").delete().eq("id", table_id).execute()
+    return {"status": "deleted"}
+
 
 

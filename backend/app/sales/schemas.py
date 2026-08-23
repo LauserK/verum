@@ -558,5 +558,59 @@ class TaxOut(BaseModel):
     created_at: Optional[Union[dt_datetime, str]] = None
 
 
+# --- Floor Plans & Tables ---
+
+class TableBase(BaseModel):
+    name: str
+    shape: Literal['rectangle', 'circle'] = 'rectangle'
+    x: int = 0
+    y: int = 0
+    width: int = 60
+    height: int = 60
+    capacity: int = 2
+    is_active: bool = True
+
+class TableCreate(TableBase):
+    pass
+
+class TableUpdate(BaseModel):
+    name: Optional[str] = None
+    shape: Optional[Literal['rectangle', 'circle']] = None
+    x: Optional[int] = None
+    y: Optional[int] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    capacity: Optional[int] = None
+    is_active: Optional[bool] = None
+
+class TableOut(TableBase):
+    id: UUID
+    floor_plan_id: UUID
+    created_at: Optional[Union[dt_datetime, str]] = None
+
+class FloorPlanBase(BaseModel):
+    venue_id: UUID
+    name: str
+    width: int = 800
+    height: int = 600
+
+class FloorPlanCreate(FloorPlanBase):
+    pass
+
+class FloorPlanUpdate(BaseModel):
+    venue_id: Optional[UUID] = None
+    name: Optional[str] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+
+class FloorPlanOut(FloorPlanBase):
+    id: UUID
+    org_id: UUID
+    tables: List[TableOut] = []
+    created_at: Optional[Union[dt_datetime, str]] = None
+    updated_at: Optional[Union[dt_datetime, str]] = None
+
+
+
 
 

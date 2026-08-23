@@ -18,7 +18,9 @@ from app.sales.schemas import (
     PaymentCreate, PaymentOut,
     CurrencyCreate, CurrencyUpdate, CurrencyOut,
     ExchangeRateCreate, ExchangeRateOut,
-    TaxCreate, TaxUpdate, TaxOut
+    TaxCreate, TaxUpdate, TaxOut,
+    FloorPlanCreate, FloorPlanUpdate, FloorPlanOut,
+    TableCreate, TableUpdate, TableOut
 )
 import app.sales.invoice_service as invoice_svc
 import app.sales.payment_service as payment_svc
@@ -118,7 +120,76 @@ async def list_workstations(
 ):
     return await sales_svc.get_workstations(org_id, venue_id, db)
 
+# --- Floor Plans & Tables ---
+
+@router.get("/floor-plans", response_model=List[FloorPlanOut])
+async def list_floor_plans(
+    venue_id: Optional[str] = None,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_config"))
+):
+    return await sales_svc.list_floor_plans(org_id, venue_id, db)
+
+@router.post("/floor-plans", response_model=FloorPlanOut)
+async def create_floor_plan(
+    payload: FloorPlanCreate,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_config"))
+):
+    return await sales_svc.create_floor_plan(org_id, payload, db)
+
+@router.patch("/floor-plans/{plan_id}", response_model=FloorPlanOut)
+async def update_floor_plan(
+    plan_id: str,
+    payload: FloorPlanUpdate,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_config"))
+):
+    return await sales_svc.update_floor_plan(org_id, plan_id, payload, db)
+
+@router.delete("/floor-plans/{plan_id}")
+async def delete_floor_plan(
+    plan_id: str,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_config"))
+):
+    return await sales_svc.delete_floor_plan(org_id, plan_id, db)
+
+@router.post("/floor-plans/{plan_id}/tables", response_model=TableOut)
+async def create_table(
+    plan_id: str,
+    payload: TableCreate,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_config"))
+):
+    return await sales_svc.create_table(org_id, plan_id, payload, db)
+
+@router.patch("/tables/{table_id}", response_model=TableOut)
+async def update_table(
+    table_id: str,
+    payload: TableUpdate,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_config"))
+):
+    return await sales_svc.update_table(org_id, table_id, payload, db)
+
+@router.delete("/tables/{table_id}")
+async def delete_table(
+    table_id: str,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_config"))
+):
+    return await sales_svc.delete_table(org_id, table_id, db)
+
 # --- Catalog: Categories ---
+
 
 @router.get("/categories", response_model=List[SaleCategoryOut])
 async def list_categories(
