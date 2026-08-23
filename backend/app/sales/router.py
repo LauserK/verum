@@ -8,7 +8,7 @@ import app.sales.service as sales_svc
 from app.sales.schemas import (
     TenantBillingConfigUpdate, TenantBillingConfigOut,
     PaymentMethodCreate, PaymentMethodOut,
-    WorkstationCreate, WorkstationOut,
+    WorkstationCreate, WorkstationUpdate, WorkstationOut,
     SaleCategoryCreate, SaleCategoryUpdate, SaleCategoryOut,
     SaleItemCreate, SaleItemUpdate, SaleItemOut,
     SaleModifierGroupCreate, SaleModifierGroupOut,
@@ -119,6 +119,25 @@ async def list_workstations(
     _ = Depends(require_permission("sales.manage_workstations"))
 ):
     return await sales_svc.get_workstations(org_id, venue_id, db)
+
+@router.patch("/workstations/{workstation_id}", response_model=WorkstationOut)
+async def update_workstation(
+    workstation_id: str,
+    payload: WorkstationUpdate,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_workstations"))
+):
+    return await sales_svc.update_workstation(org_id, workstation_id, payload, db)
+
+@router.delete("/workstations/{workstation_id}")
+async def delete_workstation(
+    workstation_id: str,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_workstations"))
+):
+    return await sales_svc.delete_workstation(org_id, workstation_id, db)
 
 # --- Floor Plans & Tables ---
 

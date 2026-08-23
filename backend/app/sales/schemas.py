@@ -183,23 +183,34 @@ class SaleItemUpdate(BaseModel):
 # --- Config: Workstations & Payment Methods ---
 
 class WorkstationCreate(BaseModel):
-    venue_id: UUID
     name: str
+    venue_id: Optional[UUID] = None
+    is_active: bool = True
     printer_type: Literal['none', 'thermal', 'fiscal'] = 'none'
     printer_config: dict = {}
     numbering_source: Literal['verum_sequence', 'fiscal_printer', 'external'] = 'verum_sequence'
-    is_active: bool = True
+    allowed_modes: Optional[List[str]] = ['tables', 'takeout', 'delivery', 'pickup', 'bar']
+
+class WorkstationUpdate(BaseModel):
+    name: Optional[str] = None
+    venue_id: Optional[UUID] = None
+    printer_type: Optional[Literal['none', 'thermal', 'fiscal']] = None
+    printer_config: Optional[dict] = None
+    numbering_source: Optional[Literal['verum_sequence', 'fiscal_printer', 'external']] = None
+    is_active: Optional[bool] = None
+    allowed_modes: Optional[List[str]] = None
 
 class WorkstationOut(BaseModel):
     id: UUID
     org_id: UUID
-    venue_id: UUID
     name: str
-    printer_type: str
-    printer_config: dict
-    numbering_source: str
-    is_active: bool
-    created_at: dt_datetime
+    venue_id: Optional[UUID] = None
+    printer_type: Optional[str] = 'none'
+    printer_config: Optional[dict] = {}
+    numbering_source: Optional[str] = 'verum_sequence'
+    is_active: bool = True
+    allowed_modes: Optional[List[str]] = None
+    created_at: Optional[Union[dt_datetime, str]] = None
 
 class PaymentMethodCreate(BaseModel):
     name: str

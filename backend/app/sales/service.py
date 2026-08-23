@@ -3,7 +3,7 @@ from uuid import UUID
 from fastapi import HTTPException
 from app.integrations.outbox import enqueue_event
 from app.sales.schemas import (
-    TenantBillingConfigUpdate, PaymentMethodCreate, WorkstationCreate,
+    TenantBillingConfigUpdate, PaymentMethodCreate, WorkstationCreate, WorkstationUpdate,
     SaleItemCreate, SaleItemUpdate, SaleItemVariantCreate, SaleItemComponentCreate,
     SaleCategoryCreate, SaleCategoryUpdate, SaleModifierGroupCreate,
     CustomerCreate, CustomerUpdate, DocumentSequenceCreate,
@@ -90,6 +90,22 @@ async def create_workstation(org_id: str, payload: WorkstationCreate, db):
     data["org_id"] = org_id
     res = db.table("workstations").insert(data).execute()
     return res.data[0]
+
+async def update_workstation(org_id: str, workstation_id: str, payload: WorkstationUpdate, db):
+    update_data = payload.model_dump(exclude_unset=True)
+    if not update_data:
+        res = db.table("workstations").select("*").eq("id", workstation_id).eq("org_id", org_id).execute()
+        if not res.data:
+            raise HTTPException(404, "Workstation not found")
+        return res.data[0]
+    res = db.table("workstations").update(update_data).eq("id", workstation_id).eq("org_id", org_id).execute()
+    if not res.data:
+        raise HTTPException(404, "Workstation not found")
+    return res.data[0]
+
+async def delete_workstation(org_id: str, workstation_id: str, db):
+    res = db.table("workstations").delete().eq("id", workstation_id).eq("org_id", org_id).execute()
+    return {"status": "deleted"}
 
 async def get_workstations(org_id: str, venue_id: Optional[str], db):
     query = db.table("workstations").select("*").eq("org_id", org_id)
