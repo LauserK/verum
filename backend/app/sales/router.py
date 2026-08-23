@@ -20,7 +20,8 @@ from app.sales.schemas import (
     ExchangeRateCreate, ExchangeRateOut,
     TaxCreate, TaxUpdate, TaxOut,
     FloorPlanCreate, FloorPlanUpdate, FloorPlanOut,
-    TableCreate, TableUpdate, TableOut
+    TableCreate, TableUpdate, TableOut,
+    PosSessionOpen, PosSessionOut
 )
 import app.sales.invoice_service as invoice_svc
 import app.sales.payment_service as payment_svc
@@ -138,6 +139,28 @@ async def delete_workstation(
     _ = Depends(require_permission("sales.manage_workstations"))
 ):
     return await sales_svc.delete_workstation(org_id, workstation_id, db)
+
+# --- POS Sessions ---
+
+@router.post("/sessions/open", response_model=PosSessionOut)
+async def open_pos_session(
+    payload: PosSessionOpen,
+    user = Depends(get_current_user),
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_config"))
+):
+    cashier_id = getattr(user, "id", None) or getattr(user, "user_id", None) or (user.get("id") if isinstance(user, dict) else None)
+    return await sales_svc.open_pos_session(org_id, cashier_id, payload, db)
+
+@router.get("/sessions/active", response_model=Optional[PosSessionOut])
+async def get_active_pos_session(
+    workstation_id: Optional[str] = None,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_config"))
+):
+    return await sales_svc.get_active_pos_session(org_id, workstation_id, db)
 
 # --- Floor Plans & Tables ---
 

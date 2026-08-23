@@ -11,7 +11,8 @@ import {
   LogOut, 
   UserCircle2,
   Receipt,
-  ArrowLeft
+  ArrowLeft,
+  MonitorCheck
 } from 'lucide-react'
 import { usePosStore, PosMode } from '@/store/posStore'
 import { useProfile } from '@/hooks/useProfile'
@@ -35,7 +36,7 @@ const POS_TABS: PosModeTab[] = [
 export default function PosTerminalPage() {
   const router = useRouter()
   const { data: profile } = useProfile()
-  const { posMode, setPosMode, activeTableName } = usePosStore()
+  const { posMode, setPosMode, activeTableName, activeWorkstationName } = usePosStore()
 
   return (
     <div className="h-screen w-screen flex flex-col bg-bg text-text-primary overflow-hidden select-none">
@@ -80,8 +81,14 @@ export default function PosTerminalPage() {
           })}
         </div>
 
-        {/* Right: Cashier profile chip, active table indicator, close session */}
+        {/* Right: Cashier profile chip, workstation chip, active table indicator, close session */}
         <div className="flex items-center gap-3">
+          {/* Active Workstation indicator */}
+          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-surface-raised border border-border text-xs text-text-secondary">
+            <MonitorCheck className="w-3.5 h-3.5 text-primary" />
+            <span className="font-semibold text-text-primary">{activeWorkstationName || 'Caja Principal'}</span>
+          </div>
+
           {/* Active Table indicator if in tables mode */}
           {posMode === 'tables' && (
             <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-primary/10 border border-primary/25 text-xs text-primary font-bold">

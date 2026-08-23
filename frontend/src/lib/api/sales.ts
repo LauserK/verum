@@ -232,6 +232,32 @@ export const salesApi = {
     deleteWorkstation: (id: string) => fetchWithAuth<{ status: string }>(`/sales/workstations/${id}`, {
         method: 'DELETE',
     }),
+
+    // POS Sessions
+    openPosSession: (data: { venue_id?: string | null; workstation_id?: string | null; opening_balance: number; opening_currency: string; notes?: string }) =>
+        fetchWithAuth<PosSession>('/sales/sessions/open', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        }),
+    getActivePosSession: (workstationId?: string) =>
+        fetchWithAuth<PosSession | null>(`/sales/sessions/active${workstationId ? `?workstation_id=${workstationId}` : ''}`),
+}
+
+export interface PosSession {
+    id: string
+    org_id: string
+    venue_id?: string | null
+    workstation_id?: string | null
+    cashier_id?: string | null
+    status: 'open' | 'closing' | 'closed'
+    opening_balance: number
+    opening_currency: string
+    closing_balance?: number | null
+    expected_balance?: number | null
+    difference?: number | null
+    notes?: string | null
+    opened_at?: string
+    closed_at?: string | null
 }
 
 export interface Workstation {

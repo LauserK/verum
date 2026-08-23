@@ -212,6 +212,28 @@ class WorkstationOut(BaseModel):
     allowed_modes: Optional[List[str]] = None
     created_at: Optional[Union[dt_datetime, str]] = None
 
+# --- POS Sessions ---
+
+class PosSessionOpen(BaseModel):
+    venue_id: Optional[UUID] = None
+    workstation_id: Optional[UUID] = None
+    opening_balance: Decimal = Decimal('0')
+    opening_currency: str = 'USD'
+    notes: Optional[str] = None
+
+class PosSessionOut(BaseModel):
+    id: UUID
+    org_id: UUID
+    venue_id: Optional[UUID] = None
+    workstation_id: Optional[UUID] = None
+    cashier_id: Optional[UUID] = None
+    status: str = 'open'
+    opening_balance: Decimal = Decimal('0')
+    opening_currency: str = 'USD'
+    notes: Optional[str] = None
+    opened_at: Optional[Union[dt_datetime, str]] = None
+    closed_at: Optional[Union[dt_datetime, str]] = None
+
 class PaymentMethodCreate(BaseModel):
     name: str
     method_type: Literal['cash', 'card', 'bank_transfer', 'mobile_payment', 'digital_wallet', 'crypto', 'other']

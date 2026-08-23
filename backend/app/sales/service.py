@@ -114,6 +114,26 @@ async def get_workstations(org_id: str, venue_id: Optional[str], db):
     res = query.execute()
     return res.data
 
+# --- POS Sessions ---
+
+async def open_pos_session(org_id: str, cashier_id: Optional[str], payload: PosSessionOpen, db):
+    data = payload.model_dump(mode="json")
+    data["org_id"] = org_id
+    if cashier_id:
+        data["cashier_id"] = str(cashier_id)
+    data["status"] = "open"
+    res = db.table("pos_sessions").insert(data).execute()
+    if not res.data:
+        raise HTTPException(400, "Could not open POS session")
+    return res.data[0]
+
+async def get_active_pos_session(org_id: str, workstation_id: Optional[str], db):
+    query = db.table("pos_sessions").select("*").eq("org_id", org_id).eq("status", "open")
+    if workstation_id:
+        query = query.eq("workstation_id", workstation_id)
+    res = query.order("opened_at", desc=True).limit(1).execute()
+    return res.data[0] if res.data else None
+
 # --- Catalog Service ---
 
 # Categories

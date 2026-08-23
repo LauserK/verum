@@ -18,11 +18,18 @@ export interface PosState {
   posMode: PosMode
   activeTableId?: string | null
   activeTableName?: string | null
+  activeWorkstationId?: string | null
+  activeWorkstationName?: string | null
+  activeSessionId?: string | null
+  openingBalance: number
+  openingCurrency: string
   orderNumber: number
   searchQuery: string
   selectedCategoryId: string
   setPosMode: (mode: PosMode) => void
   setActiveTable: (id: string | null, name?: string | null) => void
+  setActiveWorkstation: (id: string | null, name?: string | null) => void
+  setSessionOpening: (balance: number, currency: string, sessionId?: string | null) => void
   setSearchQuery: (query: string) => void
   setSelectedCategory: (catId: string) => void
   addItem: (item: { id: string; name: string; price: number; category_id?: string }) => void
@@ -42,6 +49,11 @@ export const usePosStore = create<PosState>((set) => ({
   posMode: 'tables',
   activeTableId: null,
   activeTableName: null,
+  activeWorkstationId: null,
+  activeWorkstationName: null,
+  activeSessionId: null,
+  openingBalance: 0,
+  openingCurrency: 'USD',
   orderNumber: 1,
   searchQuery: '',
   selectedCategoryId: 'all',
@@ -50,6 +62,12 @@ export const usePosStore = create<PosState>((set) => ({
 
   setActiveTable: (id: string | null, name?: string | null) =>
     set({ activeTableId: id, activeTableName: name ?? null }),
+
+  setActiveWorkstation: (id: string | null, name?: string | null) =>
+    set({ activeWorkstationId: id, activeWorkstationName: name ?? null }),
+
+  setSessionOpening: (balance: number, currency: string, sessionId?: string | null) =>
+    set({ openingBalance: balance, openingCurrency: currency, activeSessionId: sessionId ?? null }),
 
   setSearchQuery: (query: string) => set({ searchQuery: query }),
 

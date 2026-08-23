@@ -404,3 +404,23 @@ export function useDeleteWorkstation() {
         },
     })
 }
+
+// -- POS Sessions --
+export function useActivePosSession(workstationId?: string) {
+    return useQuery({
+        queryKey: ['sales', 'sessions', 'active', workstationId],
+        queryFn: () => salesApi.getActivePosSession(workstationId),
+    })
+}
+
+export function useOpenPosSession() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (data: { venue_id?: string | null; workstation_id?: string | null; opening_balance: number; opening_currency: string; notes?: string }) =>
+            salesApi.openPosSession(data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['sales', 'sessions'] })
+        },
+    })
+}
+
