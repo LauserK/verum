@@ -2,72 +2,28 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Implement the foundational database schemas, API routes, and admin UI for managing the POS Floor Plans (Tables/Zones), Workstations configurations, and Payment Methods.
+**Goal:** Implement the database migrations, backend API endpoints, and admin UI for managing Floor Plans (zones and tables) and Workstation sales modes in VERUM.
 
 **Architecture:**
-- **Database:** Raw SQL migrations for `floor_plans` and `tables` adding them to Supabase PostgreSQL.
-- **Backend:** Python FastAPI for admin endpoints serving Floor Plans and Payment Methods.
-- **Frontend:** Next.js App Router for Admin UI using `@tanstack/react-query` to fetch from the backend API.
+- **Database:** Supabase PostgreSQL migration `070_pos_floor_plans.sql` creating `floor_plans` and `tables` tables, plus adding `allowed_modes` to `workstations`.
+- **Backend (FastAPI):** Add Pydantic schemas in `app/sales/schemas.py`, business logic in `app/sales/service.py`, and endpoints in `app/sales/router.py` with pytest test coverage in `tests/test_sales_floor_plans.py`.
+- **Frontend (Next.js):** Add API calls to `lib/api/sales.ts`, React Query hooks in `hooks/useSales.ts`, and an interactive visual Floor Plan Builder in `app/admin/sales/floor-plans/page.tsx`.
 
-**Tech Stack:** Supabase (SQL), Python (FastAPI/pytest), Next.js (React/Tailwind), `@dnd-kit`, `@tanstack/react-query`
+**Tech Stack:** Supabase (PostgreSQL 15), Python 3.11 (FastAPI, Pytest), Next.js 16 (React 19, Tailwind CSS v4, Lucide Icons, `@dnd-kit`, `@tanstack/react-query`).
 
 ---
 
-### Task 1: Supabase Migrations for Floor Plans and Tables
+### Task 1: Supabase Migration for Floor Plans, Tables & Workstations
 
 **Files:**
 - Create: `backend/migrations/070_pos_floor_plans.sql`
-- Modify: `backend/tests/test_pos_admin_db.py`
 
-- [ ] **Step 1: Write the failing test for DB schema**
-
-```python
-# backend/tests/test_pos_admin_db.py
-import pytest
-from database import supabase
-from conftest import MOCK_ORG_ID, MOCK_VENUE_ID
-
-def test_insert_floor_plan_and_table():
-    plan_resp = supabase.table("floor_plans").insert({
-        "org_id": MOCK_ORG_ID,
-        "venue_id": MOCK_VENUE_ID,
-        "name": "Main Hall",
-        "width": 800,
-        "height": 600
-    }).execute()
-    
-    assert len(plan_resp.data) == 1
-    plan_id = plan_resp.data[0]["id"]
-    
-    table_resp = supabase.table("tables").insert({
-        "floor_plan_id": plan_id,
-        "name": "Mesa 1",
-        "shape": "rectangle",
-        "x": 100,
-        "y": 100,
-        "width": 60,
-        "height": 60,
-        "capacity": 4
-    }).execute()
-    
-    assert len(table_resp.data) == 1
-    
-    # Cleanup
-    supabase.table("tables").delete().eq("id", table_resp.data[0]["id"]).execute()
-    supabase.table("floor_plans").delete().eq("id", plan_id).execute()
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `cd backend && python -m pytest tests/test_pos_admin_db.py -v`
-Expected: FAIL with Relation "floor_plans" does not exist
-
-- [ ] **Step 3: Write the SQL migration**
+- [ ] **Step 1: Write SQL migration file**
 
 ```sql
 -- backend/migrations/070_pos_floor_plans.sql
 
--- 1. Floor Plans
+-- 1. Floor Plans (Zones)
 CREATE TABLE IF NOT EXISTS public.floor_plans (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
     org_id UUID REFERENCES organizations(id) ON DELETE CASCADE NOT NULL,
@@ -80,7 +36,7 @@ CREATE TABLE IF NOT EXISTS public.floor_plans (
 );
 CREATE INDEX IF NOT EXISTS idx_floor_plans_venue ON public.floor_plans(venue_id);
 
--- 2. Tables
+-- 2. Tables within Floor Plans
 CREATE TABLE IF NOT EXISTS public.tables (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
     floor_plan_id UUID REFERENCES floor_plans(id) ON DELETE CASCADE NOT NULL,
@@ -96,7 +52,11 @@ CREATE TABLE IF NOT EXISTS public.tables (
 );
 CREATE INDEX IF NOT EXISTS idx_tables_plan ON public.tables(floor_plan_id, is_active);
 
--- 3. RLS Policies
+-- 3. Add allowed_modes to workstations
+ALTER TABLE public.workstations
+ADD COLUMN IF NOT EXISTS allowed_modes TEXT[] DEFAULT ARRAY['dine_in', 'takeout', 'delivery', 'pickup', 'bar']::TEXT[];
+
+-- 4. RLS Security Setup
 ALTER TABLE public.floor_plans ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tables ENABLE ROW LEVEL SECURITY;
 
@@ -115,222 +75,261 @@ BEGIN
 END $$;
 ```
 
-- [ ] **Step 4: Apply migration and run test to verify it passes**
-
-Apply the SQL migration to the Supabase database instance.
-Run: `cd backend && python -m pytest tests/test_pos_admin_db.py -v`
-Expected: PASS
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 2: Commit**
 
 ```bash
-git add backend/migrations/070_pos_floor_plans.sql backend/tests/test_pos_admin_db.py
-git commit -m "feat(db): add floor_plans and tables schema for POS"
+git add backend/migrations/070_pos_floor_plans.sql
+git commit -m "feat(db): add floor_plans, tables, and workstation allowed_modes migration"
 ```
 
-### Task 2: Backend API - Payment Methods and Floor Plans
+---
+
+### Task 2: Backend Schemas, Service & API Endpoints for Floor Plans
 
 **Files:**
-- Create: `backend/app/sales/router.py`
-- Modify: `backend/main.py`
-- Modify: `backend/tests/test_pos_admin_api.py`
+- Create: `backend/tests/test_sales_floor_plans.py`
+- Modify: `backend/app/sales/schemas.py`
+- Modify: `backend/app/sales/service.py`
+- Modify: `backend/app/sales/router.py`
 
-- [ ] **Step 1: Write the failing API test**
+- [ ] **Step 1: Write failing tests for Floor Plans and Tables endpoints**
 
+Create `backend/tests/test_sales_floor_plans.py`:
 ```python
-# backend/tests/test_pos_admin_api.py
 import pytest
+from unittest.mock import AsyncMock, patch, MagicMock
 from fastapi.testclient import TestClient
 from main import app
-from conftest import MOCK_AUTH_HEADERS, MOCK_ORG_ID
 
 client = TestClient(app)
 
-def test_get_payment_methods():
-    response = client.get("/api/sales/payment-methods", headers=MOCK_AUTH_HEADERS)
-    assert response.status_code == 200
-    assert isinstance(response.json(), list)
+MOCK_ORG_ID = "00000000-0000-0000-0000-000000000001"
+MOCK_VENUE_ID = "00000000-0000-0000-0000-000000000002"
+MOCK_AUTH_HEADERS = {"Authorization": "Bearer mock-token"}
 
-def test_get_floor_plans():
-    response = client.get("/api/sales/floor-plans", headers=MOCK_AUTH_HEADERS)
-    assert response.status_code == 200
-    assert isinstance(response.json(), list)
+@pytest.fixture
+def mock_sales_permissions():
+    with patch("permissions.resolve_permission", return_value=True), \
+         patch("app.deps.get_active_org_id", return_value=MOCK_ORG_ID), \
+         patch("auth_deps.get_current_user", return_value={"id": "user-1", "email": "test@verum.com"}):
+        yield
+
+def test_create_and_list_floor_plans(mock_sales_permissions):
+    mock_plan = {
+        "id": "plan-1",
+        "org_id": MOCK_ORG_ID,
+        "venue_id": MOCK_VENUE_ID,
+        "name": "Terraza",
+        "width": 800,
+        "height": 600,
+        "tables": []
+    }
+    with patch("app.sales.service.list_floor_plans", new_callable=AsyncMock) as mock_list, \
+         patch("app.sales.service.create_floor_plan", new_callable=AsyncMock) as mock_create:
+        mock_create.return_value = mock_plan
+        mock_list.return_value = [mock_plan]
+
+        create_res = client.post(
+            "/sales/floor-plans",
+            json={"venue_id": MOCK_VENUE_ID, "name": "Terraza", "width": 800, "height": 600},
+            headers=MOCK_AUTH_HEADERS
+        )
+        assert create_res.status_code == 200
+        assert create_res.json()["name"] == "Terraza"
+
+        list_res = client.get("/sales/floor-plans", headers=MOCK_AUTH_HEADERS)
+        assert list_res.status_code == 200
+        assert len(list_res.json()) == 1
+        assert list_res.json()[0]["id"] == "plan-1"
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd backend && python -m pytest tests/test_pos_admin_api.py -v`
-Expected: FAIL with 404 Not Found
+Run: `pytest backend/tests/test_sales_floor_plans.py -v`
+Expected: FAIL (404 or missing endpoints/schemas)
 
-- [ ] **Step 3: Write the API router and models**
+- [ ] **Step 3: Implement Schemas in `backend/app/sales/schemas.py`**
 
+Add:
 ```python
-# backend/app/sales/router.py
-from fastapi import APIRouter, Depends
-from typing import List, Dict, Any
-from auth_deps import get_current_user
-from database import supabase
-from app.deps import get_active_org_id
+class TableBase(BaseModel):
+    name: str
+    shape: str = "rectangle"
+    x: int = 0
+    y: int = 0
+    width: int = 60
+    height: int = 60
+    capacity: int = 2
+    is_active: bool = True
 
-router = APIRouter(tags=["Sales Config"])
+class TableCreate(TableBase):
+    pass
 
-@router.get("/payment-methods")
-def list_payment_methods(
-    org_id: str = Depends(get_active_org_id),
-    user=Depends(get_current_user)
-) -> List[Dict[str, Any]]:
-    resp = supabase.table("payment_methods").select("*").eq("org_id", org_id).order("position").execute()
-    return resp.data
+class TableUpdate(BaseModel):
+    name: Optional[str] = None
+    shape: Optional[str] = None
+    x: Optional[int] = None
+    y: Optional[int] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    capacity: Optional[int] = None
+    is_active: Optional[bool] = None
 
-@router.get("/floor-plans")
-def list_floor_plans(
-    org_id: str = Depends(get_active_org_id),
-    user=Depends(get_current_user)
-) -> List[Dict[str, Any]]:
-    resp = supabase.table("floor_plans").select("*").eq("org_id", org_id).execute()
-    return resp.data
+class TableOut(TableBase):
+    id: UUID
+    floor_plan_id: UUID
+    created_at: datetime
+
+class FloorPlanBase(BaseModel):
+    name: str
+    venue_id: UUID
+    width: int = 800
+    height: int = 600
+
+class FloorPlanCreate(FloorPlanBase):
+    pass
+
+class FloorPlanUpdate(BaseModel):
+    name: Optional[str] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+
+class FloorPlanOut(FloorPlanBase):
+    id: UUID
+    org_id: UUID
+    created_at: datetime
+    updated_at: datetime
+    tables: List[TableOut] = []
 ```
 
-```python
-# Add to backend/main.py around line 46
-from app.sales.router import router as sales_router
-app.include_router(sales_router, prefix="/api/sales", tags=["Sales"])
-```
+- [ ] **Step 4: Implement Service logic in `backend/app/sales/service.py`**
 
-- [ ] **Step 4: Run test to verify it passes**
+Add functions for:
+- `list_floor_plans(org_id, venue_id, db)`
+- `create_floor_plan(org_id, payload, db)`
+- `update_floor_plan(org_id, plan_id, payload, db)`
+- `delete_floor_plan(org_id, plan_id, db)`
+- `create_table(org_id, plan_id, payload, db)`
+- `update_table(org_id, table_id, payload, db)`
+- `delete_table(org_id, table_id, db)`
 
-Run: `cd backend && python -m pytest tests/test_pos_admin_api.py -v`
+- [ ] **Step 5: Implement Router endpoints in `backend/app/sales/router.py`**
+
+Add endpoints for:
+- `GET /sales/floor-plans`
+- `POST /sales/floor-plans`
+- `PATCH /sales/floor-plans/{plan_id}`
+- `DELETE /sales/floor-plans/{plan_id}`
+- `POST /sales/floor-plans/{plan_id}/tables`
+- `PATCH /sales/tables/{table_id}`
+- `DELETE /sales/tables/{table_id}`
+
+- [ ] **Step 6: Run tests and verify they pass**
+
+Run: `pytest backend/tests/test_sales_floor_plans.py -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add backend/app/sales/router.py backend/main.py backend/tests/test_pos_admin_api.py
-git commit -m "feat(api): add pos admin endpoints for payment methods and floor plans"
+git add backend/app/sales/schemas.py backend/app/sales/service.py backend/app/sales/router.py backend/tests/test_sales_floor_plans.py
+git commit -m "feat(api): add floor plans and tables endpoints"
 ```
 
-### Task 3: Admin UI - Payment Methods Page
+---
+
+### Task 3: Frontend API Client & React Query Hooks for Floor Plans
 
 **Files:**
-- Create: `frontend/src/app/[locale]/(app)/admin/pos/payment-methods/page.tsx`
+- Modify: `frontend/src/lib/api/sales.ts`
+- Modify: `frontend/src/hooks/useSales.ts`
 
-- [ ] **Step 1: Write the UI Component using backend API**
+- [ ] **Step 1: Add types and API functions to `frontend/src/lib/api/sales.ts`**
 
-```tsx
-// frontend/src/app/[locale]/(app)/admin/pos/payment-methods/page.tsx
-'use client';
-import { useQuery } from '@tanstack/react-query';
-import { useSession } from 'next-auth/react'; // Assuming standard auth
+```typescript
+export interface TableItem {
+    id: string
+    floor_plan_id: string
+    name: string
+    shape: 'rectangle' | 'circle'
+    x: number
+    y: number
+    width: number
+    height: number
+    capacity: number
+    is_active: boolean
+    created_at?: string
+}
 
-export default function PaymentMethodsPage() {
-  const { data: session } = useSession();
-
-  const { data: methods = [], isLoading } = useQuery({
-    queryKey: ['payment-methods'],
-    queryFn: async () => {
-      const res = await fetch('/api/sales/payment-methods', {
-        headers: {
-          'Authorization': `Bearer ${session?.accessToken}`,
-          'x-org-id': session?.orgId || ''
-        }
-      });
-      if (!res.ok) throw new Error('Failed to fetch payment methods');
-      return res.json();
-    },
-    enabled: !!session?.accessToken
-  });
-
-  return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold mb-4">Métodos de Pago</h1>
-      {isLoading ? <p>Cargando...</p> : (
-        <div className="bg-white rounded shadow">
-          {methods.length === 0 && <p className="p-4">No hay métodos de pago configurados.</p>}
-          {methods.map((m: any) => (
-            <div key={m.id} className="border-b p-4 flex justify-between">
-              <div>
-                <p className="font-semibold">{m.name}</p>
-                <p className="text-sm text-gray-500">{m.method_type} - {m.currency_code}</p>
-              </div>
-              <div>{m.is_active ? 'Activo' : 'Inactivo'}</div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+export interface FloorPlan {
+    id: string
+    org_id?: string
+    venue_id: string
+    name: string
+    width: number
+    height: number
+    tables?: TableItem[]
+    created_at?: string
+    updated_at?: string
 }
 ```
+Add to `salesApi`:
+- `getFloorPlans(venueId?: string)`
+- `createFloorPlan(data: Partial<FloorPlan>)`
+- `updateFloorPlan(id: string, data: Partial<FloorPlan>)`
+- `deleteFloorPlan(id: string)`
+- `createTable(planId: string, data: Partial<TableItem>)`
+- `updateTable(tableId: string, data: Partial<TableItem>)`
+- `deleteTable(tableId: string)`
 
-- [ ] **Step 2: Verify the UI compiles**
+- [ ] **Step 2: Add hooks to `frontend/src/hooks/useSales.ts`**
+
+- `useFloorPlans(venueId?: string)`
+- `useCreateFloorPlan()`
+- `useUpdateFloorPlan()`
+- `useDeleteFloorPlan()`
+- `useCreateTable()`
+- `useUpdateTable()`
+- `useDeleteTable()`
+
+- [ ] **Step 3: Verify TypeScript builds**
+
+Run: `cd frontend && npm run build` (or check types)
+Expected: PASS
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add frontend/src/lib/api/sales.ts frontend/src/hooks/useSales.ts
+git commit -m "feat(frontend): add sales floor plans api client and hooks"
+```
+
+---
+
+### Task 4: Interactive Admin Floor Plan Builder Page
+
+**Files:**
+- Create: `frontend/src/app/admin/sales/floor-plans/page.tsx`
+- Modify: `frontend/src/app/admin/sales/page.tsx` (add navigation card/link)
+
+- [ ] **Step 1: Create Floor Plan Builder Page with Zones and Draggable Tables**
+
+Implement `frontend/src/app/admin/sales/floor-plans/page.tsx`:
+- List and switch between Floor Plan Zones (e.g. Salón Principal, Terraza, Barra).
+- Modal to create / rename zones.
+- Interactive canvas where tables can be added, positioned (dragged), resized, assigned shape (rectangle/circle), and given seat capacity.
+- Save positions with `useUpdateTable`.
+
+- [ ] **Step 2: Add Floor Plans link to `frontend/src/app/admin/sales/page.tsx`**
+
+- [ ] **Step 3: Verify frontend build and linting**
 
 Run: `cd frontend && npm run lint`
 Expected: PASS
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add frontend/src/app/[locale]/\(app\)/admin/pos/payment-methods/page.tsx
-git commit -m "feat(ui): add payment methods admin page via api"
-```
-
-### Task 4: Admin UI - Floor Plan Builder
-
-**Files:**
-- Create: `frontend/src/app/[locale]/(app)/admin/pos/floor-plans/page.tsx`
-
-- [ ] **Step 1: Write the basic Floor Plan Builder Component via API**
-
-```tsx
-// frontend/src/app/[locale]/(app)/admin/pos/floor-plans/page.tsx
-'use client';
-import { useQuery } from '@tanstack/react-query';
-import { useSession } from 'next-auth/react';
-
-export default function FloorPlansPage() {
-  const { data: session } = useSession();
-
-  const { data: plans = [], isLoading } = useQuery({
-    queryKey: ['floor-plans'],
-    queryFn: async () => {
-      const res = await fetch('/api/sales/floor-plans', {
-        headers: {
-          'Authorization': `Bearer ${session?.accessToken}`,
-          'x-org-id': session?.orgId || ''
-        }
-      });
-      if (!res.ok) throw new Error('Failed to fetch floor plans');
-      return res.json();
-    },
-    enabled: !!session?.accessToken
-  });
-
-  return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold mb-4">Planos de Planta</h1>
-      {isLoading ? <p>Cargando...</p> : (
-        <div className="grid grid-cols-3 gap-4">
-          {plans.map((p: any) => (
-            <div key={p.id} className="border p-4 rounded shadow bg-white cursor-pointer hover:bg-gray-50">
-              <h2 className="font-semibold">{p.name}</h2>
-              <p className="text-sm text-gray-500">{p.width}x{p.height}</p>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-```
-
-- [ ] **Step 2: Verify the UI compiles**
-
-Run: `cd frontend && npm run lint`
-Expected: PASS
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add frontend/src/app/[locale]/\(app\)/admin/pos/floor-plans/page.tsx
-git commit -m "feat(ui): add floor plans admin list via api"
+git add frontend/src/app/admin/sales/floor-plans/page.tsx frontend/src/app/admin/sales/page.tsx
+git commit -m "feat(ui): add visual floor plan builder in sales admin"
 ```
