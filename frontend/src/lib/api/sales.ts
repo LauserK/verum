@@ -218,6 +218,31 @@ export const salesApi = {
     deleteTable: (tableId: string) => fetchWithAuth<{ status: string }>(`/sales/tables/${tableId}`, {
         method: 'DELETE',
     }),
+
+    // Workstations (POS Terminals / Cajas)
+    getWorkstations: (venueId?: string) => fetchWithAuth<Workstation[]>(`/sales/workstations${venueId ? `?venue_id=${venueId}` : ''}`),
+    createWorkstation: (data: Partial<Workstation>) => fetchWithAuth<Workstation>('/sales/workstations', {
+        method: 'POST',
+        body: JSON.stringify(data),
+    }),
+    updateWorkstation: (id: string, data: Partial<Workstation>) => fetchWithAuth<Workstation>(`/sales/workstations/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    }),
+    deleteWorkstation: (id: string) => fetchWithAuth<{ status: string }>(`/sales/workstations/${id}`, {
+        method: 'DELETE',
+    }),
+}
+
+export interface Workstation {
+    id: string
+    org_id?: string
+    venue_id?: string | null
+    name: string
+    is_active: boolean
+    allowed_modes?: string[]
+    created_at?: string
+    updated_at?: string
 }
 
 export interface SaleCategory {

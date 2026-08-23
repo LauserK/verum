@@ -223,6 +223,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     titleEs: 'Configuración',
                     titleEn: 'Configuration',
                     items: [
+                        { href: '/admin/sales/workstations', labelEs: 'Estaciones de Trabajo (POS)', labelEn: 'POS Workstations' },
                         { href: '/admin/sales/floor-plans', labelEs: 'Planos de Mesas y Zonas', labelEn: 'Floor Plans & Zones' },
                         { href: '/admin/sales/config', labelEs: 'Configuración POS y Fiscal', labelEn: 'POS & Billing Settings' },
                         { href: '/admin/settings/integrations', labelEs: 'Integraciones & Menú Digital', labelEn: 'Integrations & Digital Menu' },

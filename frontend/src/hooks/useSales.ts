@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { salesApi, Customer, CreateInvoicePayload, TenantBillingConfig, PaymentMethod, Tax, FloorPlan, TableItem } from '@/lib/api/sales'
+import { salesApi, Customer, CreateInvoicePayload, TenantBillingConfig, PaymentMethod, Tax, FloorPlan, TableItem, Workstation } from '@/lib/api/sales'
 
 export const salesKeys = {
     all: ['sales'] as const,
@@ -9,6 +9,7 @@ export const salesKeys = {
     paymentMethods: () => [...salesKeys.all, 'payment-methods'] as const,
     taxes: (activeOnly?: boolean) => [...salesKeys.all, 'taxes', { activeOnly }] as const,
     floorPlans: (venueId?: string) => [...salesKeys.all, 'floor-plans', { venueId }] as const,
+    workstations: (venueId?: string) => [...salesKeys.all, 'workstations', { venueId }] as const,
     categories: () => [...salesKeys.all, 'categories'] as const,
     items: (categoryId?: string, activeOnly?: boolean) => [...salesKeys.all, 'items', { categoryId, activeOnly }] as const,
 }
@@ -362,6 +363,44 @@ export function useDeleteTable() {
         },
         onSettled: () => {
             queryClient.invalidateQueries({ queryKey: ['sales', 'floor-plans'] })
+        },
+    })
+}
+
+// -- Workstations (POS Terminals / Cajas) --
+export function useWorkstations(venueId?: string) {
+    return useQuery({
+        queryKey: salesKeys.workstations(venueId),
+        queryFn: () => salesApi.getWorkstations(venueId),
+    })
+}
+
+export function useCreateWorkstation() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (data: Partial<Workstation>) => salesApi.createWorkstation(data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['sales', 'workstations'] })
+        },
+    })
+}
+
+export function useUpdateWorkstation() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ id, data }: { id: string; data: Partial<Workstation> }) => salesApi.updateWorkstation(id, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['sales', 'workstations'] })
+        },
+    })
+}
+
+export function useDeleteWorkstation() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (id: string) => salesApi.deleteWorkstation(id),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['sales', 'workstations'] })
         },
     })
 }
