@@ -1,4 +1,4 @@
-﻿# backend/app/integrations/schemas.py
+# backend/app/integrations/schemas.py
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 
@@ -12,9 +12,13 @@ class QuickCatalogPreviewResponse(BaseModel):
     total_products: int = 0
     new_products: int = 0
     existing_products: int = 0
+    total_payment_methods: int = 0
+    new_payment_methods: int = 0
+    existing_payment_methods: int = 0
     categories_sample: List[str] = []
     modifier_groups_sample: List[str] = []
     products_sample: List[str] = []
+    payment_methods_sample: List[str] = []
 
 class QuickCatalogImportRequest(BaseModel):
     overwrite_existing_prices: bool = True
@@ -29,3 +33,4 @@ class QuickCatalogImportResponse(BaseModel):
     products_updated: int = 0
     variants_imported: int = 0
     product_modifier_links_created: int = 0
+    payment_methods_imported: int = 0

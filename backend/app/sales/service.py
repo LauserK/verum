@@ -36,9 +36,23 @@ async def create_payment_method(org_id: str, payload: PaymentMethodCreate, db):
     res = db.table("payment_methods").insert(data).execute()
     return res.data[0]
 
+async def update_payment_method(org_id: str, method_id: str, payload: Any, db):
+    data = payload.model_dump(exclude_unset=True)
+    if not data:
+        res = db.table("payment_methods").select("*").eq("id", method_id).eq("org_id", org_id).execute()
+        return res.data[0] if res.data else None
+    res = db.table("payment_methods").update(data).eq("id", method_id).eq("org_id", org_id).execute()
+    if not res.data:
+        raise HTTPException(404, "Payment method not found")
+    return res.data[0]
+
+async def delete_payment_method(org_id: str, method_id: str, db):
+    res = db.table("payment_methods").delete().eq("id", method_id).eq("org_id", org_id).execute()
+    return {"status": "deleted"}
+
 async def get_payment_methods(org_id: str, db):
     res = db.table("payment_methods").select("*").eq("org_id", org_id).order("position").execute()
-    return res.data
+    return res.data or []
 
 async def create_workstation(org_id: str, payload: WorkstationCreate, db):
     data = payload.model_dump()

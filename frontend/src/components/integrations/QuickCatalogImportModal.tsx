@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import React, { useState, useEffect } from "react"
 import { DownloadCloud, CheckCircle2, AlertCircle, RefreshCw, X, Layers, Sparkles } from "lucide-react"
@@ -14,9 +14,13 @@ interface PreviewData {
     total_products: number
     new_products: number
     existing_products: number
+    total_payment_methods?: number
+    new_payment_methods?: number
+    existing_payment_methods?: number
     categories_sample?: string[]
     modifier_groups_sample?: string[]
     products_sample?: string[]
+    payment_methods_sample?: string[]
 }
 
 interface ImportResult {
@@ -28,6 +32,7 @@ interface ImportResult {
     products_updated: number
     variants_imported: number
     product_modifier_links_created: number
+    payment_methods_imported?: number
 }
 
 interface Props {
@@ -145,21 +150,26 @@ export default function QuickCatalogImportModal({ isOpen, onClose, onSuccess }: 
 
                     {!loading && step === "preview" && preview && (
                         <div className="space-y-5">
-                            <div className="grid grid-cols-3 gap-3">
-                                <div className="p-4 bg-surface-raised border border-border rounded-2xl text-center">
-                                    <span className="text-2xl font-black text-text-primary">{preview.total_categories}</span>
-                                    <p className="text-xs font-semibold text-text-secondary mt-1">Categorías</p>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                <div className="p-3.5 bg-surface-raised border border-border rounded-2xl text-center">
+                                    <span className="text-xl font-black text-text-primary">{preview.total_categories}</span>
+                                    <p className="text-xs font-semibold text-text-secondary mt-0.5">Categorías</p>
                                     <span className="text-[10px] text-emerald-400 font-medium">+{preview.new_categories} nuevas</span>
                                 </div>
-                                <div className="p-4 bg-surface-raised border border-border rounded-2xl text-center">
-                                    <span className="text-2xl font-black text-text-primary">{preview.total_modifier_groups}</span>
-                                    <p className="text-xs font-semibold text-text-secondary mt-1">Modificadores</p>
+                                <div className="p-3.5 bg-surface-raised border border-border rounded-2xl text-center">
+                                    <span className="text-xl font-black text-text-primary">{preview.total_modifier_groups}</span>
+                                    <p className="text-xs font-semibold text-text-secondary mt-0.5">Modificadores</p>
                                     <span className="text-[10px] text-emerald-400 font-medium">+{preview.new_modifier_groups} nuevos</span>
                                 </div>
-                                <div className="p-4 bg-surface-raised border border-border rounded-2xl text-center">
-                                    <span className="text-2xl font-black text-text-primary">{preview.total_products}</span>
-                                    <p className="text-xs font-semibold text-text-secondary mt-1">Productos</p>
+                                <div className="p-3.5 bg-surface-raised border border-border rounded-2xl text-center">
+                                    <span className="text-xl font-black text-text-primary">{preview.total_products}</span>
+                                    <p className="text-xs font-semibold text-text-secondary mt-0.5">Productos</p>
                                     <span className="text-[10px] text-emerald-400 font-medium">+{preview.new_products} nuevos</span>
+                                </div>
+                                <div className="p-3.5 bg-surface-raised border border-border rounded-2xl text-center">
+                                    <span className="text-xl font-black text-text-primary">{preview.total_payment_methods ?? 0}</span>
+                                    <p className="text-xs font-semibold text-text-secondary mt-0.5">Métodos Pago</p>
+                                    <span className="text-[10px] text-emerald-400 font-medium">+{(preview as any).new_payment_methods ?? 0} nuevos</span>
                                 </div>
                             </div>
 
@@ -219,7 +229,7 @@ export default function QuickCatalogImportModal({ isOpen, onClose, onSuccess }: 
                             <div>
                                 <h3 className="text-base font-bold text-text-primary">Importando Catálogo...</h3>
                                 <p className="text-xs text-text-secondary mt-1">
-                                    Creando categorías, grupos de modificadores, opciones, productos y variantes.
+                                    Creando categorías, modificadores, opciones, productos, variantes y métodos de pago.
                                 </p>
                             </div>
                         </div>
@@ -237,17 +247,17 @@ export default function QuickCatalogImportModal({ isOpen, onClose, onSuccess }: 
                                 </p>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-3 text-left">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-left">
                                 <div className="p-3 bg-surface-raised border border-border rounded-xl">
                                     <span className="text-xs text-text-secondary">Categorías Creadas</span>
                                     <p className="text-base font-bold text-text-primary">{importResult.categories_imported}</p>
                                 </div>
                                 <div className="p-3 bg-surface-raised border border-border rounded-xl">
-                                    <span className="text-xs text-text-secondary">Grupos de Modificadores</span>
+                                    <span className="text-xs text-text-secondary">Grupos Modificadores</span>
                                     <p className="text-base font-bold text-text-primary">{importResult.modifier_groups_imported}</p>
                                 </div>
                                 <div className="p-3 bg-surface-raised border border-border rounded-xl">
-                                    <span className="text-xs text-text-secondary">Opciones de Modificador</span>
+                                    <span className="text-xs text-text-secondary">Opciones Modificador</span>
                                     <p className="text-base font-bold text-text-primary">{importResult.modifier_options_imported}</p>
                                 </div>
                                 <div className="p-3 bg-surface-raised border border-border rounded-xl">
@@ -255,6 +265,14 @@ export default function QuickCatalogImportModal({ isOpen, onClose, onSuccess }: 
                                     <p className="text-base font-bold text-text-primary">
                                         {importResult.products_created} / {importResult.products_updated}
                                     </p>
+                                </div>
+                                <div className="p-3 bg-surface-raised border border-border rounded-xl">
+                                    <span className="text-xs text-text-secondary">Variantes Creadas</span>
+                                    <p className="text-base font-bold text-text-primary">{importResult.variants_imported}</p>
+                                </div>
+                                <div className="p-3 bg-surface-raised border border-border rounded-xl">
+                                    <span className="text-xs text-text-secondary">Métodos de Pago</span>
+                                    <p className="text-base font-bold text-text-primary">{(importResult as any).payment_methods_imported ?? 0}</p>
                                 </div>
                             </div>
                         </div>

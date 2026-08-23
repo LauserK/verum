@@ -210,6 +210,15 @@ class PaymentMethodCreate(BaseModel):
     requires_reference: bool = True
     position: int = 0
 
+class PaymentMethodUpdate(BaseModel):
+    name: Optional[str] = None
+    method_type: Optional[Literal['cash', 'card', 'bank_transfer', 'mobile_payment', 'digital_wallet', 'crypto', 'other']] = None
+    currency_code: Optional[str] = None
+    instructions: Optional[str] = None
+    is_active: Optional[bool] = None
+    requires_reference: Optional[bool] = None
+    position: Optional[int] = None
+
 class PaymentMethodOut(BaseModel):
     id: UUID
     org_id: UUID

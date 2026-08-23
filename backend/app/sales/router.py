@@ -75,6 +75,31 @@ async def list_payment_methods(
     await cache.set(f"sales:payment_methods:{org_id}", res, ttl=300)
     return res
 
+@router.patch("/payment-methods/{method_id}", response_model=PaymentMethodOut)
+async def update_payment_method(
+    method_id: str,
+    payload: dict,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_payment_methods"))
+):
+    from app.sales.schemas import PaymentMethodUpdate
+    update_schema = PaymentMethodUpdate(**payload)
+    res = await sales_svc.update_payment_method(org_id, method_id, update_schema, db)
+    await invalidate_sales_config(org_id)
+    return res
+
+@router.delete("/payment-methods/{method_id}")
+async def delete_payment_method(
+    method_id: str,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_payment_methods"))
+):
+    res = await sales_svc.delete_payment_method(org_id, method_id, db)
+    await invalidate_sales_config(org_id)
+    return res
+
 @router.post("/workstations", response_model=WorkstationOut)
 async def create_workstation(
     payload: WorkstationCreate,

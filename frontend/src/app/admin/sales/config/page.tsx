@@ -4,12 +4,15 @@ import { useState, useEffect } from 'react'
 import { 
   useBillingConfig, 
   usePaymentMethods, 
+  useCreatePaymentMethod,
+  useUpdatePaymentMethod,
+  useDeletePaymentMethod,
   useCurrencies, 
   useCreateCurrency, 
   useExchangeRates, 
   useCreateExchangeRate 
 } from '@/hooks/useSales'
-import { salesApi } from '@/lib/api/sales'
+import { salesApi, PaymentMethod } from '@/lib/api/sales'
 import { 
   Settings, 
   CreditCard, 
@@ -20,7 +23,10 @@ import {
   CheckCircle2, 
   X, 
   Check,
-  AlertTriangle 
+  AlertTriangle,
+  Edit2,
+  Trash2,
+  Power
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -28,6 +34,10 @@ import { es } from 'date-fns/locale'
 export default function SalesConfigPage() {
   const { data: config, isLoading: loadingConfig, refetch: refetchConfig } = useBillingConfig()
   const { data: paymentMethods, isLoading: loadingMethods } = usePaymentMethods()
+  const { mutateAsync: createPaymentMethod, isPending: creatingPaymentMethod } = useCreatePaymentMethod()
+  const { mutateAsync: updatePaymentMethod, isPending: updatingPaymentMethod } = useUpdatePaymentMethod()
+  const { mutateAsync: deletePaymentMethod, isPending: deletingPaymentMethod } = useDeletePaymentMethod()
+
   const { data: currencies, isLoading: loadingCurrencies } = useCurrencies()
   const { mutateAsync: createCurrency, isPending: creatingCurrency } = useCreateCurrency()
   const { data: exchangeRates, isLoading: loadingRates } = useExchangeRates()
@@ -61,6 +71,19 @@ export default function SalesConfigPage() {
     from_currency: 'USD',
     to_currency: 'VES',
     rate: 1,
+  })
+
+  // Payment Method Modal
+  const [isMethodModalOpen, setIsMethodModalOpen] = useState(false)
+  const [editingMethod, setEditingMethod] = useState<PaymentMethod | null>(null)
+  const [methodError, setMethodError] = useState<string | null>(null)
+  const [methodForm, setMethodForm] = useState({
+    name: '',
+    method_type: 'cash' as 'cash' | 'card' | 'bank_transfer' | 'mobile_payment' | 'digital_wallet' | 'crypto' | 'other',
+    currency_code: '',
+    instructions: '',
+    requires_reference: true,
+    is_active: true
   })
 
   useEffect(() => {
@@ -149,6 +172,91 @@ export default function SalesConfigPage() {
       setRateForm(prev => ({ ...prev, rate: 1 }))
     } catch (err: any) {
       setRateError(err.message || 'Error registrando tasa de cambio.')
+    }
+  }
+
+  const handleOpenCreateMethod = () => {
+    setEditingMethod(null)
+    setMethodError(null)
+    setMethodForm({
+      name: '',
+      method_type: 'cash',
+      currency_code: '',
+      instructions: '',
+      requires_reference: true,
+      is_active: true
+    })
+    setIsMethodModalOpen(true)
+  }
+
+  const handleOpenEditMethod = (method: PaymentMethod) => {
+    setEditingMethod(method)
+    setMethodError(null)
+    setMethodForm({
+      name: method.name,
+      method_type: method.method_type || 'other',
+      currency_code: method.currency_code || '',
+      instructions: method.instructions || '',
+      requires_reference: method.requires_reference ?? true,
+      is_active: method.is_active ?? true
+    })
+    setIsMethodModalOpen(true)
+  }
+
+  const handleSaveMethod = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setMethodError(null)
+    if (!methodForm.name.trim()) {
+      setMethodError('El nombre del método de pago es requerido.')
+      return
+    }
+
+    try {
+      if (editingMethod) {
+        await updatePaymentMethod({
+          id: editingMethod.id,
+          data: {
+            name: methodForm.name.trim(),
+            method_type: methodForm.method_type,
+            currency_code: methodForm.currency_code || null,
+            instructions: methodForm.instructions.trim(),
+            requires_reference: methodForm.requires_reference,
+            is_active: methodForm.is_active
+          }
+        })
+      } else {
+        await createPaymentMethod({
+          name: methodForm.name.trim(),
+          method_type: methodForm.method_type,
+          currency_code: methodForm.currency_code || undefined,
+          instructions: methodForm.instructions.trim(),
+          requires_reference: methodForm.requires_reference,
+          is_active: methodForm.is_active
+        })
+      }
+      setIsMethodModalOpen(false)
+    } catch (err: any) {
+      setMethodError(err.message || 'Error guardando método de pago.')
+    }
+  }
+
+  const handleToggleMethod = async (method: PaymentMethod) => {
+    try {
+      await updatePaymentMethod({
+        id: method.id,
+        data: { is_active: !method.is_active }
+      })
+    } catch (err: any) {
+      alert(err.message || 'Error actualizando estado del método de pago.')
+    }
+  }
+
+  const handleDeleteMethod = async (method: PaymentMethod) => {
+    if (!confirm(`¿Eliminar el método de pago "${method.name}"?`)) return
+    try {
+      await deletePaymentMethod(method.id)
+    } catch (err: any) {
+      alert(err.message || 'Error eliminando método de pago.')
     }
   }
 
@@ -405,9 +513,20 @@ export default function SalesConfigPage() {
 
       {/* 4. Payment Methods */}
       <div className="bg-surface border border-border rounded-2xl p-6 shadow-sm space-y-4">
-        <h2 className="text-base font-bold text-text-primary flex items-center gap-2 border-b border-border pb-3">
-          <CreditCard className="w-5 h-5 text-primary" /> Métodos de Pago Habilitados
-        </h2>
+        <div className="flex justify-between items-center border-b border-border pb-3">
+          <div>
+            <h2 className="text-base font-bold text-text-primary flex items-center gap-2">
+              <CreditCard className="w-5 h-5 text-primary" /> Métodos de Pago Habilitados
+            </h2>
+            <p className="text-xs text-text-secondary mt-0.5">Métodos de cobro disponibles en facturación y POS</p>
+          </div>
+          <button 
+            onClick={handleOpenCreateMethod}
+            className="flex items-center justify-center gap-2 bg-primary text-text-inverse px-4 h-10 rounded-xl text-xs font-bold hover:bg-primary-hover transition-all shadow-md shadow-primary/20 active:scale-95 shrink-0"
+          >
+            <Plus className="w-3.5 h-3.5" /> Agregar Método
+          </button>
+        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 pt-1">
           {loadingMethods ? (
@@ -415,20 +534,76 @@ export default function SalesConfigPage() {
           ) : !paymentMethods || paymentMethods.length === 0 ? (
             <div className="col-span-full py-6 text-center text-text-secondary">No hay métodos de pago configurados.</div>
           ) : (
-            paymentMethods.map(m => (
-              <div key={m.id} className="border border-border bg-surface-raised rounded-xl p-4 space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="font-bold text-sm text-text-primary">{m.name}</span>
-                  <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 font-mono">
-                    {m.type}
-                  </span>
+            paymentMethods.map(m => {
+              const typeLabels: Record<string, string> = {
+                cash: 'Efectivo',
+                card: 'Tarjeta',
+                bank_transfer: 'Transferencia',
+                mobile_payment: 'Pago Móvil',
+                digital_wallet: 'Billetera Digital',
+                crypto: 'Cripto',
+                other: 'Otro'
+              }
+              const label = typeLabels[m.method_type] || m.method_type || 'Otro'
+
+              return (
+                <div key={m.id} className={`border border-border bg-surface-raised rounded-xl p-4 space-y-3 transition-all ${!m.is_active ? 'opacity-60 bg-surface/40' : ''}`}>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <span className="font-bold text-sm text-text-primary block">{m.name}</span>
+                      <span className="text-[11px] text-text-secondary">
+                        {label} {m.currency_code ? `(${m.currency_code})` : '(Todas las monedas)'}
+                      </span>
+                    </div>
+                    <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border font-mono ${
+                      m.is_active ? 'bg-success/10 text-success border-success/20' : 'bg-surface text-text-secondary border-border'
+                    }`}>
+                      {m.is_active ? 'Activo' : 'Inactivo'}
+                    </span>
+                  </div>
+
+                  {m.instructions && (
+                    <p className="text-xs text-text-secondary italic line-clamp-2 bg-surface/60 p-2 rounded-lg border border-border/50">
+                      {m.instructions}
+                    </p>
+                  )}
+
+                  <div className="text-xs text-text-secondary flex justify-between items-center pt-2 border-t border-border/50">
+                    <span className="text-[11px]">
+                      {m.requires_reference ? 'Requiere Ref.' : 'Sin Ref.'}
+                    </span>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => handleToggleMethod(m)}
+                        title={m.is_active ? 'Desactivar' : 'Activar'}
+                        className={`p-1.5 rounded-lg border transition-colors ${
+                          m.is_active 
+                            ? 'hover:bg-error/10 hover:text-error border-border' 
+                            : 'hover:bg-success/10 hover:text-success border-border'
+                        }`}
+                      >
+                        <Power className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleOpenEditMethod(m)}
+                        title="Editar"
+                        className="p-1.5 rounded-lg border border-border hover:bg-surface text-text-secondary hover:text-primary transition-colors"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteMethod(m)}
+                        title="Eliminar"
+                        className="p-1.5 rounded-lg border border-border hover:bg-error/10 text-text-secondary hover:text-error transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <div className="text-xs text-text-secondary flex justify-between pt-1 border-t border-border/50">
-                  <span>Recargo: {m.surcharge_pct ? `${m.surcharge_pct}%` : '0%'}</span>
-                  <span className="text-success font-semibold">Activo</span>
-                </div>
-              </div>
-            ))
+              )
+            })
           )}
         </div>
       </div>
@@ -619,6 +794,135 @@ export default function SalesConfigPage() {
                   className="bg-primary text-text-inverse px-5 h-11 rounded-xl text-sm font-bold hover:bg-primary-hover transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95"
                 >
                   <Check className="w-4 h-4" /> {creatingRate ? 'Registrando...' : 'Registrar Tasa'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Método de Pago (Crear / Editar) */}
+      {isMethodModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-surface border border-border rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in zoom-in-95">
+            <div className="flex justify-between items-center pb-2 border-b border-border">
+              <h3 className="text-base font-bold text-text-primary">
+                {editingMethod ? 'Editar Método de Pago' : 'Registrar Método de Pago'}
+              </h3>
+              <button onClick={() => setIsMethodModalOpen(false)} className="text-text-secondary hover:text-text-primary p-1">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {methodError && (
+              <div className="p-3 rounded-xl bg-error/10 text-error border border-error/20 text-xs flex items-center gap-2 animate-in fade-in">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{methodError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveMethod} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-text-secondary uppercase">Nombre del Método *</label>
+                <input 
+                  type="text" 
+                  required
+                  placeholder="Ej: Pago Móvil Banesco, Zelle, Punto de Venta"
+                  value={methodForm.name}
+                  onChange={e => setMethodForm({...methodForm, name: e.target.value})}
+                  className="w-full bg-surface-raised border border-border rounded-xl px-3 py-2 text-sm focus:border-primary outline-none mt-1"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-text-secondary uppercase">Tipo de Método</label>
+                  <select
+                    value={methodForm.method_type}
+                    onChange={e => setMethodForm({...methodForm, method_type: e.target.value as any})}
+                    className="w-full bg-surface-raised border border-border rounded-xl px-3 py-2 text-sm focus:border-primary outline-none mt-1"
+                  >
+                    <option value="cash">Efectivo</option>
+                    <option value="mobile_payment">Pago Móvil</option>
+                    <option value="digital_wallet">Billetera Digital / Zelle</option>
+                    <option value="card">Tarjeta / POS</option>
+                    <option value="bank_transfer">Transferencia</option>
+                    <option value="crypto">Criptomoneda</option>
+                    <option value="other">Otro</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-text-secondary uppercase">Moneda Específica</label>
+                  <select
+                    value={methodForm.currency_code}
+                    onChange={e => setMethodForm({...methodForm, currency_code: e.target.value})}
+                    className="w-full bg-surface-raised border border-border rounded-xl px-3 py-2 text-sm focus:border-primary outline-none mt-1"
+                  >
+                    <option value="">Todas / Multi-moneda</option>
+                    {currencies?.map(c => (
+                      <option key={c.id} value={c.code}>
+                        {c.code} ({c.symbol})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-text-secondary uppercase">Instrucciones de Pago / Datos Bancarios</label>
+                <textarea
+                  rows={2}
+                  placeholder="Ej: CI: 12345678, Tel: 0414-1234567, Banco Banesco"
+                  value={methodForm.instructions}
+                  onChange={e => setMethodForm({...methodForm, instructions: e.target.value})}
+                  className="w-full bg-surface-raised border border-border rounded-xl px-3 py-2 text-xs focus:border-primary outline-none mt-1 resize-none"
+                />
+              </div>
+
+              <div className="space-y-2 pt-1 border-t border-border/60">
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input 
+                    type="checkbox"
+                    checked={methodForm.requires_reference}
+                    onChange={e => setMethodForm({...methodForm, requires_reference: e.target.checked})}
+                    className="w-4 h-4 rounded text-primary focus:ring-primary border-border"
+                  />
+                  <span className="text-xs font-semibold text-text-primary">
+                    Exigir número de comprobante / referencia
+                  </span>
+                </label>
+
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input 
+                    type="checkbox"
+                    checked={methodForm.is_active}
+                    onChange={e => setMethodForm({...methodForm, is_active: e.target.checked})}
+                    className="w-4 h-4 rounded text-primary focus:ring-primary border-border"
+                  />
+                  <span className="text-xs font-semibold text-text-primary">
+                    Método de pago activo
+                  </span>
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-border">
+                <button 
+                  type="button" 
+                  onClick={() => setIsMethodModalOpen(false)}
+                  className="px-4 h-11 border border-border bg-surface hover:bg-surface-raised text-text-primary rounded-xl text-sm font-semibold transition-colors flex items-center justify-center"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={creatingPaymentMethod || updatingPaymentMethod}
+                  className="bg-primary text-text-inverse px-5 h-11 rounded-xl text-sm font-bold hover:bg-primary-hover transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95"
+                >
+                  <Check className="w-4 h-4" />{' '}
+                  {creatingPaymentMethod || updatingPaymentMethod
+                    ? 'Guardando...' 
+                    : editingMethod ? 'Guardar Cambios' : 'Registrar Método'}
                 </button>
               </div>
             </form>

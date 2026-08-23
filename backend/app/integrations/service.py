@@ -178,6 +178,7 @@ def preview_quick_catalog(org_id: str, db) -> Dict[str, Any]:
     remote_cats = [c for c in raw_cats if c.get("name", "").strip().lower() != "importados de verum"]
     remote_mods = remote_data.get("modifier_groups", [])
     remote_prods = remote_data.get("products", [])
+    remote_pms = remote_data.get("payment_methods", [])
 
     # Local data
     local_cats_res = db.table("sale_categories").select("name").eq("org_id", org_id).execute()
@@ -189,6 +190,9 @@ def preview_quick_catalog(org_id: str, db) -> Dict[str, Any]:
     local_prods_res = db.table("sale_items").select("name, code").eq("org_id", org_id).execute()
     local_prod_names = {p["name"].lower() for p in (local_prods_res.data or []) if p.get("name")}
     local_prod_codes = {p["code"].lower() for p in (local_prods_res.data or []) if p.get("code")}
+
+    local_pms_res = db.table("payment_methods").select("name").eq("org_id", org_id).execute()
+    local_pm_names = {pm["name"].lower() for pm in (local_pms_res.data or []) if pm.get("name")}
 
     # Diff categories
     existing_cats = sum(1 for c in remote_cats if c.get("name", "").lower() in local_cat_names)
@@ -207,6 +211,10 @@ def preview_quick_catalog(org_id: str, db) -> Dict[str, Any]:
             existing_prods += 1
     new_prods = len(remote_prods) - existing_prods
 
+    # Diff payment methods
+    existing_pms = sum(1 for pm in remote_pms if pm.get("name", "").lower() in local_pm_names)
+    new_pms = len(remote_pms) - existing_pms
+
     return {
         "total_categories": len(remote_cats),
         "new_categories": new_cats,
@@ -217,9 +225,13 @@ def preview_quick_catalog(org_id: str, db) -> Dict[str, Any]:
         "total_products": len(remote_prods),
         "new_products": new_prods,
         "existing_products": existing_prods,
+        "total_payment_methods": len(remote_pms),
+        "new_payment_methods": new_pms,
+        "existing_payment_methods": existing_pms,
         "categories_sample": [c["name"] for c in remote_cats[:5] if c.get("name")],
         "modifier_groups_sample": [m["name"] for m in remote_mods[:5] if m.get("name")],
-        "products_sample": [p["name"] for p in remote_prods[:5] if p.get("name")]
+        "products_sample": [p["name"] for p in remote_prods[:5] if p.get("name")],
+        "payment_methods_sample": [pm["name"] for pm in remote_pms[:5] if pm.get("name")]
     }
 
 
@@ -418,7 +430,36 @@ async def execute_quick_catalog_import(org_id: str, payload: Any, db) -> Dict[st
                 }).execute()
                 stats["variants_imported"] += 1
 
+    # 4. Payment Methods Import
+    from app.cache import invalidate_sales_config
+    remote_pms = remote_data.get("payment_methods", [])
+    local_pms_res = db.table("payment_methods").select("id, name").eq("org_id", org_id).execute()
+    local_pm_by_name = {pm["name"].lower(): pm["id"] for pm in (local_pms_res.data or []) if pm.get("name")}
+
+    for pm in remote_pms:
+        pm_name = pm.get("name", "").strip()
+        if not pm_name:
+            continue
+        pm_lower = pm_name.lower()
+        pm_data = {
+            "name": pm_name,
+            "method_type": pm.get("method_type", "other"),
+            "currency_code": pm.get("currency_code"),
+            "instructions": pm.get("instructions") or "",
+            "requires_reference": pm.get("requires_reference", True),
+            "is_active": pm.get("is_active", True),
+            "position": pm.get("position", 0)
+        }
+
+        if pm_lower in local_pm_by_name:
+            db.table("payment_methods").update(pm_data).eq("id", local_pm_by_name[pm_lower]).eq("org_id", org_id).execute()
+        else:
+            pm_data["org_id"] = org_id
+            db.table("payment_methods").insert(pm_data).execute()
+            stats["payment_methods_imported"] += 1
+
     await invalidate_sales_catalog(org_id)
+    await invalidate_sales_config(org_id)
     return stats
 
 

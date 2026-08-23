@@ -75,6 +75,36 @@ export function usePaymentMethods() {
     })
 }
 
+export function useCreatePaymentMethod() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: salesApi.createPaymentMethod,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: salesKeys.paymentMethods() })
+        },
+    })
+}
+
+export function useUpdatePaymentMethod() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ id, data }: { id: string; data: Partial<PaymentMethod> }) => salesApi.updatePaymentMethod(id, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: salesKeys.paymentMethods() })
+        },
+    })
+}
+
+export function useDeletePaymentMethod() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (id: string) => salesApi.deletePaymentMethod(id),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: salesKeys.paymentMethods() })
+        },
+    })
+}
+
 // -- Currencies & Exchange Rates --
 export const currencyKeys = {
     all: ['currencies'] as const,

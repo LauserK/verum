@@ -58,11 +58,14 @@ export interface TenantBillingConfig {
 
 export interface PaymentMethod {
     id: string
-    code: string
     name: string
-    type: string
-    surcharge_pct: number
+    method_type: 'cash' | 'card' | 'bank_transfer' | 'mobile_payment' | 'digital_wallet' | 'crypto' | 'other'
+    currency_code?: string | null
+    instructions?: string
     is_active: boolean
+    requires_reference?: boolean
+    position?: number
+    created_at?: string
 }
 
 export const salesApi = {
@@ -108,6 +111,13 @@ export const salesApi = {
     createPaymentMethod: (data: Partial<PaymentMethod>) => fetchWithAuth<PaymentMethod>('/sales/payment-methods', {
         method: 'POST',
         body: JSON.stringify(data),
+    }),
+    updatePaymentMethod: (id: string, data: Partial<PaymentMethod>) => fetchWithAuth<PaymentMethod>(`/sales/payment-methods/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    }),
+    deletePaymentMethod: (id: string) => fetchWithAuth<{ status: string }>(`/sales/payment-methods/${id}`, {
+        method: 'DELETE',
     }),
 
     // Currencies & Exchange Rates
