@@ -60,6 +60,7 @@ export default function FloorPlansAdminPage() {
   const [isZoneModalOpen, setIsZoneModalOpen] = useState(false)
   const [editingZone, setEditingZone] = useState<FloorPlan | null>(null)
   const [zoneFormData, setZoneFormData] = useState({
+    venue_id: '',
     name: '',
     width: 800,
     height: 600,
@@ -93,6 +94,7 @@ export default function FloorPlansAdminPage() {
   const handleOpenCreateZone = () => {
     setEditingZone(null)
     setZoneFormData({
+      venue_id: selectedVenueId || availableVenues[0]?.id || '',
       name: '',
       width: 800,
       height: 600,
@@ -103,6 +105,7 @@ export default function FloorPlansAdminPage() {
   const handleOpenEditZone = (plan: FloorPlan) => {
     setEditingZone(plan)
     setZoneFormData({
+      venue_id: plan.venue_id || selectedVenueId || availableVenues[0]?.id || '',
       name: plan.name,
       width: plan.width || 800,
       height: plan.height || 600,
@@ -112,12 +115,14 @@ export default function FloorPlansAdminPage() {
 
   const handleSaveZone = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!selectedVenueId) return
+    const targetVenueId = zoneFormData.venue_id || selectedVenueId
+    if (!targetVenueId) return
 
     if (editingZone) {
       await updateFloorPlan.mutateAsync({
         id: editingZone.id,
         data: {
+          venue_id: targetVenueId,
           name: zoneFormData.name,
           width: Number(zoneFormData.width),
           height: Number(zoneFormData.height),
@@ -125,7 +130,7 @@ export default function FloorPlansAdminPage() {
       })
     } else {
       const newPlan = await createFloorPlan.mutateAsync({
-        venue_id: selectedVenueId,
+        venue_id: targetVenueId,
         name: zoneFormData.name,
         width: Number(zoneFormData.width),
         height: Number(zoneFormData.height),
@@ -838,6 +843,27 @@ export default function FloorPlansAdminPage() {
             </div>
 
             <form onSubmit={handleSaveZone} className="space-y-4">
+              {/* Venue Selector in Modal */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-text-secondary">Sede / Local *</label>
+                <div className="relative">
+                  <Building2 className="w-4 h-4 text-text-secondary absolute left-3 top-3 pointer-events-none" />
+                  <select
+                    value={zoneFormData.venue_id}
+                    onChange={(e) => setZoneFormData({ ...zoneFormData, venue_id: e.target.value })}
+                    className="w-full pl-9 pr-8 py-2.5 bg-surface-raised border border-border rounded-xl text-sm font-medium text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary appearance-none cursor-pointer"
+                    required
+                  >
+                    {availableVenues.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-4 h-4 text-text-secondary absolute right-3 top-3 pointer-events-none opacity-70" />
+                </div>
+              </div>
+
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-text-secondary">Nombre de la Zona *</label>
                 <input
