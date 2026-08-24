@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { 
   Building2, 
@@ -18,7 +18,7 @@ import {
 } from 'lucide-react'
 import { useVenue } from '@/components/VenueContext'
 import { useProfile } from '@/hooks/useProfile'
-import { useWorkstations, useOpenPosSession, useCurrencies } from '@/hooks/useSales'
+import { useWorkstations, useOpenPosSession, useCurrencies, useBillingConfig, useActivePosSession } from '@/hooks/useSales'
 import { usePosStore, PosMode } from '@/store/posStore'
 
 const QUICK_FLOAT_AMOUNTS = [0, 10, 20, 50, 100, 200]
@@ -36,15 +36,32 @@ export default function PosSessionPage() {
 
   const { data: workstations = [], isLoading: loadingStations } = useWorkstations(selectedVenueId || undefined)
   const { data: currencies = [] } = useCurrencies()
+  const { data: config } = useBillingConfig()
   const openSessionMutation = useOpenPosSession()
 
   const activeStations = workstations.filter((w) => w.is_active)
 
   const [selectedStationId, setSelectedStationId] = useState<string>('')
   const [openingBalance, setOpeningBalance] = useState<string>('0')
-  const [currencyCode, setCurrencyCode] = useState<string>('USD')
+  const [currencyCode, setCurrencyCode] = useState<string>('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+
+  // 1. Resolve Base Currency
+  const baseCurrency = useMemo(() => {
+    const fromConfig = currencies.find((c) => c.code === config?.default_currency)
+    if (fromConfig) return fromConfig
+    const isBase = currencies.find((c) => c.is_base)
+    if (isBase) return isBase
+    return currencies[0] || { code: 'USD', symbol: '$', name: 'Dólar' }
+  }, [currencies, config])
+
+  // Set default currency code once resolved
+  useEffect(() => {
+    if (baseCurrency?.code && !currencyCode) {
+      setCurrencyCode(baseCurrency.code)
+    }
+  }, [baseCurrency, currencyCode])
 
   // Auto-select first active workstation
   useEffect(() => {
@@ -56,6 +73,26 @@ export default function PosSessionPage() {
   }, [activeStations, selectedStationId])
 
   const currentStation = activeStations.find((s) => s.id === selectedStationId) || activeStations[0]
+
+  // Check if this workstation already has an active open session
+  const { data: activeSession, isLoading: checkingSession } = useActivePosSession(currentStation?.id || undefined)
+
+  useEffect(() => {
+    if (activeSession && activeSession.status === 'open') {
+      // Resume existing active session automatically
+      const defaultMode: PosMode = (currentStation?.allowed_modes?.[0] as PosMode) || 'tables'
+      usePosStore.getState().setPosMode(defaultMode)
+      if (currentStation) {
+        usePosStore.getState().setActiveWorkstation(currentStation.id, currentStation.name)
+      }
+      usePosStore.getState().setSessionOpening(
+        activeSession.opening_balance || 0,
+        activeSession.opening_currency || baseCurrency.code,
+        activeSession.id
+      )
+      router.push('/pos/terminal')
+    }
+  }, [activeSession, currentStation, baseCurrency.code, router])
 
   // Keypad Handlers
   const handleKeypadPress = (val: string) => {
@@ -279,7 +316,7 @@ export default function PosSessionPage() {
               )}
             </section>
 
-            {/* Final Action Box */}
+              {/* Final Action Box */}
             <div className="bg-surface border border-border rounded-2xl p-4 space-y-3 shadow-sm">
               <div className="space-y-1.5">
                 <div className="flex justify-between items-center text-xs text-text-secondary">
@@ -288,7 +325,9 @@ export default function PosSessionPage() {
                 </div>
                 <div className="flex justify-between items-center text-xs text-text-secondary">
                   <span>Fondo inicial:</span>
-                  <strong className="text-emerald-500 font-mono text-sm font-bold">${parseFloat(openingBalance || '0').toFixed(2)} {currencyCode}</strong>
+                  <strong className="text-emerald-500 font-mono text-sm font-bold">
+                    {currencies.find(c => c.code === currencyCode)?.symbol || baseCurrency.symbol}{parseFloat(openingBalance || '0').toFixed(2)} {currencyCode}
+                  </strong>
                 </div>
                 <div className="flex justify-between items-center text-xs text-text-secondary">
                   <span>Cajero:</span>
@@ -320,21 +359,23 @@ export default function PosSessionPage() {
               {/* Display Box */}
               <div className="bg-surface-raised border border-border focus-within:border-primary rounded-2xl p-3 transition-all flex flex-col items-center justify-center text-center gap-1.5">
                 <div className="flex items-center justify-center gap-1.5 w-full">
-                  <span className="text-2xl sm:text-3xl font-black text-primary">$</span>
+                  <span className="text-2xl sm:text-3xl font-black text-primary">
+                    {currencies.find(c => c.code === currencyCode)?.symbol || baseCurrency.symbol}
+                  </span>
                   <span className="text-3xl sm:text-4xl font-black text-text-primary tracking-tight font-mono">
                     {openingBalance || '0'}
                   </span>
-                  <select
-                    value={currencyCode}
-                    onChange={(e) => setCurrencyCode(e.target.value)}
-                    className="ml-2 px-2.5 py-1 bg-surface border border-border rounded-lg text-xs font-bold text-text-primary focus:outline-none focus:ring-1 focus:ring-primary/20 cursor-pointer"
-                  >
-                    <option value="USD">USD ($)</option>
-                    <option value="VES">VES (Bs.)</option>
-                    {currencies.filter(c => c.code !== 'USD' && c.code !== 'VES').map(c => (
-                      <option key={c.id} value={c.code}>{c.code} ({c.symbol})</option>
-                    ))}
-                  </select>
+                  {currencies.length > 1 && (
+                    <select
+                      value={currencyCode}
+                      onChange={(e) => setCurrencyCode(e.target.value)}
+                      className="ml-2 px-2.5 py-1 bg-surface border border-border rounded-lg text-xs font-bold text-text-primary focus:outline-none focus:ring-1 focus:ring-primary/20 cursor-pointer"
+                    >
+                      {currencies.map(c => (
+                        <option key={c.id} value={c.code}>{c.code} ({c.symbol})</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
 
                 {/* Quick denomination chips */}
@@ -350,7 +391,7 @@ export default function PosSessionPage() {
                           : 'bg-surface text-text-secondary border-border hover:bg-surface-raised hover:text-text-primary'
                       }`}
                     >
-                      ${amt}.00
+                      {currencies.find(c => c.code === currencyCode)?.symbol || baseCurrency.symbol}{amt}.00
                     </button>
                   ))}
                 </div>
