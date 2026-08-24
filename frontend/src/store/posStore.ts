@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persist, createJSONStorage } from 'zustand/middleware'
 
 export interface CartItem {
   cartItemId: string
@@ -67,36 +68,38 @@ const calculateTotal = (cart: CartItem[]): number => {
   return isNaN(sum) ? 0 : Math.round(sum * 100) / 100
 }
 
-export const usePosStore = create<PosState>((set) => ({
-  cart: [],
-  total: 0,
-  posMode: 'tables',
-  activeTableId: null,
-  activeTableName: null,
-  activeWorkstationId: null,
-  activeWorkstationName: null,
-  activeSessionId: null,
-  openingBalance: 0,
-  openingCurrency: 'USD',
-  orderNumber: 1,
-  searchQuery: '',
-  selectedCategoryId: 'all',
-  customerId: null,
-  customerName: null,
-  customerTaxId: null,
-  showCheckout: false,
-  showCustomerSelector: false,
+export const usePosStore = create<PosState>()(
+  persist(
+    (set) => ({
+      cart: [],
+      total: 0,
+      posMode: 'tables',
+      activeTableId: null,
+      activeTableName: null,
+      activeWorkstationId: null,
+      activeWorkstationName: null,
+      activeSessionId: null,
+      openingBalance: 0,
+      openingCurrency: 'USD',
+      orderNumber: 1,
+      searchQuery: '',
+      selectedCategoryId: 'all',
+      customerId: null,
+      customerName: null,
+      customerTaxId: null,
+      showCheckout: false,
+      showCustomerSelector: false,
 
-  setPosMode: (mode: PosMode) => set({ posMode: mode }),
+      setPosMode: (mode: PosMode) => set({ posMode: mode }),
 
-  setActiveTable: (id: string | null, name?: string | null) =>
-    set({ activeTableId: id, activeTableName: name ?? null }),
+      setActiveTable: (id: string | null, name?: string | null) =>
+        set({ activeTableId: id, activeTableName: name ?? null }),
 
-  setActiveWorkstation: (id: string | null, name?: string | null) =>
-    set({ activeWorkstationId: id, activeWorkstationName: name ?? null }),
+      setActiveWorkstation: (id: string | null, name?: string | null) =>
+        set({ activeWorkstationId: id, activeWorkstationName: name ?? null }),
 
-  setSessionOpening: (balance: number, currency: string, sessionId?: string | null) =>
-    set({ openingBalance: balance, openingCurrency: currency, activeSessionId: sessionId ?? null }),
+      setSessionOpening: (balance: number, currency: string, sessionId?: string | null) =>
+        set({ openingBalance: balance, openingCurrency: currency, activeSessionId: sessionId ?? null }),
 
   setSearchQuery: (query: string) => set({ searchQuery: query }),
 
@@ -188,4 +191,24 @@ export const usePosStore = create<PosState>((set) => ({
       total: 0,
     })
   },
-}))
+}),
+    {
+      name: 'verum_pos_store',
+      partialize: (state) => ({
+        activeWorkstationId: state.activeWorkstationId,
+        activeWorkstationName: state.activeWorkstationName,
+        activeSessionId: state.activeSessionId,
+        openingBalance: state.openingBalance,
+        openingCurrency: state.openingCurrency,
+        posMode: state.posMode,
+        cart: state.cart,
+        total: state.total,
+        activeTableId: state.activeTableId,
+        activeTableName: state.activeTableName,
+        customerId: state.customerId,
+        customerName: state.customerName,
+        customerTaxId: state.customerTaxId,
+      }),
+    }
+  )
+)

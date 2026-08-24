@@ -21,7 +21,8 @@ import PosCart from './components/PosCart'
 import PosTableMap from './components/PosTableMap'
 import { CustomerSelectorModal } from './components/CustomerSelectorModal'
 import { CheckoutModal } from './components/CheckoutModal'
-import { usePosConfig } from '@/hooks/useSales'
+import { usePosConfig, useWorkstations, useActivePosSession } from '@/hooks/useSales'
+import { useVenue } from '@/components/VenueContext'
 
 interface PosModeTab {
   id: PosMode
@@ -40,6 +41,8 @@ const POS_TABS: PosModeTab[] = [
 export default function PosTerminalPage() {
   const router = useRouter()
   const { data: profile } = useProfile()
+  const { selectedVenueId } = useVenue()
+  const { data: workstations = [] } = useWorkstations(selectedVenueId || undefined)
   const { 
     cart,
     total,
@@ -50,6 +53,9 @@ export default function PosTerminalPage() {
     setActiveTable, 
     activeWorkstationId,
     activeWorkstationName,
+    setActiveWorkstation,
+    activeSessionId,
+    setSessionOpening,
     customerId,
     customerName,
     customerTaxId,
@@ -60,6 +66,31 @@ export default function PosTerminalPage() {
     setShowCustomerSelector,
     orderNumber
   } = usePosStore()
+
+  // Auto-resolve workstation if not set in store
+  React.useEffect(() => {
+    if (workstations.length > 0 && !activeWorkstationId) {
+      const activeOne = workstations.find((w) => w.is_active) || workstations[0]
+      if (activeOne) {
+        setActiveWorkstation(activeOne.id, activeOne.name)
+      }
+    }
+  }, [workstations, activeWorkstationId, setActiveWorkstation])
+
+  // Auto-fetch and sync active session for this workstation
+  const { data: serverSession } = useActivePosSession(activeWorkstationId || undefined)
+
+  React.useEffect(() => {
+    if (serverSession && serverSession.status === 'open') {
+      if (activeSessionId !== serverSession.id) {
+        setSessionOpening(
+          serverSession.opening_balance || 0,
+          serverSession.opening_currency || 'USD',
+          serverSession.id
+        )
+      }
+    }
+  }, [serverSession, activeSessionId, setSessionOpening])
 
   const { data: posConfig } = usePosConfig(activeWorkstationId || undefined, posMode)
   const customerRequirement = posConfig?.customer_requirement || 'optional'

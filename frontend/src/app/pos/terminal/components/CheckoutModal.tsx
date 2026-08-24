@@ -16,7 +16,7 @@ import {
 import { PaymentCalculator } from './PaymentCalculator'
 import { ChangeRegistration } from './ChangeRegistration'
 import { CheckoutConfirmation } from './CheckoutConfirmation'
-import { useCheckout, useBillingConfig, useCurrencies, useExchangeRates } from '@/hooks/useSales'
+import { useCheckout, useBillingConfig, useCurrencies, useExchangeRates, useWorkstations, useActivePosSession } from '@/hooks/useSales'
 import { usePosStore, CartItem, PosMode } from '@/store/posStore'
 import { CheckoutPayment, CheckoutChange } from '@/lib/api/sales'
 
@@ -54,11 +54,23 @@ export function CheckoutModal({
   const {
     activeWorkstationId,
     activeSessionId,
+    setActiveWorkstation,
+    setSessionOpening,
     customerId,
     customerTaxId,
     clearCart,
     clearCustomer
   } = usePosStore()
+
+  const { data: workstations = [] } = useWorkstations()
+  const effectiveWorkstationId = useMemo(() => {
+    if (activeWorkstationId) return activeWorkstationId
+    const activeOne = workstations.find((w) => w.is_active) || workstations[0]
+    return activeOne?.id || null
+  }, [activeWorkstationId, workstations])
+
+  const { data: serverSession } = useActivePosSession(effectiveWorkstationId || undefined)
+  const effectiveSessionId = activeSessionId || serverSession?.id || null
 
   const { data: config } = useBillingConfig()
   const { data: currencies = [] } = useCurrencies()
@@ -120,8 +132,11 @@ export function CheckoutModal({
     payments: CheckoutPayment[],
     change: CheckoutChange | null
   ) => {
-    if (!activeWorkstationId || !activeSessionId) {
-      setErrorMessage('No hay sesión de caja activa o estación de trabajo asignada.')
+    const wsId = effectiveWorkstationId
+    const sessId = effectiveSessionId
+
+    if (!wsId || !sessId) {
+      setErrorMessage('No hay sesión de caja activa o estación de trabajo asignada. Por favor abre una sesión de caja.')
       return
     }
 
@@ -134,8 +149,8 @@ export function CheckoutModal({
       }))
 
       const payload = {
-        workstation_id: activeWorkstationId,
-        pos_session_id: activeSessionId,
+        workstation_id: wsId,
+        pos_session_id: sessId,
         venue_id: '00000000-0000-0000-0000-000000000000', // resolved from workstation or tenant on backend
         mode: mode,
         customer_id: customerId,
