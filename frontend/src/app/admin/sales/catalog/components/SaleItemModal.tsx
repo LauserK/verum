@@ -486,6 +486,7 @@ export default function SaleItemModal({
                     setTaxIncluded(updatedItem.tax_included ?? true)
                     setIsActive(updatedItem.is_active ?? true)
                     setIsFeatured(updatedItem.is_featured ?? false)
+                    setAllowNegativeStock(updatedItem.allow_negative_stock ?? false)
                     setPosition(updatedItem.position || 0)
                     setHasVariants(updatedItem.has_variants ?? false)
                     setVariantLabel(updatedItem.variant_label || 'Presentación')
