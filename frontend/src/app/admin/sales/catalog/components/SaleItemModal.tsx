@@ -878,7 +878,7 @@ export default function SaleItemModal({
                                 </div>
 
                                 {/* Status Switches */}
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                     <div className="p-3 bg-surface-raised border border-border rounded-xl flex items-center justify-between">
                                         <span className="text-xs font-semibold text-text-primary">Producto Activo en POS</span>
                                         <label className="relative inline-flex items-center cursor-pointer">
@@ -902,6 +902,22 @@ export default function SaleItemModal({
                                                 className="sr-only peer"
                                             />
                                             <div className="w-9 h-5 bg-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
+                                        </label>
+                                    </div>
+
+                                    <div className="p-3 bg-surface-raised border border-border rounded-xl flex items-center justify-between">
+                                        <div>
+                                            <span className="text-xs font-semibold text-text-primary block">Permitir Venta sin Stock</span>
+                                            <span className="text-[10px] text-text-secondary">Vender aunque esté en 0</span>
+                                        </div>
+                                        <label className="relative inline-flex items-center cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={allowNegativeStock}
+                                                onChange={(e) => setAllowNegativeStock(e.target.checked)}
+                                                className="sr-only peer"
+                                            />
+                                            <div className="w-9 h-5 bg-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
                                         </label>
                                     </div>
                                 </div>
