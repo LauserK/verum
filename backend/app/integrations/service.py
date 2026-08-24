@@ -360,9 +360,12 @@ async def execute_quick_catalog_import(org_id: str, payload: Any, db) -> Dict[st
         local_prod_by_code = {p["code"].lower(): p["id"] for p in (local_prods_res.data or []) if p.get("code")}
         local_prod_by_name = {p["name"].lower(): p["id"] for p in (local_prods_res.data or []) if p.get("name")}
 
+        product_id_mappings = []
+
         for p in remote_prods:
             p_name = p.get("name", "").strip()
             p_code = (p.get("code") or "").strip()
+            remote_prod_id = p.get("id")
             if not p_name:
                 continue
 
@@ -407,6 +410,12 @@ async def execute_quick_catalog_import(org_id: str, payload: Any, db) -> Dict[st
             if not item_id:
                 continue
 
+            if remote_prod_id:
+                product_id_mappings.append({
+                    "product_id": remote_prod_id,
+                    "external_code": str(item_id)
+                })
+
             # Link modifier groups
             remote_mg_ids = p.get("modifier_group_ids") or []
             for r_mg_id in remote_mg_ids:
@@ -439,6 +448,37 @@ async def execute_quick_catalog_import(org_id: str, payload: Any, db) -> Dict[st
                         "is_active": True
                     }).execute()
                     stats["variants_imported"] += 1
+
+        # Sync back external_codes to VerumQuick
+        if product_id_mappings:
+            try:
+                import os, hmac, hashlib, json, httpx
+                from config import settings
+                integration_res = db.table("quick_integrations").select("*").eq("org_id", org_id).eq("is_active", True).execute()
+                if integration_res.data:
+                    integration = integration_res.data[0]
+                    secret = integration.get("secret", "")
+                    company_id = integration.get("company_id", "1")
+                    base_quick_url = "http://localhost:8080"
+                    if getattr(settings, "VERUM_QUICK_WEBHOOK_URL", None):
+                        base_quick_url = settings.VERUM_QUICK_WEBHOOK_URL.split("/integrations/")[0]
+                    elif getattr(settings, "VERUM_QUICK_URL", None):
+                        base_quick_url = settings.VERUM_QUICK_URL.rstrip("/")
+                    
+                    sync_codes_url = os.environ.get("VERUM_QUICK_SYNC_CODES_URL") or f"{base_quick_url}/integrations/api/verum/sync-external-codes"
+                    payload_body = json.dumps({"mappings": product_id_mappings}).encode('utf-8')
+                    signature = hmac.new(secret.encode("utf-8"), payload_body, hashlib.sha256).hexdigest()
+                    headers = {
+                        "Content-Type": "application/json",
+                        "X-Verum-Signature": signature,
+                        "X-Verum-Company-Id": str(company_id)
+                    }
+                    with httpx.Client(timeout=15.0) as client:
+                        sync_res = client.post(sync_codes_url, content=payload_body, headers=headers)
+                        if sync_res.status_code == 200:
+                            stats["quick_external_codes_updated"] = sync_res.json().get("updated_count", len(product_id_mappings))
+            except Exception as e:
+                print(f"[SYNC BACK EXTERNAL CODES ERROR]: {e}")
 
     # 4. Payment Methods Import
     if import_payment_methods:
