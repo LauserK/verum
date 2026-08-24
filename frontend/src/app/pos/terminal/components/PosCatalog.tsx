@@ -19,7 +19,7 @@ import {
   ArrowLeft,
   AlertTriangle
 } from 'lucide-react'
-import { useCategories, useSalesItems, usePosConfig, useStockAvailability } from '@/hooks/useSales'
+import { useCategories, useSalesItems, usePosConfig, useStockAvailability, useCurrencies, useBillingConfig } from '@/hooks/useSales'
 import { usePosStore } from '@/store/posStore'
 import { SaleItem } from '@/lib/api/sales'
 
@@ -30,7 +30,9 @@ const getCategoryIcon = (iconName?: string) => {
     case 'cafe':
       return Coffee
     case 'wine':
+      return Wine
     case 'drinks':
+      return Wine
     case 'bebidas':
       return Wine
     case 'pizza':
@@ -58,14 +60,25 @@ export default function PosCatalog() {
     setSearchQuery, 
     selectedCategoryId, 
     setSelectedCategory, 
-    addItem,
-    posMode,
+    posMode, 
     activeTableName,
     setActiveTable,
+    addItem,
     activeWorkstationId
   } = usePosStore()
   const { data: categories = [], isLoading: isLoadingCategories } = useCategories()
   const { data: items = [], isLoading: isLoadingItems } = useSalesItems()
+  const { data: currencies = [] } = useCurrencies()
+  const { data: config } = useBillingConfig()
+
+  // Base Currency resolution
+  const baseCurrency = useMemo(() => {
+    const fromConfig = currencies.find((c) => c.code === config?.default_currency)
+    if (fromConfig) return fromConfig
+    const isBase = currencies.find((c) => c.is_base)
+    if (isBase) return isBase
+    return currencies[0] || { code: 'USD', symbol: '$' }
+  }, [currencies, config])
 
   // Stock resolution
   const { data: posConfig } = usePosConfig(activeWorkstationId || undefined, posMode)
@@ -347,7 +360,7 @@ export default function PosCatalog() {
                   {/* Footer: Price & Stock */}
                   <div className="mt-2.5 pt-2 border-t border-border/50 flex items-center justify-between">
                     <span className="text-xs sm:text-sm font-black text-primary font-mono tracking-tight">
-                      ${price.toFixed(2)}
+                      {baseCurrency.symbol}{price.toFixed(2)}
                     </span>
                     {item.has_variants && (
                       <span className="text-[9px] font-medium text-text-secondary bg-surface-raised px-1.5 py-0.5 rounded border border-border">

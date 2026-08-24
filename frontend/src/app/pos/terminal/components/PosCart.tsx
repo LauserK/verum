@@ -19,7 +19,7 @@ import {
   User
 } from 'lucide-react'
 import { usePosStore, CartItem, PosMode } from '@/store/posStore'
-import { useBillingConfig, useExchangeRates, useTaxes } from '@/hooks/useSales'
+import { useBillingConfig, useCurrencies, useExchangeRates, useTaxes } from '@/hooks/useSales'
 
 const MODE_BADGES: Record<PosMode, { label: string; icon: React.ElementType; color: string }> = {
   tables: { label: 'Mesa', icon: Utensils, color: 'bg-primary/10 text-primary border-primary/20' },
@@ -51,25 +51,52 @@ export default function PosCart({ onCheckout, onSendToKitchen }: PosCartProps) {
   } = usePosStore()
 
   const { data: config } = useBillingConfig()
+  const { data: currencies = [] } = useCurrencies()
   const { data: rates = [] } = useExchangeRates()
   const { data: taxes = [] } = useTaxes(true)
+
+  // 1. Resolve Base Currency
+  const baseCurrency = useMemo(() => {
+    const fromConfig = currencies.find((c) => c.code === config?.default_currency)
+    if (fromConfig) return fromConfig
+    const isBase = currencies.find((c) => c.is_base)
+    if (isBase) return isBase
+    return currencies[0] || { code: 'USD', symbol: '$', name: 'Dólar' }
+  }, [currencies, config])
+
+  // 2. Resolve Secondary Currency & Active Exchange Rate
+  const { secondaryCurrency, exchangeRate } = useMemo(() => {
+    const sec = currencies.find((c) => c.id !== baseCurrency.id && c.is_active)
+    if (!sec) {
+      return { secondaryCurrency: null, exchangeRate: 1.0 }
+    }
+
+    const directRate = rates.find(
+      (r) =>
+        (r.from_currency === baseCurrency.code && r.to_currency === sec.code) ||
+        (r.to_currency === sec.code)
+    )
+
+    const rVal = directRate?.rate ? Number(directRate.rate) : 1.0
+    return {
+      secondaryCurrency: sec,
+      exchangeRate: rVal > 0 ? rVal : 1.0
+    }
+  }, [currencies, baseCurrency, rates])
+
+  const hasSecondary = Boolean(secondaryCurrency && exchangeRate > 0)
 
   // Undo toast state after clearCart
   const [deletedBackup, setDeletedBackup] = useState<CartItem[] | null>(null)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const [toastType, setToastType] = useState<'info' | 'success'>('info')
 
-  // Exchange rate calculation (USD to VES or default 40.0)
-  const vesExchangeRate = useMemo(() => {
-    if (!Array.isArray(rates)) return 40.0
-    const vesRateObj = rates.find(
-      (r) =>
-        (r.from_currency === 'USD' && r.to_currency === 'VES') ||
-        (r.to_currency === 'VES')
-    )
-    const parsed = vesRateObj?.rate ? parseFloat(vesRateObj.rate as any) : 40.0
-    return isNaN(parsed) || parsed <= 0 ? 40.0 : parsed
-  }, [rates])
+  const totalSecondary = useMemo(() => {
+    const validTotal = typeof total === 'number' && !isNaN(total) ? total : 0
+    if (!hasSecondary) return 0
+    const v = validTotal * exchangeRate
+    return isNaN(v) ? 0 : v
+  }, [total, exchangeRate, hasSecondary])
 
   // Subtotal & Tax breakdown calculated item by item
   const { subtotal, taxAmount, weightedTaxRate } = useMemo(() => {
@@ -118,13 +145,6 @@ export default function PosCart({ onCheckout, onSendToKitchen }: PosCartProps) {
       weightedTaxRate: Math.round(effectiveRate * 10) / 10,
     }
   }, [cart, taxes])
-
-  const totalVES = useMemo(() => {
-    const validTotal = typeof total === 'number' && !isNaN(total) ? total : 0
-    const validRate = typeof vesExchangeRate === 'number' && !isNaN(vesExchangeRate) ? vesExchangeRate : 40.0
-    const v = validTotal * validRate
-    return isNaN(v) ? 0 : v
-  }, [total, vesExchangeRate])
 
   const handleClearCart = () => {
     if (cart.length === 0) return
@@ -282,11 +302,11 @@ export default function PosCart({ onCheckout, onSendToKitchen }: PosCartProps) {
                       {item.name}
                     </h5>
                     <p className="text-[11px] font-mono text-text-secondary mt-0.5">
-                      ${item.price.toFixed(2)} c/u
+                      {baseCurrency.symbol}{item.price.toFixed(2)} c/u
                     </p>
                   </div>
                   <span className="text-xs font-black text-text-primary font-mono tracking-tight shrink-0">
-                    ${lineTotal.toFixed(2)}
+                    {baseCurrency.symbol}{lineTotal.toFixed(2)}
                   </span>
                 </div>
 
@@ -355,7 +375,7 @@ export default function PosCart({ onCheckout, onSendToKitchen }: PosCartProps) {
           <div className="flex justify-between items-center">
             <span>Subtotal</span>
             <span className="font-mono text-text-primary font-bold">
-              ${(Number(subtotal) || 0).toFixed(2)}
+              {baseCurrency.symbol} {(Number(subtotal) || 0).toFixed(2)}
             </span>
           </div>
           <div className="flex justify-between items-center text-[11px]">
@@ -363,7 +383,7 @@ export default function PosCart({ onCheckout, onSendToKitchen }: PosCartProps) {
               {weightedTaxRate > 0 ? `IVA (${weightedTaxRate}%)` : 'IVA (Exento / 0%)'}
             </span>
             <span className="font-mono text-text-primary font-bold">
-              ${(Number(taxAmount) || 0).toFixed(2)}
+              {baseCurrency.symbol} {(Number(taxAmount) || 0).toFixed(2)}
             </span>
           </div>
         </div>
@@ -375,17 +395,19 @@ export default function PosCart({ onCheckout, onSendToKitchen }: PosCartProps) {
               Total a Pagar
             </span>
             <div className="text-2xl font-black text-primary font-mono tracking-tight leading-none mt-1">
-              ${(Number(total) || 0).toFixed(2)}
+              {baseCurrency.symbol} {(Number(total) || 0).toFixed(2)}
             </div>
           </div>
-          <div className="text-right">
-            <span className="text-[10px] text-text-secondary/70 font-mono">
-              Tasa: {(Number(vesExchangeRate) || 40).toFixed(2)} VES/$
-            </span>
-            <div className="text-sm font-bold text-text-secondary font-mono tracking-tight">
-              {(Number(totalVES) || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} VES
+          {hasSecondary && (
+            <div className="text-right">
+              <span className="text-[10px] text-text-secondary/70 font-mono">
+                Tasa: {(Number(exchangeRate) || 1).toFixed(2)} {secondaryCurrency?.code}/{baseCurrency.code}
+              </span>
+              <div className="text-sm font-bold text-text-secondary font-mono tracking-tight">
+                {secondaryCurrency?.symbol} {(Number(totalSecondary) || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {secondaryCurrency?.code}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* 4. Action Buttons (Grid 2-columns) */}

@@ -44,7 +44,15 @@ export interface PosState {
   clearCustomer: () => void
   setShowCheckout: (show: boolean) => void
   setShowCustomerSelector: (show: boolean) => void
-  addItem: (item: { id: string; name: string; price: number; category_id?: string }) => void
+  addItem: (item: {
+    id: string
+    name: string
+    price: number
+    category_id?: string
+    tax_id?: string | null
+    tax_rate?: number | null
+    tax_included?: boolean
+  }) => void
   removeItem: (cartItemId: string) => void
   updateQuantity: (cartItemId: string, qty: number) => void
   clearCart: () => void

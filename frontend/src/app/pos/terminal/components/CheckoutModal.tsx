@@ -16,7 +16,7 @@ import {
 import { PaymentCalculator } from './PaymentCalculator'
 import { ChangeRegistration } from './ChangeRegistration'
 import { CheckoutConfirmation } from './CheckoutConfirmation'
-import { useCheckout, useBillingConfig, useExchangeRates } from '@/hooks/useSales'
+import { useCheckout, useBillingConfig, useCurrencies, useExchangeRates } from '@/hooks/useSales'
 import { usePosStore, CartItem, PosMode } from '@/store/posStore'
 import { CheckoutPayment, CheckoutChange } from '@/lib/api/sales'
 
@@ -61,17 +61,41 @@ export function CheckoutModal({
   } = usePosStore()
 
   const { data: config } = useBillingConfig()
+  const { data: currencies = [] } = useCurrencies()
   const { data: rates = [] } = useExchangeRates()
   const checkoutMutation = useCheckout()
 
-  // Exchange rate USD -> VES
-  const vesRate = useMemo(() => {
-    if (!Array.isArray(rates)) return 40.0
-    const ves = rates.find((r) => r.to_currency === 'VES' || r.to_currency === 'Bs')
-    return ves ? Number(ves.rate) : 40.0
-  }, [rates])
+  // 1. Resolve Base Currency
+  const baseCurrency = useMemo(() => {
+    const fromConfig = currencies.find((c) => c.code === config?.default_currency)
+    if (fromConfig) return fromConfig
+    const isBase = currencies.find((c) => c.is_base)
+    if (isBase) return isBase
+    return currencies[0] || { code: 'USD', symbol: '$', name: 'Dólar' }
+  }, [currencies, config])
 
-  const totalVES = useMemo(() => total * vesRate, [total, vesRate])
+  // 2. Resolve Secondary Currency & Active Exchange Rate
+  const { secondaryCurrency, exchangeRate } = useMemo(() => {
+    const sec = currencies.find((c) => c.id !== baseCurrency.id && c.is_active)
+    if (!sec) {
+      return { secondaryCurrency: null, exchangeRate: 1.0 }
+    }
+
+    const directRate = rates.find(
+      (r) =>
+        (r.from_currency === baseCurrency.code && r.to_currency === sec.code) ||
+        (r.to_currency === sec.code)
+    )
+
+    const rVal = directRate?.rate ? Number(directRate.rate) : 1.0
+    return {
+      secondaryCurrency: sec,
+      exchangeRate: rVal > 0 ? rVal : 1.0
+    }
+  }, [currencies, baseCurrency, rates])
+
+  const hasSecondary = Boolean(secondaryCurrency && exchangeRate > 0)
+  const totalSecondary = useMemo(() => total * exchangeRate, [total, exchangeRate])
 
   if (!isOpen) return null
 
@@ -176,11 +200,13 @@ export function CheckoutModal({
               <div className="text-xs font-bold text-text-secondary uppercase tracking-wider">Total a Cobrar</div>
               <div className="flex items-baseline gap-2">
                 <span className="text-2xl font-black text-primary font-mono tracking-tight">
-                  ${total.toFixed(2)}
+                  {baseCurrency.symbol} {total.toFixed(2)}
                 </span>
-                <span className="text-sm font-bold text-text-secondary font-mono">
-                  / Bs. {totalVES.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
+                {hasSecondary && (
+                  <span className="text-sm font-bold text-text-secondary font-mono">
+                    / {secondaryCurrency?.symbol} {totalSecondary.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {secondaryCurrency?.code}
+                  </span>
+                )}
               </div>
             </div>
 
@@ -285,7 +311,6 @@ export function CheckoutModal({
           {step === 'calculator' && (
             <PaymentCalculator
               total={total}
-              vesRate={vesRate}
               paymentType={paymentFlow === 'mixed' ? 'mixed' : 'complete'}
               onBack={() => setStep('decision')}
               onComplete={(payments, change) => {
