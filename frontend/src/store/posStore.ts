@@ -6,6 +6,9 @@ export interface CartItem {
   name: string
   price: number
   quantity: number
+  tax_id?: string | null
+  tax_rate?: number | null
+  tax_included?: boolean
   notes?: string
   category_id?: string
 }
@@ -101,7 +104,15 @@ export const usePosStore = create<PosState>((set) => ({
 
   setShowCustomerSelector: (show: boolean) => set({ showCustomerSelector: show }),
 
-  addItem: (item: { id: string; name: string; price: number; category_id?: string }) => {
+  addItem: (item: {
+    id: string
+    name: string
+    price: number
+    category_id?: string
+    tax_id?: string | null
+    tax_rate?: number | null
+    tax_included?: boolean
+  }) => {
     const cleanPrice = typeof item.price === 'number' && !isNaN(item.price) ? item.price : parseFloat(item.price as any) || 0
 
     set((state) => {
@@ -122,6 +133,9 @@ export const usePosStore = create<PosState>((set) => ({
           price: cleanPrice,
           quantity: 1,
           category_id: item.category_id,
+          tax_id: item.tax_id ?? null,
+          tax_rate: item.tax_rate ?? null,
+          tax_included: item.tax_included ?? true,
         }
         newCart = [...state.cart, newItem]
       }

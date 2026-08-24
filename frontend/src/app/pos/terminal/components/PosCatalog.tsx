@@ -89,6 +89,9 @@ export default function PosCatalog() {
       name: item.name,
       price: Number(item.sale_price) || 0,
       category_id: item.category_id || undefined,
+      tax_id: item.tax_id || null,
+      tax_rate: item.tax_rate !== undefined && item.tax_rate !== null ? Number(item.tax_rate) : null,
+      tax_included: item.tax_included ?? true,
     })
 
     // Micro-animation feedback

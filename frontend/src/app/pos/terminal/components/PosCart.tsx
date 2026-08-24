@@ -71,38 +71,53 @@ export default function PosCart({ onCheckout, onSendToKitchen }: PosCartProps) {
     return isNaN(parsed) || parsed <= 0 ? 40.0 : parsed
   }, [rates])
 
-  // Tax calculation (e.g. 16% IVA or configured active taxes)
-  const taxRatePercent = useMemo(() => {
-    if (Array.isArray(taxes) && taxes.length > 0) {
-      const sum = taxes.reduce((acc, t) => {
-        let r = typeof t.rate === 'number' ? t.rate : parseFloat(t.rate as any) || 0
-        // If tax rate is stored as decimal fraction (e.g. 0.16 instead of 16), convert to percentage
-        if (r > 0 && r <= 1.0) {
-          r = r * 100
+  // Subtotal & Tax breakdown calculated item by item
+  const { subtotal, taxAmount, weightedTaxRate } = useMemo(() => {
+    if (!cart || cart.length === 0) {
+      return { subtotal: 0, taxAmount: 0, weightedTaxRate: 0 }
+    }
+
+    let calculatedSubtotal = 0
+    let calculatedTax = 0
+
+    cart.forEach((item) => {
+      const itemPrice = typeof item.price === 'number' ? item.price : parseFloat(item.price as any) || 0
+      const itemQty = typeof item.quantity === 'number' ? item.quantity : parseInt(item.quantity as any) || 0
+      const lineTotal = itemPrice * itemQty
+
+      // If product has specific tax_rate or tax_id
+      let rate = 0
+      if (item.tax_rate !== undefined && item.tax_rate !== null) {
+        let r = Number(item.tax_rate)
+        if (r > 0 && r <= 1.0) r = r * 100
+        rate = r
+      } else if (item.tax_id && Array.isArray(taxes)) {
+        const found = taxes.find((t) => t.id === item.tax_id)
+        if (found) {
+          let r = typeof found.rate === 'number' ? found.rate : parseFloat(found.rate as any) || 0
+          if (r > 0 && r <= 1.0) r = r * 100
+          rate = r
         }
-        return acc + (isNaN(r) ? 0 : r)
-      }, 0)
-      return isNaN(sum) ? 16 : sum
-    }
-    return 16 // default 16%
-  }, [taxes])
+      }
 
-  // Subtotal & Tax breakdown
-  const { subtotal, taxAmount } = useMemo(() => {
-    const validTotal = typeof total === 'number' && !isNaN(total) ? total : 0
-    const validTaxRate = typeof taxRatePercent === 'number' && !isNaN(taxRatePercent) ? taxRatePercent : 16
+      if (rate > 0) {
+        const itemSub = lineTotal / (1 + rate / 100)
+        calculatedSubtotal += itemSub
+        calculatedTax += (lineTotal - itemSub)
+      } else {
+        // Exempt / 0% Tax
+        calculatedSubtotal += lineTotal
+      }
+    })
 
-    if (validTotal <= 0) {
-      return { subtotal: 0, taxAmount: 0 }
-    }
+    const effectiveRate = calculatedSubtotal > 0 ? (calculatedTax / calculatedSubtotal) * 100 : 0
 
-    const sub = validTaxRate > 0 ? validTotal / (1 + validTaxRate / 100) : validTotal
-    const tax = validTotal - sub
     return {
-      subtotal: isNaN(sub) ? 0 : Math.max(0, sub),
-      taxAmount: isNaN(tax) ? 0 : Math.max(0, tax),
+      subtotal: Math.round(calculatedSubtotal * 100) / 100,
+      taxAmount: Math.round(calculatedTax * 100) / 100,
+      weightedTaxRate: Math.round(effectiveRate * 10) / 10,
     }
-  }, [total, taxRatePercent])
+  }, [cart, taxes])
 
   const totalVES = useMemo(() => {
     const validTotal = typeof total === 'number' && !isNaN(total) ? total : 0
@@ -344,7 +359,9 @@ export default function PosCart({ onCheckout, onSendToKitchen }: PosCartProps) {
             </span>
           </div>
           <div className="flex justify-between items-center text-[11px]">
-            <span>IVA ({Number(taxRatePercent) || 16}%)</span>
+            <span>
+              {weightedTaxRate > 0 ? `IVA (${weightedTaxRate}%)` : 'IVA (Exento / 0%)'}
+            </span>
             <span className="font-mono text-text-primary font-bold">
               ${(Number(taxAmount) || 0).toFixed(2)}
             </span>
