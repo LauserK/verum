@@ -445,7 +445,9 @@ export function PaymentCalculator({
             {/* Amount input & currency toggle */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-text-secondary uppercase">Monto a Cobrar</label>
+                <label className="text-xs font-bold text-text-secondary uppercase">
+                  {paymentType === 'complete' ? 'Monto Total a Procesar' : 'Monto a Cobrar'}
+                </label>
                 {/* Currency Switch (Only shown if secondary currency exists) */}
                 {hasSecondary && (
                   <div className="flex bg-surface-raised p-1 rounded-xl border border-border">
@@ -486,7 +488,9 @@ export function PaymentCalculator({
                   readOnly
                   value={inputAmountStr}
                   placeholder="0.00"
-                  className="w-full pl-12 pr-4 py-3 bg-surface-raised border border-border focus:border-primary rounded-2xl text-2xl font-black font-mono text-text-primary outline-none transition-all text-right"
+                  className={`w-full pl-12 pr-4 py-3 bg-surface-raised border border-border rounded-2xl text-2xl font-black font-mono text-text-primary outline-none transition-all text-right ${
+                    paymentType === 'complete' ? 'bg-surface-raised/40 cursor-default' : 'focus:border-primary'
+                  }`}
                 />
               </div>
 
@@ -504,19 +508,21 @@ export function PaymentCalculator({
               )}
             </div>
 
-            {/* Quick cash / amounts */}
-            <div className="grid grid-cols-4 gap-2">
-              {[5, 10, 20, 50].map((val) => (
-                <button
-                  key={val}
-                  type="button"
-                  onClick={() => handleQuickAmount(val)}
-                  className="py-2 bg-surface-raised hover:bg-surface border border-border rounded-xl text-xs font-mono font-bold text-text-primary hover:border-primary/40 transition-all cursor-pointer"
-                >
-                  {baseCurrency.symbol}{val}
-                </button>
-              ))}
-            </div>
+            {/* Quick cash / amounts (only in mixed mode) */}
+            {paymentType === 'mixed' && (
+              <div className="grid grid-cols-4 gap-2">
+                {[5, 10, 20, 50].map((val) => (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => handleQuickAmount(val)}
+                    className="py-2 bg-surface-raised hover:bg-surface border border-border rounded-xl text-xs font-mono font-bold text-text-primary hover:border-primary/40 transition-all cursor-pointer"
+                  >
+                    {baseCurrency.symbol}{val}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* Cash Tendered (only if method is cash) */}
             {selectedMethod?.method_type === 'cash' && (
@@ -565,10 +571,10 @@ export function PaymentCalculator({
                   type="button"
                   onClick={handleAddPayment}
                   disabled={!inputAmountStr || parseFloat(inputAmountStr) <= 0}
-                  className="w-full py-3.5 bg-primary text-black font-black text-sm rounded-2xl hover:bg-primary-hover shadow-lg shadow-primary/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40"
+                  className="w-full py-4 bg-primary text-black font-black text-base rounded-2xl hover:bg-primary-hover shadow-lg shadow-primary/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40"
                 >
                   <Check className="w-5 h-5" />
-                  <span>Procesar Pago Completo</span>
+                  <span>Procesar Pago Completo ({activeInputCurrency?.symbol}{inputAmountStr})</span>
                 </button>
               ) : (
                 <div className="flex gap-3">
@@ -596,28 +602,30 @@ export function PaymentCalculator({
             </div>
           </div>
 
-          {/* On-screen Touch Numpad */}
-          <div className="w-60 bg-surface-raised p-3 rounded-2xl border border-border flex flex-col gap-2">
-            <div className="grid grid-cols-3 gap-2 flex-1">
-              {['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', '⌫'].map((key) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => handleNumpadPress(key)}
-                  className="flex items-center justify-center bg-surface hover:bg-surface-raised active:bg-primary/20 border border-border/80 hover:border-primary/30 rounded-xl text-lg font-bold font-mono text-text-primary transition-all cursor-pointer select-none"
-                >
-                  {key}
-                </button>
-              ))}
+          {/* On-screen Touch Numpad (Only displayed for mixed payment mode) */}
+          {paymentType === 'mixed' && (
+            <div className="w-60 bg-surface-raised p-3 rounded-2xl border border-border flex flex-col gap-2">
+              <div className="grid grid-cols-3 gap-2 flex-1">
+                {['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', '⌫'].map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => handleNumpadPress(key)}
+                    className="flex items-center justify-center bg-surface hover:bg-surface-raised active:bg-primary/20 border border-border/80 hover:border-primary/30 rounded-xl text-lg font-bold font-mono text-text-primary transition-all cursor-pointer select-none"
+                  >
+                    {key}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => handleNumpadPress('C')}
+                className="py-2.5 bg-error/10 text-error hover:bg-error/20 rounded-xl text-xs font-bold uppercase transition-colors cursor-pointer"
+              >
+                Borrar
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => handleNumpadPress('C')}
-              className="py-2.5 bg-error/10 text-error hover:bg-error/20 rounded-xl text-xs font-bold uppercase transition-colors cursor-pointer"
-            >
-              Borrar
-            </button>
-          </div>
+          )}
         </div>
       </div>
     </div>

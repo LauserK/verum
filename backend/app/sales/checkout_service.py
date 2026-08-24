@@ -1,3 +1,4 @@
+from datetime import datetime
 from fastapi import HTTPException
 from app.sales.schemas import CheckoutCreate
 from app.sales.service import resolve_pos_config
@@ -66,11 +67,36 @@ async def process_checkout(org_id: str, payload: CheckoutCreate, user_id: str, d
 
     total_amount = subtotal - payload.discount_amount
 
-    # 6. Generate document number
-    doc_num_res = db.rpc("get_next_doc_number", {
-        "p_org_id": org_id, "p_type": payload.document_type
-    }).execute()
-    doc_number = doc_num_res.data
+    # 6. Generate document number (auto-provision sequence if missing)
+    doc_number = None
+    try:
+        doc_num_res = db.rpc("get_next_doc_number", {
+            "p_org_id": org_id, "p_type": payload.document_type
+        }).execute()
+        doc_number = doc_num_res.data
+    except Exception:
+        # Check / create sequence in table directly
+        seq_res = db.table("document_sequences").select("*").eq("org_id", org_id).eq("document_type", payload.document_type).execute()
+        if not seq_res.data:
+            prefix = "INV-" if payload.document_type == "invoice" else "TKT-"
+            db.table("document_sequences").insert({
+                "org_id": org_id,
+                "document_type": payload.document_type,
+                "prefix": prefix,
+                "next_number": 2,
+                "padding": 8
+            }).execute()
+            doc_number = f"{prefix}00000001"
+        else:
+            cur = seq_res.data[0]
+            nxt = cur.get("next_number", 1)
+            pfx = cur.get("prefix", "INV-")
+            pad = cur.get("padding", 8)
+            db.table("document_sequences").update({"next_number": nxt + 1}).eq("id", cur["id"]).execute()
+            doc_number = f"{pfx}{str(nxt).zfill(pad)}"
+
+    if not doc_number:
+        doc_number = f"INV-{int(datetime.now().timestamp())}"
 
     # 7. Calculate payments
     amount_paid = sum(p.amount * p.exchange_rate for p in payload.payments)
