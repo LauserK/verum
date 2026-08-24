@@ -148,6 +148,56 @@ class CacheManager:
         except Exception as e:
             logger.warning(f"Cache DELETE_PATTERN error for '{raw_pattern}': {e}")
 
+    async def hgetall(self, raw_key: str) -> dict:
+        """Get all hash fields for a key. Returns dict or empty dict if disabled/missing."""
+        if not self._enabled:
+            return {}
+        try:
+            key = self._make_key(raw_key)
+            data = await self._redis.hgetall(key)
+            if not data:
+                return {}
+            # decode bytes to str if needed
+            res = {}
+            for k, v in data.items():
+                k_str = k.decode("utf-8") if isinstance(k, bytes) else str(k)
+                v_str = v.decode("utf-8") if isinstance(v, bytes) else str(v)
+                res[k_str] = v_str
+            return res
+        except Exception as e:
+            logger.warning(f"Cache HGETALL error for '{raw_key}': {e}")
+            return {}
+
+    async def hset(self, raw_key: str, field: str, value: str) -> None:
+        """Set a hash field. No-op if disabled."""
+        if not self._enabled:
+            return
+        try:
+            key = self._make_key(raw_key)
+            await self._redis.hset(key, field, value)
+        except Exception as e:
+            logger.warning(f"Cache HSET error for '{raw_key}': {e}")
+
+    async def hdel(self, raw_key: str, field: str) -> None:
+        """Delete a hash field. No-op if disabled."""
+        if not self._enabled:
+            return
+        try:
+            key = self._make_key(raw_key)
+            await self._redis.hdel(key, field)
+        except Exception as e:
+            logger.warning(f"Cache HDEL error for '{raw_key}': {e}")
+
+    async def expire(self, raw_key: str, ttl: int) -> None:
+        """Set TTL on a key. No-op if disabled."""
+        if not self._enabled:
+            return
+        try:
+            key = self._make_key(raw_key)
+            await self._redis.expire(key, ttl)
+        except Exception as e:
+            logger.warning(f"Cache EXPIRE error for '{raw_key}': {e}")
+
     async def health(self) -> dict:
         """Return cache health status and metrics."""
         if not self._enabled:
