@@ -50,3 +50,41 @@ ALTER TABLE public.sale_items
 ALTER TABLE public.payments
   ADD COLUMN IF NOT EXISTS change_currency TEXT,
   ADD COLUMN IF NOT EXISTS change_method TEXT;
+
+-- 6. Helper RPC: get_stock_balance for item in warehouse
+CREATE OR REPLACE FUNCTION public.get_stock_balance(p_warehouse_id UUID, p_item_id UUID)
+RETURNS NUMERIC AS $$
+DECLARE
+  v_qty NUMERIC;
+BEGIN
+  -- Sum from unexhausted lots if available
+  SELECT COALESCE(SUM(qty_base), 0)
+  INTO v_qty
+  FROM public.stock_lots
+  WHERE warehouse_id = p_warehouse_id
+    AND item_id = p_item_id
+    AND is_exhausted = false;
+
+  -- Fallback to stock_movements if no lots found
+  IF v_qty = 0 THEN
+    SELECT COALESCE(SUM(qty_base), 0)
+    INTO v_qty
+    FROM public.stock_movements
+    WHERE warehouse_id = p_warehouse_id
+      AND item_id = p_item_id;
+  END IF;
+
+  RETURN COALESCE(v_qty, 0);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 7. Helper RPC: increment_customer_balance for CXC sales
+CREATE OR REPLACE FUNCTION public.increment_customer_balance(p_customer_id UUID, p_amount NUMERIC)
+RETURNS VOID AS $$
+BEGIN
+  UPDATE public.customers
+  SET outstanding_balance = COALESCE(outstanding_balance, 0) + p_amount
+  WHERE id = p_customer_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+

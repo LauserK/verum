@@ -29,12 +29,19 @@ def test_reserve_stock_success(client, mock_supabase, mock_user):
             mock_cache.hset = AsyncMock()
             mock_cache.expire = AsyncMock()
 
-            mock_item = MagicMock()
-            mock_item.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = [
-                {"allow_negative_stock": False}
-            ]
-            mock_supabase.table.return_value = mock_item
-            mock_supabase.rpc.return_value.execute.return_value.data = 10.0
+            def table_router(name):
+                mock_t = MagicMock()
+                if name == "sale_items":
+                    mock_t.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = [
+                        {"allow_negative_stock": False}
+                    ]
+                elif name == "stock_lots":
+                    mock_t.select.return_value.eq.return_value.eq.return_value.eq.return_value.execute.return_value.data = [
+                        {"qty_base": 10.0}
+                    ]
+                return mock_t
+
+            mock_supabase.table.side_effect = table_router
 
             response = client.post("/sales/stock/reserve", json={
                 "sale_item_id": item_id,
@@ -64,12 +71,19 @@ def test_reserve_stock_insufficient(client, mock_supabase, mock_user):
             mock_cache.hset = AsyncMock()
             mock_cache.expire = AsyncMock()
 
-            mock_item = MagicMock()
-            mock_item.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = [
-                {"allow_negative_stock": False}
-            ]
-            mock_supabase.table.return_value = mock_item
-            mock_supabase.rpc.return_value.execute.return_value.data = 10.0
+            def table_router(name):
+                mock_t = MagicMock()
+                if name == "sale_items":
+                    mock_t.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = [
+                        {"allow_negative_stock": False}
+                    ]
+                elif name == "stock_lots":
+                    mock_t.select.return_value.eq.return_value.eq.return_value.eq.return_value.execute.return_value.data = [
+                        {"qty_base": 10.0}
+                    ]
+                return mock_t
+
+            mock_supabase.table.side_effect = table_router
 
             response = client.post("/sales/stock/reserve", json={
                 "sale_item_id": item_id,
@@ -82,3 +96,4 @@ def test_reserve_stock_insufficient(client, mock_supabase, mock_user):
             assert response.status_code == 400
             assert "OUT_OF_STOCK" in response.json().get("detail", "")
     app.dependency_overrides.clear()
+

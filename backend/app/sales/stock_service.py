@@ -1,6 +1,31 @@
 from fastapi import HTTPException
 from app.cache import cache
 
+async def _get_item_stock(warehouse_id: str, sale_item_id: str, db) -> float:
+    """
+    Get current stock balance for an item in a warehouse.
+    Calculates from stock_movements / stock_lots.
+    """
+    try:
+        # Sum unexhausted lots
+        lots_res = db.table("stock_lots").select("qty_base").eq(
+            "warehouse_id", warehouse_id
+        ).eq("item_id", sale_item_id).eq("is_exhausted", False).execute()
+        if lots_res.data:
+            return sum(float(lot.get("qty_base", 0)) for lot in lots_res.data)
+
+        # Alternatively sum stock_movements
+        mv_res = db.table("stock_movements").select("qty_base").eq(
+            "warehouse_id", warehouse_id
+        ).eq("item_id", sale_item_id).execute()
+        if mv_res.data:
+            return sum(float(mv.get("qty_base", 0)) for mv in mv_res.data)
+
+        return 0.0
+    except Exception:
+        # If any query fails, return 0.0
+        return 0.0
+
 
 async def reserve_stock(org_id: str, sale_item_id: str, cart_line_id: str,
                         quantity: float, warehouse_id: str, session_id: str, db):
@@ -14,11 +39,7 @@ async def reserve_stock(org_id: str, sale_item_id: str, cart_line_id: str,
 
     if not allow_negative:
         # Get real stock from inventory
-        stock_res = db.rpc("get_stock_balance", {
-            "p_warehouse_id": warehouse_id,
-            "p_item_id": sale_item_id
-        }).execute()
-        actual_stock = float(stock_res.data) if stock_res.data else 0.0
+        actual_stock = await _get_item_stock(warehouse_id, sale_item_id, db)
 
         # Subtract existing reservations
         cache_key = f"stock:reserved:{warehouse_id}:{sale_item_id}"
@@ -70,12 +91,8 @@ async def get_stock_availability(org_id: str, warehouse_id: str, db):
         item_id = item["id"]
         allow_neg = item.get("allow_negative_stock", False)
 
-        # Get real stock
-        stock_res = db.rpc("get_stock_balance", {
-            "p_warehouse_id": warehouse_id,
-            "p_item_id": item_id
-        }).execute()
-        actual = float(stock_res.data) if stock_res.data else 0.0
+        # Get real stock from inventory
+        actual = await _get_item_stock(warehouse_id, item_id, db)
 
         # Subtract reservations
         cache_key = f"stock:reserved:{warehouse_id}:{item_id}"
@@ -89,3 +106,4 @@ async def get_stock_availability(org_id: str, warehouse_id: str, db):
         })
 
     return result
+
