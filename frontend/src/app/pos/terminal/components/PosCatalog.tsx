@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import React, { useMemo, useState } from 'react'
 import {
@@ -14,7 +14,9 @@ import {
   Pizza,
   Sandwich,
   Cake,
-  Plus
+  Plus,
+  LayoutGrid,
+  ArrowLeft
 } from 'lucide-react'
 import { useCategories, useSalesItems } from '@/hooks/useSales'
 import { usePosStore } from '@/store/posStore'
@@ -50,7 +52,16 @@ const getCategoryIcon = (iconName?: string) => {
 }
 
 export default function PosCatalog() {
-  const { searchQuery, setSearchQuery, selectedCategoryId, setSelectedCategory, addItem } = usePosStore()
+  const { 
+    searchQuery, 
+    setSearchQuery, 
+    selectedCategoryId, 
+    setSelectedCategory, 
+    addItem,
+    posMode,
+    activeTableName,
+    setActiveTable
+  } = usePosStore()
   const { data: categories = [], isLoading: isLoadingCategories } = useCategories()
   const { data: items = [], isLoading: isLoadingItems } = useSalesItems()
 
@@ -110,8 +121,19 @@ export default function PosCatalog() {
     <div className="flex flex-col h-full w-full bg-bg overflow-hidden">
       {/* Sticky Top Filter & Category Bar */}
       <div className="shrink-0 p-4 pb-3 space-y-3 bg-surface/80 backdrop-blur-md border-b border-border/70 z-10">
-        {/* Search Input Bar */}
+        {/* Search Input Bar & Table Back Button */}
         <div className="flex items-center gap-3">
+          {posMode === 'tables' && activeTableName && (
+            <button
+              onClick={() => setActiveTable(null, null)}
+              className="h-11 px-3.5 rounded-2xl bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 flex items-center gap-2 text-xs font-bold transition-all shrink-0 cursor-pointer shadow-sm active:scale-95"
+              title="Volver al plano interactivo de mesas"
+            >
+              <LayoutGrid className="w-4 h-4" />
+              <span>{activeTableName} (Cambiar)</span>
+            </button>
+          )}
+
           <div className="relative flex-1">
             <Search className="w-4 h-4 text-text-secondary absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input

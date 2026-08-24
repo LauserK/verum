@@ -13,7 +13,6 @@ import {
   Bike,
   PackageCheck,
   Wine,
-  Clock,
   RotateCcw,
   CheckCircle2,
   AlertCircle
@@ -51,53 +50,57 @@ export default function PosCart({ onCheckout, onSendToKitchen }: PosCartProps) {
   const { data: rates = [] } = useExchangeRates()
   const { data: taxes = [] } = useTaxes(true)
 
-  // Track start time for the order / elapsed time
-  const [startTime] = useState<Date>(() => new Date())
-  const [elapsedMinutes, setElapsedMinutes] = useState<number>(0)
-
   // Undo toast state after clearCart
   const [deletedBackup, setDeletedBackup] = useState<CartItem[] | null>(null)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const [toastType, setToastType] = useState<'info' | 'success'>('info')
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      const diff = Math.floor((Date.now() - startTime.getTime()) / 60000)
-      setElapsedMinutes(diff)
-    }, 30000)
-    return () => clearInterval(timer)
-  }, [startTime])
-
   // Exchange rate calculation (USD to VES or default 40.0)
   const vesExchangeRate = useMemo(() => {
+    if (!Array.isArray(rates)) return 40.0
     const vesRateObj = rates.find(
       (r) =>
         (r.from_currency === 'USD' && r.to_currency === 'VES') ||
         (r.to_currency === 'VES')
     )
-    return vesRateObj?.rate ? Number(vesRateObj.rate) : 40.0
+    const parsed = vesRateObj?.rate ? parseFloat(vesRateObj.rate as any) : 40.0
+    return isNaN(parsed) || parsed <= 0 ? 40.0 : parsed
   }, [rates])
 
   // Tax calculation (e.g. 16% IVA or configured active taxes)
   const taxRatePercent = useMemo(() => {
-    if (taxes && taxes.length > 0) {
-      return taxes.reduce((acc, t) => acc + (t.rate || 0), 0)
+    if (Array.isArray(taxes) && taxes.length > 0) {
+      const sum = taxes.reduce((acc, t) => {
+        const r = typeof t.rate === 'number' ? t.rate : parseFloat(t.rate as any) || 0
+        return acc + (isNaN(r) ? 0 : r)
+      }, 0)
+      return isNaN(sum) ? 16 : sum
     }
     return 16 // default 16%
   }, [taxes])
 
   // Subtotal & Tax breakdown
   const { subtotal, taxAmount } = useMemo(() => {
-    const sub = total / (1 + taxRatePercent / 100)
-    const tax = total - sub
+    const validTotal = typeof total === 'number' && !isNaN(total) ? total : 0
+    const validTaxRate = typeof taxRatePercent === 'number' && !isNaN(taxRatePercent) ? taxRatePercent : 16
+
+    if (validTotal <= 0) {
+      return { subtotal: 0, taxAmount: 0 }
+    }
+
+    const sub = validTaxRate > 0 ? validTotal / (1 + validTaxRate / 100) : validTotal
+    const tax = validTotal - sub
     return {
-      subtotal: Math.max(0, sub),
-      taxAmount: Math.max(0, tax),
+      subtotal: isNaN(sub) ? 0 : Math.max(0, sub),
+      taxAmount: isNaN(tax) ? 0 : Math.max(0, tax),
     }
   }, [total, taxRatePercent])
 
   const totalVES = useMemo(() => {
-    return total * vesExchangeRate
+    const validTotal = typeof total === 'number' && !isNaN(total) ? total : 0
+    const validRate = typeof vesExchangeRate === 'number' && !isNaN(vesExchangeRate) ? vesExchangeRate : 40.0
+    const v = validTotal * validRate
+    return isNaN(v) ? 0 : v
   }, [total, vesExchangeRate])
 
   const handleClearCart = () => {
@@ -168,13 +171,6 @@ export default function PosCart({ onCheckout, onSendToKitchen }: PosCartProps) {
               <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${modeBadge.color}`}>
                 <ModeIcon className="w-3 h-3" />
                 {modeText}
-              </span>
-            </div>
-            <div className="flex items-center gap-1 text-[10px] text-text-secondary mt-0.5">
-              <Clock className="w-3 h-3 text-text-secondary/70" />
-              <span>
-                {startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                {elapsedMinutes > 0 ? ` (${elapsedMinutes}m)` : ' (Reciente)'}
               </span>
             </div>
           </div>
@@ -317,13 +313,13 @@ export default function PosCart({ onCheckout, onSendToKitchen }: PosCartProps) {
           <div className="flex justify-between items-center">
             <span>Subtotal</span>
             <span className="font-mono text-text-primary font-bold">
-              ${subtotal.toFixed(2)}
+              ${(Number(subtotal) || 0).toFixed(2)}
             </span>
           </div>
           <div className="flex justify-between items-center text-[11px]">
-            <span>IVA ({taxRatePercent}%)</span>
+            <span>IVA ({Number(taxRatePercent) || 16}%)</span>
             <span className="font-mono text-text-primary font-bold">
-              ${taxAmount.toFixed(2)}
+              ${(Number(taxAmount) || 0).toFixed(2)}
             </span>
           </div>
         </div>
@@ -335,15 +331,15 @@ export default function PosCart({ onCheckout, onSendToKitchen }: PosCartProps) {
               Total a Pagar
             </span>
             <div className="text-2xl font-black text-primary font-mono tracking-tight leading-none mt-1">
-              ${total.toFixed(2)}
+              ${(Number(total) || 0).toFixed(2)}
             </div>
           </div>
           <div className="text-right">
             <span className="text-[10px] text-text-secondary/70 font-mono">
-              Tasa: {vesExchangeRate.toFixed(2)} VES/$
+              Tasa: {(Number(vesExchangeRate) || 40).toFixed(2)} VES/$
             </span>
             <div className="text-sm font-bold text-text-secondary font-mono tracking-tight">
-              {totalVES.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} VES
+              {(Number(totalVES) || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} VES
             </div>
           </div>
         </div>

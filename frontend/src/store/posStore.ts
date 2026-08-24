@@ -39,8 +39,12 @@ export interface PosState {
 }
 
 const calculateTotal = (cart: CartItem[]): number => {
-  const sum = cart.reduce((acc, item) => acc + item.price * item.quantity, 0)
-  return Math.round(sum * 100) / 100
+  const sum = cart.reduce((acc, item) => {
+    const p = typeof item.price === 'number' ? item.price : parseFloat(item.price as any) || 0
+    const q = typeof item.quantity === 'number' ? item.quantity : parseInt(item.quantity as any) || 0
+    return acc + (isNaN(p) ? 0 : p) * (isNaN(q) ? 0 : q)
+  }, 0)
+  return isNaN(sum) ? 0 : Math.round(sum * 100) / 100
 }
 
 export const usePosStore = create<PosState>((set) => ({
@@ -74,6 +78,8 @@ export const usePosStore = create<PosState>((set) => ({
   setSelectedCategory: (catId: string) => set({ selectedCategoryId: catId }),
 
   addItem: (item: { id: string; name: string; price: number; category_id?: string }) => {
+    const cleanPrice = typeof item.price === 'number' && !isNaN(item.price) ? item.price : parseFloat(item.price as any) || 0
+
     set((state) => {
       const existingIndex = state.cart.findIndex((i) => i.id === item.id)
       let newCart: CartItem[]
@@ -81,7 +87,7 @@ export const usePosStore = create<PosState>((set) => ({
       if (existingIndex > -1) {
         newCart = state.cart.map((cartItem, idx) =>
           idx === existingIndex
-            ? { ...cartItem, quantity: cartItem.quantity + 1 }
+            ? { ...cartItem, quantity: (cartItem.quantity || 0) + 1 }
             : cartItem
         )
       } else {
@@ -89,7 +95,7 @@ export const usePosStore = create<PosState>((set) => ({
           cartItemId: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
           id: item.id,
           name: item.name,
-          price: item.price,
+          price: cleanPrice,
           quantity: 1,
           category_id: item.category_id,
         }

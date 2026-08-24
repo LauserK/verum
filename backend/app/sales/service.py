@@ -7,7 +7,8 @@ from app.sales.schemas import (
     SaleItemCreate, SaleItemUpdate, SaleItemVariantCreate, SaleItemComponentCreate,
     SaleCategoryCreate, SaleCategoryUpdate, SaleModifierGroupCreate,
     CustomerCreate, CustomerUpdate, DocumentSequenceCreate,
-    FloorPlanCreate, FloorPlanUpdate, TableCreate, TableUpdate
+    FloorPlanCreate, FloorPlanUpdate, TableCreate, TableUpdate,
+    PosSessionOpen, PosSessionOut
 )
 
 # --- Config Service ---

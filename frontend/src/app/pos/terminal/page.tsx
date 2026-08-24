@@ -10,14 +10,15 @@ import {
   Wine, 
   LogOut, 
   UserCircle2,
-  Receipt,
-  ArrowLeft,
-  MonitorCheck
+  MonitorCheck,
+  LayoutGrid,
+  MapPin
 } from 'lucide-react'
 import { usePosStore, PosMode } from '@/store/posStore'
 import { useProfile } from '@/hooks/useProfile'
 import PosCatalog from './components/PosCatalog'
 import PosCart from './components/PosCart'
+import PosTableMap from './components/PosTableMap'
 
 interface PosModeTab {
   id: PosMode
@@ -36,7 +37,22 @@ const POS_TABS: PosModeTab[] = [
 export default function PosTerminalPage() {
   const router = useRouter()
   const { data: profile } = useProfile()
-  const { posMode, setPosMode, activeTableName, activeWorkstationName } = usePosStore()
+  const { 
+    posMode, 
+    setPosMode, 
+    activeTableId, 
+    activeTableName, 
+    setActiveTable, 
+    activeWorkstationName 
+  } = usePosStore()
+
+  const handleModeChange = (newMode: PosMode) => {
+    setPosMode(newMode)
+    // If switching away from tables mode, reset active table
+    if (newMode !== 'tables') {
+      setActiveTable(null, null)
+    }
+  }
 
   return (
     <div className="h-screen w-screen flex flex-col bg-bg text-text-primary overflow-hidden select-none">
@@ -67,7 +83,7 @@ export default function PosTerminalPage() {
             return (
               <button
                 key={tab.id}
-                onClick={() => setPosMode(tab.id)}
+                onClick={() => handleModeChange(tab.id)}
                 className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
                   isActive
                     ? 'bg-surface text-primary border border-border/80 shadow-sm ring-1 ring-primary/20'
@@ -89,12 +105,20 @@ export default function PosTerminalPage() {
             <span className="font-semibold text-text-primary">{activeWorkstationName || 'Caja Principal'}</span>
           </div>
 
-          {/* Active Table indicator if in tables mode */}
+          {/* Active Table indicator & Map Toggle button if in tables mode */}
           {posMode === 'tables' && (
-            <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-primary/10 border border-primary/25 text-xs text-primary font-bold">
-              <Utensils className="w-3.5 h-3.5" />
-              <span>{activeTableName ? `Mesa: ${activeTableName}` : 'Sin mesa asignada'}</span>
-            </div>
+            <button
+              onClick={() => setActiveTable(null, null)}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer shadow-sm ${
+                activeTableName
+                  ? 'bg-primary/10 border-primary/30 text-primary hover:bg-primary/20'
+                  : 'bg-surface-raised border-border text-text-secondary hover:text-text-primary hover:bg-surface'
+              }`}
+              title="Cambiar de mesa o ver mapa general"
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span>{activeTableName ? `Mesa: ${activeTableName} (Cambiar)` : 'Mapa de Mesas'}</span>
+            </button>
           )}
 
           {/* Cashier Chip */}
@@ -117,17 +141,24 @@ export default function PosTerminalPage() {
         </div>
       </header>
 
-      {/* Main 70/30 Split Container */}
+      {/* Main Container */}
       <main className="flex-1 flex overflow-hidden">
-        {/* Left (70% width): PosCatalog */}
-        <div className="w-[70%] h-full flex flex-col border-r border-border overflow-hidden">
-          <PosCatalog />
-        </div>
-
-        {/* Right (30% width): Interactive Minuta/Cart */}
-        <aside className="w-[30%] h-full flex flex-col overflow-hidden">
-          <PosCart />
-        </aside>
+        {posMode === 'tables' && !activeTableId ? (
+          /* Fullscreen Table Map (100% width) when no table is selected */
+          <div className="w-full h-full flex flex-col overflow-hidden">
+            <PosTableMap />
+          </div>
+        ) : (
+          /* 70/30 Split Container: Catalog + Minuta */
+          <>
+            <div className="w-[70%] h-full flex flex-col border-r border-border overflow-hidden">
+              <PosCatalog />
+            </div>
+            <aside className="w-[30%] h-full flex flex-col overflow-hidden">
+              <PosCart />
+            </aside>
+          </>
+        )}
       </main>
     </div>
   )
