@@ -75,7 +75,11 @@ export default function PosCart({ onCheckout, onSendToKitchen }: PosCartProps) {
   const taxRatePercent = useMemo(() => {
     if (Array.isArray(taxes) && taxes.length > 0) {
       const sum = taxes.reduce((acc, t) => {
-        const r = typeof t.rate === 'number' ? t.rate : parseFloat(t.rate as any) || 0
+        let r = typeof t.rate === 'number' ? t.rate : parseFloat(t.rate as any) || 0
+        // If tax rate is stored as decimal fraction (e.g. 0.16 instead of 16), convert to percentage
+        if (r > 0 && r <= 1.0) {
+          r = r * 100
+        }
         return acc + (isNaN(r) ? 0 : r)
       }, 0)
       return isNaN(sum) ? 16 : sum
