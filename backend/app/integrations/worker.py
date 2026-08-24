@@ -28,11 +28,11 @@ async def process_outbox_events(client: httpx.AsyncClient):
             
             # Si el evento falló previamente, esperar al menos 1 minuto desde el último intento
             if status == "failed":
-                updated_at_str = event.get("updated_at") or event.get("processed_at") or event.get("created_at")
-                if updated_at_str:
+                attempt_time_str = event.get("processed_at") or event.get("created_at")
+                if attempt_time_str:
                     try:
                         # Reemplazar Z por +00:00 para compatibilidad ISO
-                        dt_iso = updated_at_str.replace("Z", "+00:00")
+                        dt_iso = attempt_time_str.replace("Z", "+00:00")
                         last_attempt = datetime.fromisoformat(dt_iso)
                         if now - last_attempt < retry_delay:
                             # Aún no ha pasado el minuto de enfriamiento para este evento
@@ -46,7 +46,7 @@ async def process_outbox_events(client: httpx.AsyncClient):
                 supabase.table("integration_events").update({
                     "status": "failed",
                     "error_message": "No active quick_integration found for org.",
-                    "updated_at": "now()"
+                    "processed_at": "now()"
                 }).eq("id", event_id).execute()
                 continue
                 
@@ -83,7 +83,6 @@ async def process_outbox_events(client: httpx.AsyncClient):
                     supabase.table("integration_events").update({
                         "status": "processed",
                         "processed_at": "now()",
-                        "updated_at": "now()",
                         "error_message": None
                     }).eq("id", event_id).execute()
                     print(f"[OUTBOX WORKER] Successfully dispatched event {event_id} ({event.get('event_type')}) to VerumQuick.")
@@ -91,14 +90,14 @@ async def process_outbox_events(client: httpx.AsyncClient):
                     supabase.table("integration_events").update({
                         "status": "failed",
                         "error_message": f"HTTP {response.status_code}: {response.text}",
-                        "updated_at": "now()"
+                        "processed_at": "now()"
                     }).eq("id", event_id).execute()
                     print(f"[OUTBOX WORKER ERROR] Webhook response {response.status_code}: {response.text}")
             except Exception as e:
                 supabase.table("integration_events").update({
                     "status": "failed",
                     "error_message": str(e),
-                    "updated_at": "now()"
+                    "processed_at": "now()"
                 }).eq("id", event_id).execute()
                 print(f"[OUTBOX WORKER ERROR] Failed to connect to webhook: {e}")
                 
