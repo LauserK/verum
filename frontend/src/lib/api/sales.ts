@@ -18,15 +18,25 @@ export interface Customer {
 
 export interface Invoice {
     id: string
+    document_number: string
     invoice_number?: string
+    document_type?: string
     customer_id?: string
-    status: 'draft' | 'confirmed' | 'voided' | 'refunded'
+    customer_name?: string
+    customer_tax_id?: string
+    status: 'draft' | 'confirmed' | 'partial' | 'paid' | 'void' | 'refunded'
     subtotal: number
-    tax_total: number
-    total_amount: number
-    currency?: string
+    discount_amount?: number
+    total_tax?: number
+    tax_total?: number
+    total: number
+    total_amount?: number
+    amount_paid?: number
+    balance_due?: number
     currency_code?: string
+    currency?: string
     created_at: string
+    date?: string
 }
 
 export interface InvoiceLineItem {
@@ -504,7 +514,7 @@ export interface CheckoutChange {
 export interface CheckoutPayload {
     workstation_id: string
     pos_session_id: string
-    venue_id: string
+    venue_id?: string | null
     mode: string
     table_id?: string | null
     customer_id?: string | null

@@ -712,7 +712,7 @@ class CheckoutChangeCreate(BaseModel):
 class CheckoutCreate(BaseModel):
     workstation_id: UUID
     pos_session_id: UUID
-    venue_id: UUID
+    venue_id: Optional[UUID] = None
     mode: Literal['tables', 'takeout', 'delivery', 'pickup', 'bar']
     table_id: Optional[UUID] = None
     customer_id: Optional[UUID] = None

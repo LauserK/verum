@@ -83,7 +83,7 @@ CREATE OR REPLACE FUNCTION public.increment_customer_balance(p_customer_id UUID,
 RETURNS VOID AS $$
 BEGIN
   UPDATE public.customers
-  SET outstanding_balance = COALESCE(outstanding_balance, 0) + p_amount
+  SET current_balance = COALESCE(current_balance, 0) + p_amount
   WHERE id = p_customer_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

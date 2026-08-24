@@ -151,7 +151,6 @@ export function CheckoutModal({
       const payload = {
         workstation_id: wsId,
         pos_session_id: sessId,
-        venue_id: '00000000-0000-0000-0000-000000000000', // resolved from workstation or tenant on backend
         mode: mode,
         customer_id: customerId,
         customer_name: customerName,

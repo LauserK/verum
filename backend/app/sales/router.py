@@ -432,6 +432,25 @@ async def list_sequences(
 
 # --- Invoices ---
 
+@router.get("/invoices", response_model=List[InvoiceOut])
+async def list_invoices(
+    status: Optional[str] = None,
+    customer_id: Optional[str] = None,
+    document_type: Optional[str] = None,
+    pos_session_id: Optional[str] = None,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.view_invoices"))
+):
+    return await invoice_svc.list_invoices(
+        org_id=org_id,
+        db=db,
+        status=status,
+        customer_id=customer_id,
+        document_type=document_type,
+        pos_session_id=pos_session_id
+    )
+
 @router.post("/invoices", response_model=InvoiceOut)
 async def create_invoice(
     payload: InvoiceCreate,

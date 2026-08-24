@@ -45,22 +45,74 @@ async def process_checkout(org_id: str, payload: CheckoutCreate, user_id: str, d
         customer_tax_id = payload.customer_tax_id
 
     # 5. Calculate totals
+    sale_item_ids = [str(item.sale_item_id) for item in payload.items]
+    items_res = db.table("sale_items").select("id, name").in_("id", sale_item_ids).execute()
+    item_names = {i["id"]: i["name"] for i in items_res.data}
+    
+    variant_ids = [str(item.variant_id) for item in payload.items if item.variant_id]
+    variant_names = {}
+    if variant_ids:
+        var_res = db.table("sale_item_variants").select("id, name").in_("id", variant_ids).execute()
+        variant_names = {v["id"]: v["name"] for v in var_res.data}
+
+    tax_ids = [str(item.tax_id) for item in payload.items if item.tax_id]
+    taxes_dict = {}
+    if tax_ids:
+        tax_res = db.table("taxes").select("id, name, rate").in_("id", tax_ids).execute()
+        taxes_dict = {t["id"]: t for t in tax_res.data}
+
     subtotal = 0
+    total_tax = 0
+    total_exempt = 0
+    total_taxable = 0
     invoice_items = []
+    
     for item in payload.items:
         line_sub = item.quantity * item.unit_price
         discount_amt = line_sub * (item.discount_pct / 100) if item.discount_pct else 0
-        line_total = line_sub - discount_amt
-        subtotal += line_total
+        line_total_net = line_sub - discount_amt
+        
+        tax_name = None
+        tax_rate = 0.0
+        is_exempt = True
+        
+        if item.tax_id and str(item.tax_id) in taxes_dict:
+            tax = taxes_dict[str(item.tax_id)]
+            tax_name = tax["name"]
+            tax_rate = float(tax["rate"])
+            is_exempt = False
+            
+        line_tax = line_total_net * tax_rate
+        line_total = line_total_net + line_tax
+        
+        subtotal += line_total_net
+        total_tax += line_tax
+        if is_exempt:
+            total_exempt += line_total_net
+        else:
+            total_taxable += line_total_net
+            
+        base_name = item_names.get(str(item.sale_item_id), "Item")
+        if item.variant_id and str(item.variant_id) in variant_names:
+            desc = f"{base_name} - {variant_names[str(item.variant_id)]}"
+        else:
+            desc = base_name
+
         invoice_items.append({
             "sale_item_id": str(item.sale_item_id),
             "variant_id": str(item.variant_id) if item.variant_id else None,
+            "description": desc,
             "quantity": item.quantity,
             "unit_price": float(item.unit_price),
             "discount_pct": float(item.discount_pct),
             "discount_amount": float(discount_amt),
             "tax_id": str(item.tax_id) if item.tax_id else None,
-            "subtotal": float(line_total),
+            "tax_name": tax_name,
+            "tax_rate": tax_rate,
+            "is_exempt": is_exempt,
+            "tax_amount": float(line_tax),
+            "subtotal": float(line_total_net),
+            "total": float(line_total_net),
             "modifiers": item.modifiers,
             "notes": item.notes,
         })
@@ -108,10 +160,25 @@ async def process_checkout(org_id: str, payload: CheckoutCreate, user_id: str, d
 
     status = "paid" if balance_due <= 0.01 else "partial" if amount_paid > 0 else "confirmed"
 
-    # 8. Insert invoice
+    # 8. Resolve real venue_id if not valid
+    venue_id_to_use = None
+    if payload.venue_id and str(payload.venue_id) != "00000000-0000-0000-0000-000000000000":
+        venue_id_to_use = str(payload.venue_id)
+    else:
+        # Check workstation's venue_id
+        ws_res = db.table("workstations").select("venue_id").eq("id", str(payload.workstation_id)).execute()
+        if ws_res.data and ws_res.data[0].get("venue_id"):
+            venue_id_to_use = str(ws_res.data[0]["venue_id"])
+        else:
+            # Check active venue for org
+            ven_res = db.table("venues").select("id").eq("org_id", org_id).execute()
+            if ven_res.data:
+                venue_id_to_use = str(ven_res.data[0]["id"])
+
+    # 9. Insert invoice
     invoice_data = {
         "org_id": org_id,
-        "venue_id": str(payload.venue_id),
+        "venue_id": venue_id_to_use,
         "workstation_id": str(payload.workstation_id),
         "pos_session_id": str(payload.pos_session_id),
         "document_type": payload.document_type,
@@ -182,10 +249,22 @@ async def process_checkout(org_id: str, payload: CheckoutCreate, user_id: str, d
 
     # 11. Update customer outstanding balance for CXC
     if is_cxc and customer_id:
-        db.rpc("increment_customer_balance", {
-            "p_customer_id": customer_id,
-            "p_amount": float(balance_due)
-        }).execute()
+        try:
+            db.rpc("increment_customer_balance", {
+                "p_customer_id": customer_id,
+                "p_amount": float(balance_due)
+            }).execute()
+        except Exception:
+            # Fallback direct update to customers table (current_balance)
+            try:
+                c_res = db.table("customers").select("current_balance").eq("id", customer_id).execute()
+                if c_res.data:
+                    curr = float(c_res.data[0].get("current_balance") or 0)
+                    db.table("customers").update({
+                        "current_balance": curr + float(balance_due)
+                    }).eq("id", customer_id).execute()
+            except Exception as e:
+                print(f"[CHECKOUT] Customer balance update error: {e}")
 
     # 12. Deduct inventory
     if warehouse_id:

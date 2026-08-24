@@ -228,3 +228,30 @@ async def void_invoice(org_id: str, invoice_id: str, voided_by: str, reason: str
     }
     update_res = db.table("invoices").update(update_data).eq("id", invoice_id).execute()
     return update_res.data[0]
+
+async def list_invoices(
+    org_id: str,
+    db,
+    status: Optional[str] = None,
+    customer_id: Optional[str] = None,
+    document_type: Optional[str] = None,
+    pos_session_id: Optional[str] = None,
+    limit: int = 100
+) -> list:
+    query = db.table("invoices").select("*, invoice_items(*), invoice_tax_summary(*)").eq("org_id", org_id).order("created_at", desc=True).limit(limit)
+    if status:
+        query = query.eq("status", status)
+    if customer_id:
+        query = query.eq("customer_id", customer_id)
+    if document_type:
+        query = query.eq("document_type", document_type)
+    if pos_session_id:
+        query = query.eq("pos_session_id", pos_session_id)
+    
+    res = query.execute()
+    invoices = res.data or []
+    for inv in invoices:
+        inv["items"] = inv.get("invoice_items", [])
+        inv["tax_summary"] = inv.get("invoice_tax_summary", [])
+    return invoices
+
