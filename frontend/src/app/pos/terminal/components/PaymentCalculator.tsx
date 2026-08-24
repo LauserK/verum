@@ -13,14 +13,15 @@ import {
   Smartphone,
   Repeat,
   AlertCircle,
-  HelpCircle
+  HelpCircle,
+  ArrowRightLeft
 } from 'lucide-react'
-import { usePaymentMethods } from '@/hooks/useSales'
+import { usePaymentMethods, useCurrencies, useExchangeRates, useBillingConfig } from '@/hooks/useSales'
 import { CheckoutPayment, CheckoutChange } from '@/lib/api/sales'
 
 interface PaymentCalculatorProps {
   total: number
-  vesRate: number
+  vesRate?: number
   paymentType: 'complete' | 'mixed'
   onBack: () => void
   onComplete: (payments: CheckoutPayment[], change: CheckoutChange | null) => void
@@ -36,17 +37,51 @@ const METHOD_ICONS: Record<string, React.ElementType> = {
 
 export function PaymentCalculator({
   total,
-  vesRate,
   paymentType,
   onBack,
   onComplete
 }: PaymentCalculatorProps) {
   const { data: methods = [] } = usePaymentMethods()
+  const { data: currencies = [] } = useCurrencies()
+  const { data: rates = [] } = useExchangeRates()
+  const { data: config } = useBillingConfig()
+
+  // 1. Resolve Base Currency
+  const baseCurrency = useMemo(() => {
+    const fromConfig = currencies.find((c) => c.code === config?.default_currency)
+    if (fromConfig) return fromConfig
+    const isBase = currencies.find((c) => c.is_base)
+    if (isBase) return isBase
+    return currencies[0] || { code: 'USD', symbol: '$', name: 'Dólar Estadounidense' }
+  }, [currencies, config])
+
+  // 2. Resolve Secondary Currency & Active Exchange Rate
+  const { secondaryCurrency, exchangeRate } = useMemo(() => {
+    const sec = currencies.find((c) => c.id !== baseCurrency.id && c.is_active)
+    if (!sec) {
+      return { secondaryCurrency: null, exchangeRate: 1.0 }
+    }
+
+    // Find rate between base and secondary
+    const directRate = rates.find(
+      (r) =>
+        (r.from_currency === baseCurrency.code && r.to_currency === sec.code) ||
+        (r.to_currency === sec.code)
+    )
+
+    const rVal = directRate?.rate ? Number(directRate.rate) : 1.0
+    return {
+      secondaryCurrency: sec,
+      exchangeRate: rVal > 0 ? rVal : 1.0
+    }
+  }, [currencies, baseCurrency, rates])
+
+  const hasSecondary = Boolean(secondaryCurrency && exchangeRate > 0)
 
   // Selected method
   const [selectedMethodId, setSelectedMethodId] = useState<string>('')
-  // Currency mode of current input: 'USD' or 'VES'
-  const [inputCurrency, setInputCurrency] = useState<'USD' | 'VES'>('USD')
+  // Currency code of current input (e.g. 'USD', 'VES', 'CLP', etc.)
+  const [inputCurrencyCode, setInputCurrencyCode] = useState<string>(baseCurrency.code)
   // String buffer for on-screen numpad
   const [inputAmountStr, setInputAmountStr] = useState<string>('')
   // Cash tendered buffer (when cash method selected)
@@ -55,13 +90,28 @@ export function PaymentCalculator({
   const [reference, setReference] = useState<string>('')
   // Array of registered payments
   const [paymentsList, setPaymentsList] = useState<
-    Array<CheckoutPayment & { methodName: string; methodType: string }>
+    Array<CheckoutPayment & { methodName: string; methodType: string; symbol: string }>
   >([])
+
+  // Keep inputCurrencyCode aligned with base currency initially
+  useEffect(() => {
+    if (baseCurrency?.code && !inputCurrencyCode) {
+      setInputCurrencyCode(baseCurrency.code)
+    }
+  }, [baseCurrency, inputCurrencyCode])
 
   const selectedMethod = useMemo(
     () => methods.find((m) => m.id === selectedMethodId),
     [methods, selectedMethodId]
   )
+
+  // Active currency meta for current input
+  const activeInputCurrency = useMemo(() => {
+    return (
+      currencies.find((c) => c.code === inputCurrencyCode) ||
+      (inputCurrencyCode === secondaryCurrency?.code ? secondaryCurrency : baseCurrency)
+    )
+  }, [currencies, inputCurrencyCode, secondaryCurrency, baseCurrency])
 
   // Default select first method
   useEffect(() => {
@@ -70,28 +120,81 @@ export function PaymentCalculator({
     }
   }, [methods, selectedMethodId])
 
-  // Total paid in USD
-  const totalPaidUSD = useMemo(() => {
+  // Total paid in Base Currency
+  const totalPaidBase = useMemo(() => {
     return paymentsList.reduce((acc, p) => acc + p.amount * (p.exchange_rate || 1.0), 0)
   }, [paymentsList])
 
-  const remainingUSD = useMemo(() => {
-    const rem = total - totalPaidUSD
+  const remainingBase = useMemo(() => {
+    const rem = total - totalPaidBase
     return rem > 0.009 ? rem : 0
-  }, [total, totalPaidUSD])
+  }, [total, totalPaidBase])
 
-  const remainingVES = useMemo(() => remainingUSD * vesRate, [remainingUSD, vesRate])
+  const remainingSecondary = useMemo(
+    () => (hasSecondary ? remainingBase * exchangeRate : 0),
+    [remainingBase, exchangeRate, hasSecondary]
+  )
 
   // Auto prefill input amount based on remaining
   useEffect(() => {
     if (paymentType === 'complete') {
-      const amt = inputCurrency === 'USD' ? total : total * vesRate
+      const amt =
+        inputCurrencyCode === baseCurrency.code
+          ? total
+          : hasSecondary
+          ? total * exchangeRate
+          : total
       setInputAmountStr(amt.toFixed(2))
     } else {
-      const amt = inputCurrency === 'USD' ? remainingUSD : remainingVES
+      const amt =
+        inputCurrencyCode === baseCurrency.code
+          ? remainingBase
+          : hasSecondary
+          ? remainingSecondary
+          : remainingBase
       setInputAmountStr(amt > 0 ? amt.toFixed(2) : '')
     }
-  }, [selectedMethodId, inputCurrency, remainingUSD, remainingVES, paymentType, total, vesRate])
+  }, [
+    selectedMethodId,
+    inputCurrencyCode,
+    remainingBase,
+    remainingSecondary,
+    paymentType,
+    total,
+    exchangeRate,
+    baseCurrency.code,
+    hasSecondary
+  ])
+
+  // Live Conversion Calculation for Numpad Buffer
+  const liveConversion = useMemo(() => {
+    const val = parseFloat(inputAmountStr)
+    if (!val || isNaN(val) || val <= 0 || !hasSecondary) return null
+
+    if (inputCurrencyCode === baseCurrency.code) {
+      // Base -> Secondary
+      const converted = val * exchangeRate
+      return {
+        amount: converted,
+        formatted: `${secondaryCurrency?.symbol || ''} ${converted.toLocaleString('es-VE', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        })} ${secondaryCurrency?.code || ''}`,
+        targetCurrency: secondaryCurrency?.code
+      }
+    } else {
+      // Secondary -> Base
+      const converted = val / exchangeRate
+      return {
+        amount: converted,
+        formatted: `${baseCurrency.symbol} ${converted.toLocaleString('es-VE', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        })} ${baseCurrency.code}`,
+        targetCurrency: baseCurrency.code
+      }
+    }
+  }, [inputAmountStr, inputCurrencyCode, baseCurrency, secondaryCurrency, exchangeRate, hasSecondary])
 
   // Numpad key handlers
   const handleNumpadPress = (val: string) => {
@@ -113,10 +216,10 @@ export function PaymentCalculator({
 
   // Quick amount buttons
   const handleQuickAmount = (multiplier: number) => {
-    if (inputCurrency === 'USD') {
+    if (inputCurrencyCode === baseCurrency.code) {
       setInputAmountStr(multiplier.toString())
     } else {
-      setInputAmountStr((multiplier * vesRate).toString())
+      setInputAmountStr(hasSecondary ? (multiplier * exchangeRate).toFixed(2) : multiplier.toString())
     }
   }
 
@@ -124,25 +227,26 @@ export function PaymentCalculator({
     const rawVal = parseFloat(inputAmountStr)
     if (!rawVal || rawVal <= 0 || !selectedMethod) return
 
-    let amountUSD = rawVal
+    let amountBase = rawVal
     let rate = 1.0
 
-    if (inputCurrency === 'VES') {
-      amountUSD = rawVal / vesRate
-      rate = 1.0 / vesRate
+    if (inputCurrencyCode !== baseCurrency.code && hasSecondary) {
+      amountBase = rawVal / exchangeRate
+      rate = 1.0 / exchangeRate
     }
 
     const cashTenderedVal = parseFloat(cashTenderedStr)
 
-    const newPayment: CheckoutPayment & { methodName: string; methodType: string } = {
+    const newPayment: CheckoutPayment & { methodName: string; methodType: string; symbol: string } = {
       payment_method_id: selectedMethod.id,
       amount: rawVal,
-      currency_code: inputCurrency,
+      currency_code: inputCurrencyCode,
       exchange_rate: rate,
       reference: reference.trim() || null,
       cash_tendered: cashTenderedVal && cashTenderedVal > rawVal ? cashTenderedVal : null,
       methodName: selectedMethod.name,
-      methodType: selectedMethod.method_type
+      methodType: selectedMethod.method_type,
+      symbol: activeInputCurrency?.symbol || '$'
     }
 
     if (paymentType === 'complete') {
@@ -151,7 +255,7 @@ export function PaymentCalculator({
       if (cashTenderedVal && cashTenderedVal > rawVal) {
         changeObj = {
           amount: cashTenderedVal - rawVal,
-          currency_code: inputCurrency,
+          currency_code: inputCurrencyCode,
           method: 'cash'
         }
       }
@@ -169,7 +273,7 @@ export function PaymentCalculator({
   }
 
   const handleFinishMixed = () => {
-    if (remainingUSD > 0.05) return
+    if (remainingBase > 0.05) return
 
     // Calculate change if any cash payment was overpaid
     let changeObj: CheckoutChange | null = null
@@ -212,10 +316,10 @@ export function PaymentCalculator({
                 type="button"
                 onClick={() => {
                   setSelectedMethodId(method.id)
-                  if (method.currency_code === 'VES' || method.currency_code === 'Bs') {
-                    setInputCurrency('VES')
+                  if (method.currency_code) {
+                    setInputCurrencyCode(method.currency_code)
                   } else {
-                    setInputCurrency('USD')
+                    setInputCurrencyCode(baseCurrency.code)
                   }
                 }}
                 className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all text-left cursor-pointer ${
@@ -249,7 +353,7 @@ export function PaymentCalculator({
                       : 'bg-surface-raised text-text-secondary'
                   }`}
                 >
-                  {method.currency_code || 'USD'}
+                  {method.currency_code || baseCurrency.code}
                 </span>
               </button>
             )
@@ -264,35 +368,41 @@ export function PaymentCalculator({
           <div>
             <span className="text-[11px] font-bold text-text-secondary uppercase">Total Cuenta</span>
             <div className="text-lg font-black text-text-primary font-mono tracking-tight mt-0.5">
-              ${total.toFixed(2)}
+              {baseCurrency.symbol} {total.toFixed(2)}
             </div>
-            <span className="text-[11px] text-text-secondary font-mono">
-              Bs. {(total * vesRate).toFixed(2)}
-            </span>
+            {hasSecondary && (
+              <span className="text-[11px] text-text-secondary font-mono">
+                {secondaryCurrency?.symbol} {(total * exchangeRate).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            )}
           </div>
 
           <div>
             <span className="text-[11px] font-bold text-text-secondary uppercase">Total Pagado</span>
             <div className="text-lg font-black text-emerald-500 font-mono tracking-tight mt-0.5">
-              ${totalPaidUSD.toFixed(2)}
+              {baseCurrency.symbol} {totalPaidBase.toFixed(2)}
             </div>
-            <span className="text-[11px] text-emerald-500/80 font-mono">
-              Bs. {(totalPaidUSD * vesRate).toFixed(2)}
-            </span>
+            {hasSecondary && (
+              <span className="text-[11px] text-emerald-500/80 font-mono">
+                {secondaryCurrency?.symbol} {(totalPaidBase * exchangeRate).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            )}
           </div>
 
           <div>
             <span className="text-[11px] font-bold text-text-secondary uppercase">Por Pagar</span>
             <div
               className={`text-lg font-black font-mono tracking-tight mt-0.5 ${
-                remainingUSD <= 0.009 ? 'text-emerald-500' : 'text-amber-500'
+                remainingBase <= 0.009 ? 'text-emerald-500' : 'text-amber-500'
               }`}
             >
-              ${remainingUSD.toFixed(2)}
+              {baseCurrency.symbol} {remainingBase.toFixed(2)}
             </div>
-            <span className="text-[11px] text-text-secondary font-mono">
-              Bs. {remainingVES.toFixed(2)}
-            </span>
+            {hasSecondary && (
+              <span className="text-[11px] text-text-secondary font-mono">
+                {secondaryCurrency?.symbol} {remainingSecondary.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            )}
           </div>
         </div>
 
@@ -309,7 +419,7 @@ export function PaymentCalculator({
                   <div className="flex items-center gap-3">
                     <span className="text-sm font-semibold text-text-primary">{p.methodName}</span>
                     <span className="text-xs font-mono font-bold px-2 py-0.5 bg-surface border border-border rounded-md text-text-secondary">
-                      {p.currency_code} {p.amount.toFixed(2)}
+                      {p.symbol} {p.amount.toFixed(2)} {p.currency_code}
                     </span>
                     {p.reference && (
                       <span className="text-xs text-text-secondary font-mono">Ref: {p.reference}</span>
@@ -336,36 +446,40 @@ export function PaymentCalculator({
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-text-secondary uppercase">Monto a Cobrar</label>
-                {/* Currency Switch */}
-                <div className="flex bg-surface-raised p-1 rounded-xl border border-border">
-                  <button
-                    type="button"
-                    onClick={() => setInputCurrency('USD')}
-                    className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                      inputCurrency === 'USD'
-                        ? 'bg-primary text-black shadow-sm'
-                        : 'text-text-secondary hover:text-text-primary'
-                    }`}
-                  >
-                    USD ($)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setInputCurrency('VES')}
-                    className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                      inputCurrency === 'VES'
-                        ? 'bg-primary text-black shadow-sm'
-                        : 'text-text-secondary hover:text-text-primary'
-                    }`}
-                  >
-                    VES (Bs.)
-                  </button>
-                </div>
+                {/* Currency Switch (Only shown if secondary currency exists) */}
+                {hasSecondary && (
+                  <div className="flex bg-surface-raised p-1 rounded-xl border border-border">
+                    <button
+                      type="button"
+                      onClick={() => setInputCurrencyCode(baseCurrency.code)}
+                      className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                        inputCurrencyCode === baseCurrency.code
+                          ? 'bg-primary text-black shadow-sm'
+                          : 'text-text-secondary hover:text-text-primary'
+                      }`}
+                    >
+                      {baseCurrency.code} ({baseCurrency.symbol})
+                    </button>
+                    {secondaryCurrency && (
+                      <button
+                        type="button"
+                        onClick={() => setInputCurrencyCode(secondaryCurrency.code)}
+                        className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                          inputCurrencyCode === secondaryCurrency.code
+                            ? 'bg-primary text-black shadow-sm'
+                            : 'text-text-secondary hover:text-text-primary'
+                        }`}
+                      >
+                        {secondaryCurrency.code} ({secondaryCurrency.symbol})
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 font-mono font-bold text-text-secondary text-lg">
-                  {inputCurrency === 'USD' ? '$' : 'Bs.'}
+                  {activeInputCurrency?.symbol || '$'}
                 </span>
                 <input
                   type="text"
@@ -375,6 +489,19 @@ export function PaymentCalculator({
                   className="w-full pl-12 pr-4 py-3 bg-surface-raised border border-border focus:border-primary rounded-2xl text-2xl font-black font-mono text-text-primary outline-none transition-all text-right"
                 />
               </div>
+
+              {/* LIVE CONVERSION CALLOUT: Shows instant conversion in the other currency */}
+              {hasSecondary && liveConversion && (
+                <div className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-primary/10 border border-primary/20 text-xs text-text-primary font-medium animate-in fade-in">
+                  <span className="flex items-center gap-1.5 text-text-secondary text-[11px]">
+                    <ArrowRightLeft className="w-3.5 h-3.5 text-primary" />
+                    Equivalente en {liveConversion.targetCurrency}:
+                  </span>
+                  <span className="font-mono font-bold text-primary">
+                    ≈ {liveConversion.formatted}
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Quick cash / amounts */}
@@ -386,7 +513,7 @@ export function PaymentCalculator({
                   onClick={() => handleQuickAmount(val)}
                   className="py-2 bg-surface-raised hover:bg-surface border border-border rounded-xl text-xs font-mono font-bold text-text-primary hover:border-primary/40 transition-all cursor-pointer"
                 >
-                  ${val}
+                  {baseCurrency.symbol}{val}
                 </button>
               ))}
             </div>
@@ -408,7 +535,7 @@ export function PaymentCalculator({
                 {parseFloat(cashTenderedStr) > (parseFloat(inputAmountStr) || 0) && (
                   <p className="text-xs text-emerald-400 font-bold mt-1">
                     Cambio a devolver:{' '}
-                    {inputCurrency === 'USD' ? '$' : 'Bs.'}{' '}
+                    {activeInputCurrency?.symbol || '$'}{' '}
                     {(parseFloat(cashTenderedStr) - (parseFloat(inputAmountStr) || 0)).toFixed(2)}
                   </p>
                 )}
@@ -458,7 +585,7 @@ export function PaymentCalculator({
                   <button
                     type="button"
                     onClick={handleFinishMixed}
-                    disabled={remainingUSD > 0.01 || paymentsList.length === 0}
+                    disabled={remainingBase > 0.01 || paymentsList.length === 0}
                     className="flex-1 py-3 bg-emerald-500 text-black font-black text-sm rounded-2xl hover:bg-emerald-400 shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40"
                   >
                     <Check className="w-4 h-4" />
