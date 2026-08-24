@@ -7,6 +7,9 @@ export interface Customer {
     email?: string
     phone?: string
     address?: string
+    notes?: string
+    birth_date?: string
+    social_media?: string
     credit_limit: number
     outstanding_balance: number
     is_active: boolean
@@ -233,6 +236,45 @@ export const salesApi = {
         method: 'DELETE',
     }),
 
+    // POS Config
+    getPosConfig: (workstationId: string, mode: string) =>
+        fetchWithAuth<PosConfig>(`/sales/pos-config?workstation_id=${workstationId}&mode=${mode}`),
+
+    // Sale Mode Config
+    getModeConfigs: () => fetchWithAuth<SaleModeConfig[]>('/sales/mode-config'),
+    createModeConfig: (data: { mode: string; customer_requirement: string }) =>
+        fetchWithAuth<SaleModeConfig>('/sales/mode-config', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        }),
+    updateModeConfig: (id: string, data: { customer_requirement: string | null }) =>
+        fetchWithAuth<SaleModeConfig>(`/sales/mode-config/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(data),
+        }),
+    deleteModeConfig: (id: string) =>
+        fetchWithAuth<{ status: string }>(`/sales/mode-config/${id}`, { method: 'DELETE' }),
+
+    // Stock
+    reserveStock: (data: { sale_item_id: string; cart_line_id: string; quantity: number; warehouse_id: string; session_id: string }) =>
+        fetchWithAuth('/sales/stock/reserve', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        }),
+    releaseStock: (cartLineId: string, warehouseId: string, saleItemId: string, sessionId: string) =>
+        fetchWithAuth(`/sales/stock/reserve/${cartLineId}?warehouse_id=${warehouseId}&sale_item_id=${saleItemId}&session_id=${sessionId}`, {
+            method: 'DELETE',
+        }),
+    getStockAvailability: (warehouseId: string) =>
+        fetchWithAuth<StockAvailability[]>(`/sales/stock/availability?warehouse_id=${warehouseId}`),
+
+    // Checkout
+    processCheckout: (data: CheckoutPayload) =>
+        fetchWithAuth<CheckoutResponse>('/sales/checkout', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        }),
+
     // POS Sessions
     openPosSession: (data: { venue_id?: string | null; workstation_id?: string | null; opening_balance: number; opening_currency: string; notes?: string }) =>
         fetchWithAuth<PosSession>('/sales/sessions/open', {
@@ -265,6 +307,8 @@ export interface Workstation {
     org_id?: string
     venue_id?: string | null
     name: string
+    warehouse_id?: string | null
+    customer_requirement?: 'required' | 'optional' | 'disabled' | null
     is_active: boolean
     allowed_modes?: string[]
     created_at?: string
@@ -352,6 +396,7 @@ export interface SaleItem {
     variant_label?: string
     is_active: boolean
     is_featured: boolean
+    allow_negative_stock?: boolean
     position: number
     components?: SaleItemComponent[]
     variants?: SaleItemVariant[]
@@ -412,4 +457,78 @@ export interface FloorPlan {
     created_at?: string
     updated_at?: string
 }
+
+// ── Checkout Types ──
+
+export interface PosConfig {
+    customer_requirement: 'required' | 'optional' | 'disabled'
+    warehouse_id: string
+    resolved_from: string
+}
+
+export interface SaleModeConfig {
+    id: string
+    org_id: string
+    mode: string
+    customer_requirement: 'required' | 'optional' | 'disabled' | null
+    created_at: string
+    updated_at: string
+}
+
+export interface CheckoutItem {
+    sale_item_id: string
+    variant_id?: string | null
+    quantity: number
+    unit_price: number
+    discount_pct?: number
+    tax_id?: string | null
+    modifiers?: any[]
+    notes?: string | null
+}
+
+export interface CheckoutPayment {
+    payment_method_id: string
+    amount: number
+    currency_code: string
+    exchange_rate?: number
+    reference?: string | null
+    cash_tendered?: number | null
+}
+
+export interface CheckoutChange {
+    amount: number
+    currency_code: string
+    method: string
+}
+
+export interface CheckoutPayload {
+    workstation_id: string
+    pos_session_id: string
+    venue_id: string
+    mode: string
+    table_id?: string | null
+    customer_id?: string | null
+    customer_name?: string | null
+    customer_tax_id?: string | null
+    items: CheckoutItem[]
+    payments: CheckoutPayment[]
+    change?: CheckoutChange | null
+    document_type?: string
+    discount_amount?: number
+    notes?: string | null
+}
+
+export interface CheckoutResponse {
+    invoice: Invoice & {
+        amount_paid: number
+        balance_due: number
+    }
+}
+
+export interface StockAvailability {
+    sale_item_id: string
+    available_stock: number
+    allow_negative_stock: boolean
+}
+
 

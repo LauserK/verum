@@ -26,12 +26,21 @@ export interface PosState {
   orderNumber: number
   searchQuery: string
   selectedCategoryId: string
+  customerId: string | null
+  customerName: string | null
+  customerTaxId: string | null
+  showCheckout: boolean
+  showCustomerSelector: boolean
   setPosMode: (mode: PosMode) => void
   setActiveTable: (id: string | null, name?: string | null) => void
   setActiveWorkstation: (id: string | null, name?: string | null) => void
   setSessionOpening: (balance: number, currency: string, sessionId?: string | null) => void
   setSearchQuery: (query: string) => void
   setSelectedCategory: (catId: string) => void
+  setCustomer: (id: string | null, name: string | null, taxId?: string | null) => void
+  clearCustomer: () => void
+  setShowCheckout: (show: boolean) => void
+  setShowCustomerSelector: (show: boolean) => void
   addItem: (item: { id: string; name: string; price: number; category_id?: string }) => void
   removeItem: (cartItemId: string) => void
   updateQuantity: (cartItemId: string, qty: number) => void
@@ -61,6 +70,11 @@ export const usePosStore = create<PosState>((set) => ({
   orderNumber: 1,
   searchQuery: '',
   selectedCategoryId: 'all',
+  customerId: null,
+  customerName: null,
+  customerTaxId: null,
+  showCheckout: false,
+  showCustomerSelector: false,
 
   setPosMode: (mode: PosMode) => set({ posMode: mode }),
 
@@ -76,6 +90,16 @@ export const usePosStore = create<PosState>((set) => ({
   setSearchQuery: (query: string) => set({ searchQuery: query }),
 
   setSelectedCategory: (catId: string) => set({ selectedCategoryId: catId }),
+
+  setCustomer: (id: string | null, name: string | null, taxId?: string | null) =>
+    set({ customerId: id, customerName: name, customerTaxId: taxId ?? null }),
+
+  clearCustomer: () =>
+    set({ customerId: null, customerName: null, customerTaxId: null }),
+
+  setShowCheckout: (show: boolean) => set({ showCheckout: show }),
+
+  setShowCustomerSelector: (show: boolean) => set({ showCustomerSelector: show }),
 
   addItem: (item: { id: string; name: string; price: number; category_id?: string }) => {
     const cleanPrice = typeof item.price === 'number' && !isNaN(item.price) ? item.price : parseFloat(item.price as any) || 0

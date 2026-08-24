@@ -16,9 +16,10 @@ import {
   Cake,
   Plus,
   LayoutGrid,
-  ArrowLeft
+  ArrowLeft,
+  AlertTriangle
 } from 'lucide-react'
-import { useCategories, useSalesItems } from '@/hooks/useSales'
+import { useCategories, useSalesItems, usePosConfig, useStockAvailability } from '@/hooks/useSales'
 import { usePosStore } from '@/store/posStore'
 import { SaleItem } from '@/lib/api/sales'
 
@@ -60,10 +61,23 @@ export default function PosCatalog() {
     addItem,
     posMode,
     activeTableName,
-    setActiveTable
+    setActiveTable,
+    activeWorkstationId
   } = usePosStore()
   const { data: categories = [], isLoading: isLoadingCategories } = useCategories()
   const { data: items = [], isLoading: isLoadingItems } = useSalesItems()
+
+  // Stock resolution
+  const { data: posConfig } = usePosConfig(activeWorkstationId || undefined, posMode)
+  const { data: stockData } = useStockAvailability(posConfig?.warehouse_id)
+
+  const getStockInfo = (itemId: string) => {
+    if (!stockData) return { available: Infinity, allowNeg: false }
+    const s = stockData.find((item) => item.sale_item_id === itemId)
+    return s
+      ? { available: s.available_stock, allowNeg: s.allow_negative_stock }
+      : { available: Infinity, allowNeg: false }
+  }
 
   // Track recently clicked item ID for visual pulse micro-animation
   const [clickedItemId, setClickedItemId] = useState<string | null>(null)
@@ -253,14 +267,18 @@ export default function PosCatalog() {
             {filteredItems.map((item) => {
               const isClicked = clickedItemId === item.id
               const price = Number(item.sale_price) || 0
+              const stock = getStockInfo(item.id)
+              const isOutOfStock = stock.available <= 0 && !stock.allowNeg
+              const isNegativeWarning = stock.available <= 0 && stock.allowNeg
 
               return (
                 <button
                   key={item.id}
+                  disabled={isOutOfStock}
                   onClick={() => handleItemClick(item)}
                   className={`group relative bg-surface border border-border rounded-2xl p-3 flex flex-col justify-between text-left transition-all duration-200 hover:border-primary/60 hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-0.5 active:scale-95 cursor-pointer select-none min-h-[160px] ${
                     isClicked ? 'ring-2 ring-primary border-primary scale-[0.98]' : ''
-                  }`}
+                  } ${isOutOfStock ? 'opacity-40 grayscale cursor-not-allowed hover:border-border hover:shadow-none hover:translate-y-0' : ''}`}
                 >
                   {/* Top: Square Image or Elegant Placeholder */}
                   <div className="w-full aspect-[4/3] rounded-xl overflow-hidden bg-surface-raised border border-border/50 relative flex items-center justify-center mb-2.5">
@@ -284,10 +302,31 @@ export default function PosCatalog() {
                       </span>
                     )}
 
+                    {/* Low/Negative stock warning */}
+                    {isNegativeWarning && (
+                      <span
+                        className="absolute top-2 right-2 p-1 rounded-md bg-amber-500/90 text-black shadow-sm"
+                        title="Venta sin stock activada (inventario negativo)"
+                      >
+                        <AlertTriangle className="w-3.5 h-3.5" />
+                      </span>
+                    )}
+
+                    {/* Out of stock overlay badge */}
+                    {isOutOfStock && (
+                      <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] flex items-center justify-center">
+                        <span className="px-2 py-1 rounded-md bg-error text-white text-[10px] font-black uppercase tracking-wider shadow-sm">
+                          Sin Stock
+                        </span>
+                      </div>
+                    )}
+
                     {/* Quick Add overlay button icon */}
-                    <div className="absolute bottom-2 right-2 w-7 h-7 rounded-lg bg-surface/90 backdrop-blur-sm border border-border/80 text-text-secondary group-hover:bg-primary group-hover:text-text-inverse group-hover:border-primary flex items-center justify-center transition-all duration-200 shadow-sm">
-                      <Plus className="w-4 h-4" />
-                    </div>
+                    {!isOutOfStock && (
+                      <div className="absolute bottom-2 right-2 w-7 h-7 rounded-lg bg-surface/90 backdrop-blur-sm border border-border/80 text-text-secondary group-hover:bg-primary group-hover:text-text-inverse group-hover:border-primary flex items-center justify-center transition-all duration-200 shadow-sm">
+                        <Plus className="w-4 h-4" />
+                      </div>
+                    )}
                   </div>
 
                   {/* Body: Title & Category */}
@@ -302,7 +341,7 @@ export default function PosCatalog() {
                     )}
                   </div>
 
-                  {/* Footer: Price */}
+                  {/* Footer: Price & Stock */}
                   <div className="mt-2.5 pt-2 border-t border-border/50 flex items-center justify-between">
                     <span className="text-xs sm:text-sm font-black text-primary font-mono tracking-tight">
                       ${price.toFixed(2)}

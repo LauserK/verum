@@ -15,7 +15,8 @@ import {
   Wine,
   RotateCcw,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  User
 } from 'lucide-react'
 import { usePosStore, CartItem, PosMode } from '@/store/posStore'
 import { useBillingConfig, useExchangeRates, useTaxes } from '@/hooks/useSales'
@@ -40,6 +41,9 @@ export default function PosCart({ onCheckout, onSendToKitchen }: PosCartProps) {
     posMode,
     activeTableName,
     orderNumber,
+    customerId,
+    customerName,
+    setShowCustomerSelector,
     updateQuantity,
     removeItem,
     clearCart,
@@ -176,17 +180,36 @@ export default function PosCart({ onCheckout, onSendToKitchen }: PosCartProps) {
           </div>
         </div>
 
-        {/* Clear Button */}
-        {cart.length > 0 && (
+        <div className="flex items-center gap-2">
+          {/* Customer Button */}
           <button
-            onClick={handleClearCart}
-            className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-text-secondary hover:text-error hover:bg-error/10 border border-transparent hover:border-error/20 transition-all cursor-pointer flex items-center gap-1.5"
-            title="Vaciar comanda"
+            type="button"
+            onClick={() => setShowCustomerSelector(true)}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+              customerId
+                ? 'border-primary/40 text-primary bg-primary/10'
+                : 'border-border text-text-secondary hover:border-primary/30 hover:text-text-primary bg-surface-raised/40'
+            }`}
+            title={customerId ? `Cliente: ${customerName}` : 'Asignar cliente'}
           >
-            <Trash2 className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Vaciar</span>
+            <User className="w-3.5 h-3.5" />
+            <span className="truncate max-w-[110px]">
+              {customerId ? customerName : 'Cliente'}
+            </span>
           </button>
-        )}
+
+          {/* Clear Button */}
+          {cart.length > 0 && (
+            <button
+              onClick={handleClearCart}
+              className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-text-secondary hover:text-error hover:bg-error/10 border border-transparent hover:border-error/20 transition-all cursor-pointer flex items-center gap-1.5"
+              title="Vaciar comanda"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Vaciar</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Undo Toast Overlay */}

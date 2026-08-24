@@ -173,6 +173,7 @@ export default function SaleItemModal({
     const [taxIncluded, setTaxIncluded] = useState<boolean>(true)
     const [isActive, setIsActive] = useState<boolean>(true)
     const [isFeatured, setIsFeatured] = useState<boolean>(false)
+    const [allowNegativeStock, setAllowNegativeStock] = useState<boolean>(false)
     const [position, setPosition] = useState<number>(0)
     const [hasVariants, setHasVariants] = useState<boolean>(false)
     const [variantLabel, setVariantLabel] = useState<string>('Presentación')
@@ -226,6 +227,7 @@ export default function SaleItemModal({
             setTaxIncluded(item.tax_included ?? true)
             setIsActive(item.is_active ?? true)
             setIsFeatured(item.is_featured ?? false)
+            setAllowNegativeStock(item.allow_negative_stock ?? false)
             setPosition(item.position || 0)
             setHasVariants(item.has_variants ?? false)
             setVariantLabel(item.variant_label || 'Presentación')
@@ -443,6 +445,7 @@ export default function SaleItemModal({
                 tax_included: taxIncluded,
                 is_active: isActive,
                 is_featured: isFeatured,
+                allow_negative_stock: allowNegativeStock,
                 position: Number(position) || 0,
                 has_variants: hasVariants,
                 variant_label: variantLabel.trim() || 'Presentación',
@@ -837,6 +840,27 @@ export default function SaleItemModal({
                                             />
                                         </div>
                                     )}
+                                </div>
+
+                                {/* Allow Negative Stock Toggle Section */}
+                                <div className="p-4 bg-surface-raised/40 border border-border rounded-2xl space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <p className="text-sm font-bold text-text-primary">Permitir venta sin stock</p>
+                                            <p className="text-xs text-text-secondary">
+                                                El producto podrá venderse aunque el inventario esté en 0 o negativo (con advertencia visual en POS)
+                                            </p>
+                                        </div>
+                                        <label className="relative inline-flex items-center cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={allowNegativeStock}
+                                                onChange={(e) => setAllowNegativeStock(e.target.checked)}
+                                                className="sr-only peer"
+                                            />
+                                            <div className="w-9 h-5 bg-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+                                        </label>
+                                    </div>
                                 </div>
 
                                 {/* Description */}

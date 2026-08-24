@@ -10,7 +10,10 @@ import {
   useCurrencies, 
   useCreateCurrency, 
   useExchangeRates, 
-  useCreateExchangeRate 
+  useCreateExchangeRate,
+  useModeConfigs,
+  useCreateModeConfig,
+  useUpdateModeConfig
 } from '@/hooks/useSales'
 import { salesApi, PaymentMethod } from '@/lib/api/sales'
 import { 
@@ -26,7 +29,8 @@ import {
   AlertTriangle,
   Edit2,
   Trash2,
-  Power
+  Power,
+  UserCheck
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -43,6 +47,10 @@ export default function SalesConfigPage() {
   const { data: exchangeRates, isLoading: loadingRates } = useExchangeRates()
   const { mutateAsync: createExchangeRate, isPending: creatingRate } = useCreateExchangeRate()
 
+  const { data: modeConfigs, refetch: refetchModeConfigs } = useModeConfigs()
+  const { mutateAsync: createModeConfig } = useCreateModeConfig()
+  const { mutateAsync: updateModeConfig } = useUpdateModeConfig()
+
   const [saving, setSaving] = useState(false)
   const [savedSuccess, setSavedSuccess] = useState(false)
   const [configError, setConfigError] = useState<string | null>(null)
@@ -53,6 +61,7 @@ export default function SalesConfigPage() {
   // General form state
   const [form, setForm] = useState({
     default_currency: 'USD',
+    customer_requirement: 'optional' as 'required' | 'optional' | 'disabled',
     cash_rounding: true,
     cash_rounding_multiple: 1.0,
     cash_rounding_rule: 'nearest' as 'nearest' | 'up' | 'down',
@@ -107,6 +116,7 @@ export default function SalesConfigPage() {
     if (config) {
       setForm({
         default_currency: config.default_currency || 'USD',
+        customer_requirement: (config as any).customer_requirement || 'optional',
         cash_rounding: config.cash_rounding ?? true,
         cash_rounding_multiple: config.cash_rounding_multiple ?? 1.0,
         cash_rounding_rule: config.cash_rounding_rule || 'nearest',
@@ -330,6 +340,20 @@ export default function SalesConfigPage() {
                 </select>
                 <p className="text-xs text-text-secondary mt-1">Moneda de referencia para precios y contabilidad.</p>
               </div>
+
+              <div>
+                <label className="text-xs font-bold text-text-secondary uppercase tracking-wider">Política de Cliente (Global)</label>
+                <select 
+                  value={form.customer_requirement || 'optional'}
+                  onChange={e => setForm({...form, customer_requirement: e.target.value as any})}
+                  className="w-full bg-surface-raised border border-border rounded-xl px-4 py-2.5 text-sm focus:border-primary outline-none mt-1"
+                >
+                  <option value="optional">Opcional (Permite consumidor final)</option>
+                  <option value="required">Obligatorio (Exige RIF/Cédula antes de cobrar)</option>
+                  <option value="disabled">Desactivado (Oculta selector de clientes en POS)</option>
+                </select>
+                <p className="text-xs text-text-secondary mt-1">Política por defecto para todo el sistema.</p>
+              </div>
             </div>
 
             <div className="space-y-4 pt-2 border-t border-border">
@@ -404,7 +428,76 @@ export default function SalesConfigPage() {
         )}
       </div>
 
-      {/* 2. Currencies Catalog */}
+      {/* 2. Customer Requirement by Sale Mode */}
+      <div className="bg-surface border border-border rounded-2xl p-6 shadow-sm space-y-4">
+        <div className="border-b border-border pb-3">
+          <h2 className="text-base font-bold text-text-primary flex items-center gap-2">
+            <UserCheck className="w-5 h-5 text-primary" /> Políticas de Cliente por Modo de Venta
+          </h2>
+          <p className="text-xs text-text-secondary mt-0.5">
+            Configura si se exige registrar los datos del cliente según el tipo de servicio (Mesas, Delivery, etc.)
+          </p>
+        </div>
+
+        <div className="space-y-3">
+          {[
+            { key: 'tables', label: 'Mesas (Dine-in)' },
+            { key: 'takeout', label: 'Para Llevar (Takeout)' },
+            { key: 'delivery', label: 'Delivery' },
+            { key: 'pickup', label: 'Pick-up' },
+            { key: 'bar', label: 'Barra (Bar)' },
+          ].map((modeItem) => {
+            const currentModeConfig = modeConfigs?.find((mc) => mc.mode === modeItem.key)
+
+            return (
+              <div
+                key={modeItem.key}
+                className="flex items-center justify-between p-3.5 bg-surface-raised border border-border rounded-xl"
+              >
+                <div>
+                  <span className="text-sm font-semibold text-text-primary">{modeItem.label}</span>
+                  <p className="text-xs text-text-secondary">
+                    {currentModeConfig?.customer_requirement
+                      ? `Personalizado: ${currentModeConfig.customer_requirement}`
+                      : `Heredando política global (${form.customer_requirement})`}
+                  </p>
+                </div>
+
+                <select
+                  value={currentModeConfig?.customer_requirement || ''}
+                  onChange={async (e) => {
+                    const val = e.target.value
+                    try {
+                      if (currentModeConfig) {
+                        await updateModeConfig({
+                          id: currentModeConfig.id,
+                          data: { customer_requirement: val ? val : null },
+                        })
+                      } else if (val) {
+                        await createModeConfig({
+                          mode: modeItem.key,
+                          customer_requirement: val,
+                        })
+                      }
+                      refetchModeConfigs()
+                    } catch (err) {
+                      console.error('Error updating mode config:', err)
+                    }
+                  }}
+                  className="bg-surface border border-border rounded-xl px-3 py-2 text-xs font-semibold text-text-primary outline-none focus:border-primary"
+                >
+                  <option value="">Heredar global ({form.customer_requirement})</option>
+                  <option value="required">Obligatorio</option>
+                  <option value="optional">Opcional</option>
+                  <option value="disabled">Desactivado</option>
+                </select>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* 3. Currencies Catalog */}
       <div className="bg-surface border border-border rounded-2xl p-6 shadow-sm space-y-4">
         <div className="flex justify-between items-center border-b border-border pb-3">
           <div>

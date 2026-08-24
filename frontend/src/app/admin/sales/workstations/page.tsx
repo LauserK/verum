@@ -91,6 +91,8 @@ export default function WorkstationsAdminPage() {
   const [formData, setFormData] = useState({
     name: '',
     venue_id: '',
+    warehouse_id: '',
+    customer_requirement: '' as string,
     is_active: true,
     allowed_modes: ['tables', 'takeout', 'delivery', 'pickup', 'bar'] as string[],
   })
@@ -104,6 +106,8 @@ export default function WorkstationsAdminPage() {
     setFormData({
       name: '',
       venue_id: selectedVenueId || availableVenues[0]?.id || '',
+      warehouse_id: '',
+      customer_requirement: '',
       is_active: true,
       allowed_modes: ['tables', 'takeout', 'delivery', 'pickup', 'bar'],
     })
@@ -116,6 +120,8 @@ export default function WorkstationsAdminPage() {
     setFormData({
       name: station.name,
       venue_id: station.venue_id || selectedVenueId || availableVenues[0]?.id || '',
+      warehouse_id: station.warehouse_id || '',
+      customer_requirement: station.customer_requirement || '',
       is_active: station.is_active,
       allowed_modes: station.allowed_modes && station.allowed_modes.length > 0
         ? station.allowed_modes
@@ -132,6 +138,8 @@ export default function WorkstationsAdminPage() {
     const payload: Partial<Workstation> = {
       name: formData.name.trim(),
       venue_id: formData.venue_id || null,
+      warehouse_id: formData.warehouse_id || null,
+      customer_requirement: (formData.customer_requirement as any) || null,
       is_active: formData.is_active,
       allowed_modes: formData.allowed_modes,
     }
@@ -569,6 +577,23 @@ export default function WorkstationsAdminPage() {
                     )
                   })}
                 </div>
+              </div>
+
+              {/* Customer Policy Override */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-text-secondary">
+                  Política de Cliente (Override en esta estación)
+                </label>
+                <select
+                  value={formData.customer_requirement || ''}
+                  onChange={(e) => setFormData({ ...formData, customer_requirement: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-surface-raised border border-border rounded-xl text-sm font-medium text-text-primary focus:outline-none focus:border-primary"
+                >
+                  <option value="">Heredar política (del modo de venta o global)</option>
+                  <option value="required">Obligatorio (Exige registrar cliente)</option>
+                  <option value="optional">Opcional (Permite consumidor final)</option>
+                  <option value="disabled">Desactivado (Oculta selector de clientes)</option>
+                </select>
               </div>
 
               {/* Active Switch */}

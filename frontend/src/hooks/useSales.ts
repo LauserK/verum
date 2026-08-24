@@ -12,6 +12,11 @@ export const salesKeys = {
     workstations: (venueId?: string) => [...salesKeys.all, 'workstations', { venueId }] as const,
     categories: () => [...salesKeys.all, 'categories'] as const,
     items: (categoryId?: string, activeOnly?: boolean) => [...salesKeys.all, 'items', { categoryId, activeOnly }] as const,
+    posConfig: (workstationId?: string, mode?: string) =>
+        [...salesKeys.all, 'posConfig', { workstationId, mode }] as const,
+    modeConfigs: () => [...salesKeys.all, 'mode-configs'] as const,
+    stockAvailability: (warehouseId?: string) =>
+        [...salesKeys.all, 'stock-availability', { warehouseId }] as const,
 }
 
 // -- Catalog: Categories & Items --
@@ -423,4 +428,83 @@ export function useOpenPosSession() {
         },
     })
 }
+
+// ── POS Config ──
+
+export function usePosConfig(workstationId?: string, mode?: string) {
+    return useQuery({
+        queryKey: salesKeys.posConfig(workstationId, mode),
+        queryFn: () => salesApi.getPosConfig(workstationId!, mode!),
+        enabled: !!workstationId && !!mode,
+        staleTime: 32400000, // 9 hours - matches Redis TTL
+    })
+}
+
+// ── Sale Mode Config ──
+
+export function useModeConfigs() {
+    return useQuery({
+        queryKey: salesKeys.modeConfigs(),
+        queryFn: salesApi.getModeConfigs,
+    })
+}
+
+export function useCreateModeConfig() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: salesApi.createModeConfig,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: salesKeys.modeConfigs() })
+            queryClient.invalidateQueries({ queryKey: ['sales', 'posConfig'] })
+        },
+    })
+}
+
+export function useUpdateModeConfig() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ id, data }: { id: string; data: { customer_requirement: string | null } }) =>
+            salesApi.updateModeConfig(id, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: salesKeys.modeConfigs() })
+            queryClient.invalidateQueries({ queryKey: ['sales', 'posConfig'] })
+        },
+    })
+}
+
+export function useDeleteModeConfig() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (id: string) => salesApi.deleteModeConfig(id),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: salesKeys.modeConfigs() })
+            queryClient.invalidateQueries({ queryKey: ['sales', 'posConfig'] })
+        },
+    })
+}
+
+// ── Stock Availability ──
+
+export function useStockAvailability(warehouseId?: string) {
+    return useQuery({
+        queryKey: salesKeys.stockAvailability(warehouseId),
+        queryFn: () => salesApi.getStockAvailability(warehouseId!),
+        enabled: !!warehouseId,
+        refetchInterval: 30000, // Poll every 30s
+    })
+}
+
+// ── Checkout ──
+
+export function useCheckout() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: salesApi.processCheckout,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: salesKeys.invoices() })
+            queryClient.invalidateQueries({ queryKey: ['sales', 'sessions'] })
+        },
+    })
+}
+
 

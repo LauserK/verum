@@ -19,6 +19,9 @@ import { useProfile } from '@/hooks/useProfile'
 import PosCatalog from './components/PosCatalog'
 import PosCart from './components/PosCart'
 import PosTableMap from './components/PosTableMap'
+import { CustomerSelectorModal } from './components/CustomerSelectorModal'
+import { CheckoutModal } from './components/CheckoutModal'
+import { usePosConfig } from '@/hooks/useSales'
 
 interface PosModeTab {
   id: PosMode
@@ -38,13 +41,45 @@ export default function PosTerminalPage() {
   const router = useRouter()
   const { data: profile } = useProfile()
   const { 
+    cart,
+    total,
     posMode, 
     setPosMode, 
     activeTableId, 
     activeTableName, 
     setActiveTable, 
-    activeWorkstationName 
+    activeWorkstationId,
+    activeWorkstationName,
+    customerId,
+    customerName,
+    customerTaxId,
+    setCustomer,
+    showCheckout,
+    showCustomerSelector,
+    setShowCheckout,
+    setShowCustomerSelector,
+    orderNumber
   } = usePosStore()
+
+  const { data: posConfig } = usePosConfig(activeWorkstationId || undefined, posMode)
+  const customerRequirement = posConfig?.customer_requirement || 'optional'
+
+  const handleCheckoutClick = () => {
+    if (cart.length === 0) return
+    if (customerRequirement === 'required' && !customerId) {
+      setShowCustomerSelector(true)
+      return
+    }
+    setShowCheckout(true)
+  }
+
+  const handleCustomerSelected = (customer: { id: string | null; name: string; taxId: string | null }) => {
+    setCustomer(customer.id, customer.name, customer.taxId)
+    setShowCustomerSelector(false)
+    if (cart.length > 0 && customerRequirement === 'required') {
+      setShowCheckout(true)
+    }
+  }
 
   const handleModeChange = (newMode: PosMode) => {
     setPosMode(newMode)
@@ -155,11 +190,31 @@ export default function PosTerminalPage() {
               <PosCatalog />
             </div>
             <aside className="w-[30%] h-full flex flex-col overflow-hidden">
-              <PosCart />
+              <PosCart onCheckout={handleCheckoutClick} />
             </aside>
           </>
         )}
       </main>
+
+      {/* Customer Selector Modal */}
+      <CustomerSelectorModal
+        isOpen={showCustomerSelector}
+        onClose={() => setShowCustomerSelector(false)}
+        onSelect={handleCustomerSelected}
+        required={customerRequirement === 'required'}
+      />
+
+      {/* Checkout Modal */}
+      <CheckoutModal
+        isOpen={showCheckout}
+        onClose={() => setShowCheckout(false)}
+        total={total}
+        cartItems={cart}
+        customerName={customerName}
+        mode={posMode}
+        tableName={activeTableName}
+        orderNumber={orderNumber}
+      />
     </div>
   )
 }

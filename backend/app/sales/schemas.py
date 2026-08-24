@@ -643,6 +643,89 @@ class FloorPlanOut(FloorPlanBase):
     created_at: Optional[Union[dt_datetime, str]] = None
     updated_at: Optional[Union[dt_datetime, str]] = None
 
+# ── Sale Mode Config ──
+
+class SaleModeConfigCreate(BaseModel):
+    mode: Literal['tables', 'takeout', 'delivery', 'pickup', 'bar']
+    customer_requirement: Literal['required', 'optional', 'disabled']
+
+class SaleModeConfigUpdate(BaseModel):
+    customer_requirement: Optional[Literal['required', 'optional', 'disabled']] = None
+
+class SaleModeConfigOut(BaseModel):
+    id: UUID
+    org_id: UUID
+    mode: str
+    customer_requirement: Optional[str] = None
+    created_at: Optional[Union[dt_datetime, str]] = None
+    updated_at: Optional[Union[dt_datetime, str]] = None
+
+# ── POS Config (resolved) ──
+
+class PosConfigOut(BaseModel):
+    customer_requirement: str
+    warehouse_id: Optional[UUID] = None
+    resolved_from: str
+
+# ── Stock Reservation ──
+
+class StockReserveRequest(BaseModel):
+    sale_item_id: UUID
+    cart_line_id: str
+    quantity: float
+    warehouse_id: UUID
+    session_id: str
+
+class StockAvailabilityItem(BaseModel):
+    sale_item_id: UUID
+    available_stock: float
+    allow_negative_stock: bool
+
+# ── Checkout ──
+
+class CheckoutItemCreate(BaseModel):
+    sale_item_id: UUID
+    variant_id: Optional[UUID] = None
+    quantity: float
+    unit_price: float
+    discount_pct: float = 0
+    tax_id: Optional[UUID] = None
+    modifiers: list = []
+    notes: Optional[str] = None
+
+class CheckoutPaymentCreate(BaseModel):
+    payment_method_id: UUID
+    amount: float
+    currency_code: str
+    exchange_rate: float = 1.0
+    reference: Optional[str] = None
+    cash_tendered: Optional[float] = None
+
+class CheckoutChangeCreate(BaseModel):
+    amount: float
+    currency_code: str
+    method: str
+
+class CheckoutCreate(BaseModel):
+    workstation_id: UUID
+    pos_session_id: UUID
+    venue_id: UUID
+    mode: Literal['tables', 'takeout', 'delivery', 'pickup', 'bar']
+    table_id: Optional[UUID] = None
+    customer_id: Optional[UUID] = None
+    customer_name: Optional[str] = None
+    customer_tax_id: Optional[str] = None
+    items: List[CheckoutItemCreate]
+    payments: List[CheckoutPaymentCreate] = []
+    change: Optional[CheckoutChangeCreate] = None
+    document_type: str = "invoice"
+    discount_amount: float = 0
+    notes: Optional[str] = None
+
+class CheckoutResponse(BaseModel):
+    invoice: dict
+
+
 
 
 

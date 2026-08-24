@@ -8,7 +8,8 @@ from app.sales.schemas import (
     SaleCategoryCreate, SaleCategoryUpdate, SaleModifierGroupCreate,
     CustomerCreate, CustomerUpdate, DocumentSequenceCreate,
     FloorPlanCreate, FloorPlanUpdate, TableCreate, TableUpdate,
-    PosSessionOpen, PosSessionOut
+    PosSessionOpen, PosSessionOut,
+    SaleModeConfigCreate, SaleModeConfigUpdate
 )
 
 # --- Config Service ---
@@ -807,6 +808,84 @@ async def update_table(org_id: str, table_id: str, payload: TableUpdate, db: Any
 async def delete_table(org_id: str, table_id: str, db: Any = None):
     res = db.table("tables").delete().eq("id", table_id).execute()
     return {"status": "deleted"}
+
+# ── Sale Mode Config CRUD ──
+
+async def list_sale_mode_configs(org_id: str, db: Any = None):
+    res = db.table("sale_mode_config").select("*").eq("org_id", org_id).order("mode").execute()
+    return res.data or []
+
+
+async def create_sale_mode_config(org_id: str, payload: SaleModeConfigCreate, db: Any = None):
+    data = payload.model_dump(mode="json")
+    data["org_id"] = org_id
+    res = db.table("sale_mode_config").insert(data).execute()
+    if not res.data:
+        raise HTTPException(400, "Could not create sale mode config")
+    return res.data[0]
+
+
+async def update_sale_mode_config(org_id: str, config_id: str, payload: SaleModeConfigUpdate, db: Any = None):
+    data = payload.model_dump(mode="json", exclude_unset=True)
+    if not data:
+        raise HTTPException(400, "No fields to update")
+    data["updated_at"] = "now()"
+    res = db.table("sale_mode_config").update(data).eq("id", config_id).eq("org_id", org_id).execute()
+    if not res.data:
+        raise HTTPException(404, "Sale mode config not found")
+    return res.data[0]
+
+
+async def delete_sale_mode_config(org_id: str, config_id: str, db: Any = None):
+    db.table("sale_mode_config").delete().eq("id", config_id).eq("org_id", org_id).execute()
+    return {"status": "deleted"}
+
+
+# ── POS Config Resolution (cascade with Redis cache) ──
+
+async def resolve_pos_config(org_id: str, workstation_id: str, mode: str, db: Any = None):
+    from app.cache import cache
+
+    cache_key = f"pos:config:{org_id}:{workstation_id}:{mode}"
+    cached = await cache.get(cache_key)
+    if cached:
+        return cached
+
+    # 1. Read workstation
+    wk_res = db.table("workstations").select("warehouse_id, customer_requirement").eq("id", workstation_id).eq("org_id", org_id).execute()
+    if not wk_res.data:
+        raise HTTPException(404, "Workstation not found")
+    wk = wk_res.data[0]
+
+    # 2. Resolve customer_requirement in cascade
+    req = None
+    resolved_from = "default"
+
+    if wk.get("customer_requirement"):
+        req = wk["customer_requirement"]
+        resolved_from = "workstation"
+    else:
+        sm_res = db.table("sale_mode_config").select("customer_requirement").eq("org_id", org_id).eq("mode", mode).execute()
+        if sm_res.data and sm_res.data[0].get("customer_requirement"):
+            req = sm_res.data[0]["customer_requirement"]
+            resolved_from = "sale_mode_config"
+        else:
+            tb_res = db.table("tenant_billing_config").select("customer_requirement").eq("org_id", org_id).execute()
+            if tb_res.data and tb_res.data[0].get("customer_requirement"):
+                req = tb_res.data[0]["customer_requirement"]
+                resolved_from = "tenant_billing_config"
+
+    if req is None:
+        req = "optional"
+
+    result = {
+        "customer_requirement": req,
+        "warehouse_id": wk.get("warehouse_id"),
+        "resolved_from": resolved_from
+    }
+    await cache.set(cache_key, result, ttl=32400)
+    return result
+
 
 
 

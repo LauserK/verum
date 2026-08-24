@@ -284,3 +284,8 @@ async def invalidate_sales_catalog(org_id: str):
     """Invalidate cached sales catalog categories, items, and price lists."""
     await cache.delete_pattern(f"sales:catalog:{org_id}:*")
 
+async def invalidate_pos_config(org_id: str):
+    """Invalidate all cached POS config for an organization."""
+    await cache.delete_pattern(f"pos:config:{org_id}:*")
+
+

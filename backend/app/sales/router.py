@@ -3,7 +3,7 @@ from typing import List, Optional
 from database import get_db
 from auth_deps import get_current_user
 from app.deps import get_active_org_id, require_permission
-from app.cache import cache, invalidate_sales_config, invalidate_sales_catalog
+from app.cache import cache, invalidate_sales_config, invalidate_sales_catalog, invalidate_pos_config
 import app.sales.service as sales_svc
 from app.sales.schemas import (
     TenantBillingConfigUpdate, TenantBillingConfigOut,
@@ -21,10 +21,15 @@ from app.sales.schemas import (
     TaxCreate, TaxUpdate, TaxOut,
     FloorPlanCreate, FloorPlanUpdate, FloorPlanOut,
     TableCreate, TableUpdate, TableOut,
-    PosSessionOpen, PosSessionOut
+    PosSessionOpen, PosSessionOut,
+    SaleModeConfigCreate, SaleModeConfigUpdate, SaleModeConfigOut,
+    PosConfigOut, StockReserveRequest, StockAvailabilityItem,
+    CheckoutCreate, CheckoutResponse
 )
 import app.sales.invoice_service as invoice_svc
 import app.sales.payment_service as payment_svc
+import app.sales.stock_service as stock_svc
+import app.sales.checkout_service as checkout_svc
 
 router = APIRouter(prefix="/sales", tags=["Sales"])
 
@@ -578,6 +583,109 @@ async def delete_tax(
     res = await sales_svc.delete_tax(org_id, tax_id, db)
     await invalidate_sales_config(org_id)
     return res
+
+# ── POS Config ──
+
+@router.get("/pos-config", response_model=PosConfigOut)
+async def get_pos_config(
+    workstation_id: str,
+    mode: str,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.view_config"))
+):
+    return await sales_svc.resolve_pos_config(org_id, workstation_id, mode, db)
+
+# ── Sale Mode Config CRUD ──
+
+@router.get("/mode-config", response_model=List[SaleModeConfigOut])
+async def list_mode_configs(
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_config"))
+):
+    return await sales_svc.list_sale_mode_configs(org_id, db)
+
+@router.post("/mode-config", response_model=SaleModeConfigOut)
+async def create_mode_config(
+    payload: SaleModeConfigCreate,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_config"))
+):
+    res = await sales_svc.create_sale_mode_config(org_id, payload, db)
+    await invalidate_pos_config(org_id)
+    return res
+
+@router.patch("/mode-config/{config_id}", response_model=SaleModeConfigOut)
+async def update_mode_config(
+    config_id: str,
+    payload: SaleModeConfigUpdate,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_config"))
+):
+    res = await sales_svc.update_sale_mode_config(org_id, config_id, payload, db)
+    await invalidate_pos_config(org_id)
+    return res
+
+@router.delete("/mode-config/{config_id}")
+async def delete_mode_config(
+    config_id: str,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_config"))
+):
+    res = await sales_svc.delete_sale_mode_config(org_id, config_id, db)
+    await invalidate_pos_config(org_id)
+    return res
+
+# ── Stock Reservation & Availability ──
+
+@router.post("/stock/reserve")
+async def reserve_stock(
+    payload: StockReserveRequest,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.create_invoice"))
+):
+    return await stock_svc.reserve_stock(
+        org_id, str(payload.sale_item_id), payload.cart_line_id,
+        payload.quantity, str(payload.warehouse_id), payload.session_id, db
+    )
+
+@router.delete("/stock/reserve/{cart_line_id}")
+async def release_stock(
+    cart_line_id: str,
+    warehouse_id: str,
+    sale_item_id: str,
+    session_id: str,
+    org_id: str = Depends(get_active_org_id),
+    _ = Depends(require_permission("sales.create_invoice"))
+):
+    return await stock_svc.release_stock(warehouse_id, sale_item_id, session_id, cart_line_id)
+
+@router.get("/stock/availability", response_model=List[StockAvailabilityItem])
+async def get_availability(
+    warehouse_id: str,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.view_catalog"))
+):
+    return await stock_svc.get_stock_availability(org_id, warehouse_id, db)
+
+# ── Atomic Checkout ──
+
+@router.post("/checkout", response_model=CheckoutResponse)
+async def process_checkout(
+    payload: CheckoutCreate,
+    org_id: str = Depends(get_active_org_id),
+    user = Depends(get_current_user),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.create_invoice"))
+):
+    return await checkout_svc.process_checkout(org_id, payload, user.id, db)
+
 
 
 
