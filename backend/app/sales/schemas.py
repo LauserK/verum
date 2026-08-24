@@ -130,6 +130,7 @@ class SaleItemCreate(BaseModel):
     has_variants: bool = False
     variant_label: str = ''
     is_featured: bool = False
+    allow_negative_stock: bool = False
     position: int = 0
     components: List[SaleItemComponentCreate] = []
     variants: List[SaleItemVariantCreate] = []
@@ -155,6 +156,7 @@ class SaleItemOut(BaseModel):
     variant_label: str = ''
     is_active: bool = True
     is_featured: bool = False
+    allow_negative_stock: bool = False
     position: int = 0
     components: List[SaleItemComponentOut] = []
     variants: List[SaleItemVariantOut] = []
@@ -175,6 +177,7 @@ class SaleItemUpdate(BaseModel):
     variant_label: Optional[str] = None
     is_active: Optional[bool] = None
     is_featured: Optional[bool] = None
+    allow_negative_stock: Optional[bool] = None
     position: Optional[int] = None
     components: Optional[List[SaleItemComponentCreate]] = None
     variants: Optional[List[SaleItemVariantCreate]] = None
