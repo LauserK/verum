@@ -14,33 +14,62 @@ import {
   ArrowRight
 } from 'lucide-react'
 import { useVenue } from '@/components/VenueContext'
-import { useFloorPlans } from '@/hooks/useSales'
+import { useFloorPlans, useTableOrders, useWorkstations } from '@/hooks/useSales'
 import { usePosStore } from '@/store/posStore'
 
 export default function PosTableMap() {
   const { selectedVenueId, selectedVenueName } = useVenue()
-  const { data: floorPlans = [], isLoading } = useFloorPlans(selectedVenueId || undefined)
-  const { activeTableId, setActiveTable } = usePosStore()
+  const { activeTableId, setActiveTable, loadTableOrder, cartsByContext, cart, total, activeWorkstationId } = usePosStore()
+
+  const { data: workstations = [] } = useWorkstations(selectedVenueId || undefined)
+  const currentVenueId = selectedVenueId || workstations.find((w) => w.id === activeWorkstationId)?.venue_id || null
+
+  const { data: floorPlans = [], isLoading } = useFloorPlans(currentVenueId || undefined)
+  const { data: serverTableOrders = [] } = useTableOrders(currentVenueId || undefined)
 
   const [selectedPlanId, setSelectedPlanId] = useState<string>('')
 
-  // Default to first floor plan
-  React.useEffect(() => {
-    if (floorPlans.length > 0) {
-      if (!selectedPlanId || !floorPlans.some((p) => p.id === selectedPlanId)) {
-        setSelectedPlanId(floorPlans[0].id)
+  // Map of active orders from backend across all terminals
+  const serverOrdersMap = useMemo(() => {
+    const map = new Map<string, any>()
+    for (const order of serverTableOrders) {
+      if (order.status === 'active' && order.table_id) {
+        map.set(order.table_id, order)
       }
     }
+    return map
+  }, [serverTableOrders])
+
+  // Derive current active plan cleanly without extra state updates
+  const currentPlan = useMemo(() => {
+    if (selectedPlanId) {
+      const found = floorPlans.find((p) => p.id === selectedPlanId)
+      if (found) return found
+    }
+    return floorPlans[0] || null
   }, [floorPlans, selectedPlanId])
 
-  const currentPlan = floorPlans.find((p) => p.id === selectedPlanId) || floorPlans[0]
-  const currentTables = currentPlan?.tables?.filter((t) => t.is_active) || []
+  const currentTables = useMemo(() => {
+    return currentPlan?.tables?.filter((t) => t.is_active) || []
+  }, [currentPlan])
 
   const handleSelectTable = (tableId: string, tableName: string) => {
-    setActiveTable(tableId, tableName)
+    const serverOrder = serverOrdersMap.get(tableId)
+    if (serverOrder && Array.isArray(serverOrder.cart) && serverOrder.cart.length > 0) {
+      loadTableOrder(tableId, tableName, {
+        cart: serverOrder.cart,
+        total: Number(serverOrder.total) || 0,
+        customerId: serverOrder.customer_id || null,
+        customerName: serverOrder.customer_name || null,
+        customerTaxId: serverOrder.customer_tax_id || null,
+      })
+    } else {
+      setActiveTable(tableId, tableName)
+    }
   }
 
-  if (isLoading) {
+  // Only show full loading spinner during initial load when there is no cached data
+  if (isLoading && floorPlans.length === 0) {
     return (
       <div className="h-full w-full flex flex-col items-center justify-center p-8 bg-bg">
         <div className="w-12 h-12 rounded-2xl bg-surface-raised animate-pulse mb-3" />
@@ -68,15 +97,30 @@ export default function PosTableMap() {
           </span>
           <div className="grid grid-cols-4 gap-2.5">
             {Array.from({ length: 8 }).map((_, i) => {
+              const tableId = `quick-table-${i + 1}`
               const tableNum = `Mesa ${i + 1}`
+              const serverOrder = serverOrdersMap.get(tableId)
+              const tableCtx = cartsByContext[`table:${tableId}`]
+              const hasItems = (serverOrder && Array.isArray(serverOrder.cart) && serverOrder.cart.length > 0) || (tableCtx?.cart?.length || 0) > 0 || (activeTableId === tableId && cart.length > 0)
+              const tableTotal = activeTableId === tableId ? total : (serverOrder ? Number(serverOrder.total) : (tableCtx?.total || 0))
+
               return (
                 <button
                   key={i}
-                  onClick={() => handleSelectTable(`quick-table-${i + 1}`, tableNum)}
-                  className="p-3.5 rounded-2xl bg-surface-raised border border-border hover:border-primary hover:bg-primary/5 hover:text-primary transition-all text-center flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-95 shadow-sm"
+                  onClick={() => handleSelectTable(tableId, tableNum)}
+                  className={`p-3.5 rounded-2xl border transition-all text-center flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-95 shadow-sm ${
+                    hasItems
+                      ? 'bg-amber-500/15 border-amber-500/60 text-amber-500 hover:bg-amber-500/25'
+                      : 'bg-surface-raised border-border hover:border-primary hover:bg-primary/5 hover:text-primary'
+                  }`}
                 >
-                  <Utensils className="w-4 h-4 text-text-secondary" />
+                  <Utensils className={`w-4 h-4 ${hasItems ? 'text-amber-500' : 'text-text-secondary'}`} />
                   <span className="text-xs font-bold text-text-primary">{tableNum}</span>
+                  {hasItems && (
+                    <span className="text-[9px] font-mono font-bold text-amber-500">
+                      ${tableTotal.toFixed(2)}
+                    </span>
+                  )}
                 </button>
               )
             })}
@@ -157,6 +201,15 @@ export default function PosTableMap() {
             {currentTables.map((table) => {
               const isSelected = activeTableId === table.id
               const isCircle = table.shape === 'circle'
+              const serverOrder = serverOrdersMap.get(table.id)
+              const tableCtx = cartsByContext[`table:${table.id}`]
+              const hasItems = (serverOrder && Array.isArray(serverOrder.cart) && serverOrder.cart.length > 0) || (tableCtx?.cart?.length || 0) > 0 || (isSelected && cart.length > 0)
+              const tableTotal = isSelected ? total : (serverOrder ? Number(serverOrder.total) : (tableCtx?.total || 0))
+              const itemCount = isSelected
+                ? cart.reduce((s, i) => s + (i.quantity || 0), 0)
+                : serverOrder && Array.isArray(serverOrder.cart)
+                ? serverOrder.cart.reduce((s: number, i: any) => s + (i.quantity || 0), 0)
+                : (tableCtx?.cart || []).reduce((s, i) => s + (i.quantity || 0), 0)
 
               return (
                 <button
@@ -173,30 +226,43 @@ export default function PosTableMap() {
                   } ${
                     isSelected
                       ? 'bg-primary text-text-inverse ring-4 ring-primary/30 border-2 border-primary shadow-lg shadow-primary/30 scale-105 z-10'
+                      : hasItems
+                      ? 'bg-amber-500/15 border-2 border-amber-500/60 text-amber-500 hover:bg-amber-500/25 hover:border-amber-500 hover:shadow-lg'
                       : 'bg-surface border-2 border-border hover:border-primary/80 hover:bg-surface-raised hover:shadow-lg'
                   }`}
                 >
                   {/* Table Icon / Shape Indicator */}
                   <div className="flex items-center gap-1 mb-0.5">
-                    <Utensils className={`w-3.5 h-3.5 ${isSelected ? 'text-text-inverse' : 'text-primary'}`} />
+                    <Utensils className={`w-3.5 h-3.5 ${
+                      isSelected ? 'text-text-inverse' : hasItems ? 'text-amber-500' : 'text-primary'
+                    }`} />
+                    {hasItems && !isSelected && (
+                      <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                    )}
                   </div>
 
                   {/* Table Name */}
                   <span className={`font-bold text-xs sm:text-sm tracking-tight leading-tight line-clamp-1 ${
-                    isSelected ? 'text-text-inverse' : 'text-text-primary'
+                    isSelected ? 'text-text-inverse' : hasItems ? 'text-amber-500 font-black' : 'text-text-primary'
                   }`}>
                     {table.name}
                   </span>
 
-                  {/* Table Capacity (pax) */}
-                  <div className="flex items-center gap-1 text-[10px] opacity-80 mt-0.5">
-                    <Users className="w-2.5 h-2.5" />
-                    <span>{table.capacity || 4}p</span>
-                  </div>
+                  {/* Capacity or Amount */}
+                  {hasItems && !isSelected ? (
+                    <span className="text-[10px] font-mono font-bold text-amber-500 mt-0.5">
+                      ${tableTotal.toFixed(2)} ({itemCount})
+                    </span>
+                  ) : (
+                    <div className="flex items-center gap-1 text-[10px] opacity-80 mt-0.5">
+                      <Users className="w-2.5 h-2.5" />
+                      <span>{table.capacity || 4}p</span>
+                    </div>
+                  )}
 
                   {/* Quick Select Tooltip Feedback */}
                   <div className="absolute -bottom-8 opacity-0 group-hover:opacity-100 transition-opacity bg-black/90 text-white text-[10px] font-bold px-2 py-0.5 rounded-md pointer-events-none whitespace-nowrap shadow-md">
-                    Abrir Comanda
+                    {hasItems ? `Ver Comanda ($${tableTotal.toFixed(2)})` : 'Abrir Comanda'}
                   </div>
                 </button>
               )

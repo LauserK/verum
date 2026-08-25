@@ -215,14 +215,20 @@ async def process_checkout(org_id: str, payload: CheckoutCreate, user_id: str, d
         db.table("invoice_items").insert(invoice_items).execute()
 
     # 10. Insert payments
+    from app.sales.service import get_payment_methods
+    cached_pms = await get_payment_methods(org_id, db)
+    pm_map = {str(pm["id"]): pm for pm in cached_pms} if cached_pms else {}
+
     for p in payload.payments:
         # Snapshot payment method
-        pm_res = db.table("payment_methods").select("name, method_type").eq(
-            "id", str(p.payment_method_id)
-        ).eq("org_id", org_id).execute()
-        if not pm_res.data:
-            raise HTTPException(400, "INVALID_PAYMENT_METHOD")
-        pm = pm_res.data[0]
+        pm = pm_map.get(str(p.payment_method_id))
+        if not pm:
+            pm_res = db.table("payment_methods").select("name, method_type").eq(
+                "id", str(p.payment_method_id)
+            ).eq("org_id", org_id).execute()
+            if not pm_res.data:
+                raise HTTPException(400, "INVALID_PAYMENT_METHOD")
+            pm = pm_res.data[0]
 
         payment_data = {
             "invoice_id": invoice_id,
@@ -265,6 +271,18 @@ async def process_checkout(org_id: str, payload: CheckoutCreate, user_id: str, d
                     }).eq("id", customer_id).execute()
             except Exception as e:
                 print(f"[CHECKOUT] Customer balance update error: {e}")
+
+    # 11.5 If checkout was for a table, mark active table order as billed
+    if payload.table_id:
+        try:
+            db.table("pos_table_orders").update({
+                "status": "billed",
+                "updated_at": "now()"
+            }).eq("org_id", org_id).eq("table_id", str(payload.table_id)).eq("status", "active").execute()
+            from app.cache import invalidate_table_orders
+            await invalidate_table_orders(org_id)
+        except Exception as te:
+            print(f"[CHECKOUT] Error freeing table order: {te}")
 
     # 12. Deduct inventory
     if warehouse_id:

@@ -24,7 +24,8 @@ from app.sales.schemas import (
     PosSessionOpen, PosSessionOut,
     SaleModeConfigCreate, SaleModeConfigUpdate, SaleModeConfigOut,
     PosConfigOut, StockReserveRequest, StockAvailabilityItem,
-    CheckoutCreate, CheckoutResponse
+    CheckoutCreate, CheckoutResponse,
+    PosTableOrderSync, PosTableOrderOut
 )
 import app.sales.invoice_service as invoice_svc
 import app.sales.payment_service as payment_svc
@@ -76,12 +77,7 @@ async def list_payment_methods(
     db = Depends(get_db),
     _ = Depends(require_permission("sales.manage_payment_methods"))
 ):
-    cached = await cache.get(f"sales:payment_methods:{org_id}")
-    if cached:
-        return cached
-    res = await sales_svc.get_payment_methods(org_id, db)
-    await cache.set(f"sales:payment_methods:{org_id}", res, ttl=300)
-    return res
+    return await sales_svc.get_payment_methods(org_id, db)
 
 @router.patch("/payment-methods/{method_id}", response_model=PaymentMethodOut)
 async def update_payment_method(
@@ -234,6 +230,49 @@ async def delete_table(
     _ = Depends(require_permission("sales.manage_config"))
 ):
     return await sales_svc.delete_table(org_id, table_id, db)
+
+# --- Table Orders (Multi-terminal real-time sync) ---
+
+@router.get("/table-orders", response_model=List[PosTableOrderOut])
+async def list_table_orders(
+    venue_id: Optional[str] = None,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_config"))
+):
+    return await sales_svc.list_active_table_orders(org_id, venue_id, db)
+
+@router.get("/table-orders/{table_id}", response_model=Optional[PosTableOrderOut])
+async def get_table_order(
+    table_id: str,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_config"))
+):
+    return await sales_svc.get_active_table_order(org_id, table_id, db)
+
+@router.put("/table-orders/{table_id}")
+async def sync_table_order(
+    table_id: str,
+    payload: PosTableOrderSync,
+    user = Depends(get_current_user),
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_config"))
+):
+    user_id = getattr(user, "id", None) or getattr(user, "user_id", None) or (user.get("id") if isinstance(user, dict) else None)
+    payload.table_id = table_id
+    return await sales_svc.sync_table_order(org_id, str(user_id) if user_id else None, payload, db)
+
+@router.delete("/table-orders/{table_id}")
+async def delete_table_order(
+    table_id: str,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_config"))
+):
+    return await sales_svc.delete_table_order(org_id, table_id, db)
+
 
 # --- Catalog: Categories ---
 

@@ -100,6 +100,8 @@ export function usePaymentMethods() {
     return useQuery({
         queryKey: salesKeys.paymentMethods(),
         queryFn: salesApi.getPaymentMethods,
+        staleTime: 1000 * 60 * 60 * 9, // 9 hours (aligned with Redis cache)
+        gcTime: 1000 * 60 * 60 * 9,
     })
 }
 
@@ -216,6 +218,8 @@ export function useFloorPlans(venueId?: string) {
     return useQuery({
         queryKey: salesKeys.floorPlans(venueId),
         queryFn: () => salesApi.getFloorPlans(venueId),
+        staleTime: 1000 * 60 * 30, // 30 min cache to avoid double loading and flickering
+        gcTime: 1000 * 60 * 60,
     })
 }
 
@@ -377,6 +381,8 @@ export function useWorkstations(venueId?: string) {
     return useQuery({
         queryKey: salesKeys.workstations(venueId),
         queryFn: () => salesApi.getWorkstations(venueId),
+        staleTime: 1000 * 60 * 60 * 9, // 9 hours
+        gcTime: 1000 * 60 * 60 * 9,
     })
 }
 
@@ -415,6 +421,8 @@ export function useActivePosSession(workstationId?: string) {
     return useQuery({
         queryKey: ['sales', 'sessions', 'active', workstationId],
         queryFn: () => salesApi.getActivePosSession(workstationId),
+        staleTime: 1000 * 60 * 10, // 10 minutes (requested by user)
+        gcTime: 1000 * 60 * 10,
     })
 }
 
@@ -428,6 +436,46 @@ export function useOpenPosSession() {
         },
     })
 }
+
+// ── POS Table Orders (Multi-Terminal Sync) ──
+
+export function useTableOrders(venueId?: string) {
+    return useQuery({
+        queryKey: ['sales', 'table-orders', venueId],
+        queryFn: () => salesApi.getTableOrders(venueId),
+        refetchInterval: 5000, // Poll every 5 seconds for real-time multi-terminal status
+    })
+}
+
+export function useTableOrder(tableId?: string) {
+    return useQuery({
+        queryKey: ['sales', 'table-orders', 'single', tableId],
+        queryFn: () => salesApi.getTableOrder(tableId!),
+        enabled: !!tableId,
+    })
+}
+
+export function useSyncTableOrder() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ tableId, data }: { tableId: string; data: any }) =>
+            salesApi.syncTableOrder(tableId, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['sales', 'table-orders'] })
+        },
+    })
+}
+
+export function useDeleteTableOrder() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (tableId: string) => salesApi.deleteTableOrder(tableId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['sales', 'table-orders'] })
+        },
+    })
+}
+
 
 // ── POS Config ──
 

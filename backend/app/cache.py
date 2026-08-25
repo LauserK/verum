@@ -338,4 +338,18 @@ async def invalidate_pos_config(org_id: str):
     """Invalidate all cached POS config for an organization."""
     await cache.delete_pattern(f"pos:config:{org_id}:*")
 
+async def invalidate_workstations(org_id: str):
+    """Invalidate cached workstations for an organization."""
+    await cache.delete_pattern(f"sales:workstations:{org_id}:*")
+
+async def invalidate_pos_session(org_id: str):
+    """Invalidate active POS session cache for an organization."""
+    await cache.delete_pattern(f"pos:session:active:{org_id}:*")
+
+async def invalidate_table_orders(org_id: str):
+    """Invalidate active table orders cache for an organization."""
+    await cache.delete_pattern(f"sales:table_orders:{org_id}:*")
+
+
+
 

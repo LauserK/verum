@@ -14,7 +14,8 @@ import {
   Repeat,
   AlertCircle,
   HelpCircle,
-  ArrowRightLeft
+  ArrowRightLeft,
+  Loader2
 } from 'lucide-react'
 import { usePaymentMethods, useCurrencies, useExchangeRates, useBillingConfig } from '@/hooks/useSales'
 import { CheckoutPayment, CheckoutChange } from '@/lib/api/sales'
@@ -23,6 +24,7 @@ interface PaymentCalculatorProps {
   total: number
   vesRate?: number
   paymentType: 'complete' | 'mixed'
+  isProcessing?: boolean
   onBack: () => void
   onComplete: (payments: CheckoutPayment[], change: CheckoutChange | null) => void
 }
@@ -38,6 +40,7 @@ const METHOD_ICONS: Record<string, React.ElementType> = {
 export function PaymentCalculator({
   total,
   paymentType,
+  isProcessing = false,
   onBack,
   onComplete
 }: PaymentCalculatorProps) {
@@ -570,19 +573,32 @@ export function PaymentCalculator({
                 <button
                   type="button"
                   onClick={handleAddPayment}
-                  disabled={!inputAmountStr || parseFloat(inputAmountStr) <= 0}
-                  className="w-full py-4 bg-primary text-black font-black text-base rounded-2xl hover:bg-primary-hover shadow-lg shadow-primary/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40"
+                  disabled={isProcessing || !inputAmountStr || parseFloat(inputAmountStr) <= 0}
+                  className={`w-full py-4 font-black text-base rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2.5 active:scale-[0.98] select-none ${
+                    isProcessing
+                      ? 'bg-primary/75 text-black cursor-wait shadow-primary/10 pointer-events-none'
+                      : 'bg-primary text-black hover:bg-primary-hover shadow-primary/20 cursor-pointer hover:shadow-xl hover:shadow-primary/30 disabled:opacity-40 disabled:pointer-events-none disabled:shadow-none'
+                  }`}
                 >
-                  <Check className="w-5 h-5" />
-                  <span>Procesar Pago Completo ({activeInputCurrency?.symbol}{inputAmountStr})</span>
+                  {isProcessing ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin text-black" />
+                      <span>Procesando Pago Completo...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-5 h-5" />
+                      <span>Procesar Pago Completo ({activeInputCurrency?.symbol}{inputAmountStr})</span>
+                    </>
+                  )}
                 </button>
               ) : (
                 <div className="flex gap-3">
                   <button
                     type="button"
                     onClick={handleAddPayment}
-                    disabled={!inputAmountStr || parseFloat(inputAmountStr) <= 0}
-                    className="flex-1 py-3 bg-surface-raised hover:bg-surface border border-primary/40 text-primary font-bold text-sm rounded-2xl transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40"
+                    disabled={isProcessing || !inputAmountStr || parseFloat(inputAmountStr) <= 0}
+                    className="flex-1 py-3 bg-surface-raised hover:bg-surface border border-primary/40 text-primary font-bold text-sm rounded-2xl transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:pointer-events-none active:scale-[0.98] select-none"
                   >
                     <Plus className="w-4 h-4" />
                     <span>Agregar Pago</span>
@@ -591,11 +607,24 @@ export function PaymentCalculator({
                   <button
                     type="button"
                     onClick={handleFinishMixed}
-                    disabled={remainingBase > 0.01 || paymentsList.length === 0}
-                    className="flex-1 py-3 bg-emerald-500 text-black font-black text-sm rounded-2xl hover:bg-emerald-400 shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40"
+                    disabled={isProcessing || remainingBase > 0.01 || paymentsList.length === 0}
+                    className={`flex-1 py-3 font-black text-sm rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2 active:scale-[0.98] select-none ${
+                      isProcessing
+                        ? 'bg-emerald-500/75 text-black cursor-wait shadow-emerald-500/10 pointer-events-none'
+                        : 'bg-emerald-500 text-black hover:bg-emerald-400 shadow-emerald-500/20 cursor-pointer hover:shadow-xl hover:shadow-emerald-500/30 disabled:opacity-40 disabled:pointer-events-none disabled:shadow-none'
+                    }`}
                   >
-                    <Check className="w-4 h-4" />
-                    <span>Finalizar Cobro</span>
+                    {isProcessing ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin text-black" />
+                        <span>Procesando Cobro...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4" />
+                        <span>Finalizar Cobro</span>
+                      </>
+                    )}
                   </button>
                 </div>
               )}

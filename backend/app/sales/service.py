@@ -40,6 +40,9 @@ async def create_payment_method(org_id: str, payload: PaymentMethodCreate, db):
     res = db.table("payment_methods").insert(data).execute()
     created = res.data[0]
 
+    from app.cache import invalidate_sales_config
+    await invalidate_sales_config(org_id)
+
     if sync_to_quick:
         try:
             from app.integrations.outbox import enqueue_event
@@ -65,6 +68,9 @@ async def update_payment_method(org_id: str, method_id: str, payload: Any, db):
         raise HTTPException(404, "Payment method not found")
     updated = res.data[0]
 
+    from app.cache import invalidate_sales_config
+    await invalidate_sales_config(org_id)
+
     if sync_to_quick:
         try:
             from app.integrations.outbox import enqueue_event
@@ -81,16 +87,29 @@ async def update_payment_method(org_id: str, method_id: str, payload: Any, db):
 
 async def delete_payment_method(org_id: str, method_id: str, db):
     res = db.table("payment_methods").delete().eq("id", method_id).eq("org_id", org_id).execute()
+    from app.cache import invalidate_sales_config
+    await invalidate_sales_config(org_id)
     return {"status": "deleted"}
 
 async def get_payment_methods(org_id: str, db):
+    from app.cache import cache
+    cache_key = f"sales:payment_methods:{org_id}"
+    cached = await cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     res = db.table("payment_methods").select("*").eq("org_id", org_id).order("position").execute()
-    return res.data or []
+    result = res.data or []
+    # Cache for 9 hours (32400 seconds)
+    await cache.set(cache_key, result, ttl=32400)
+    return result
 
 async def create_workstation(org_id: str, payload: WorkstationCreate, db):
     data = payload.model_dump(mode="json")
     data["org_id"] = org_id
     res = db.table("workstations").insert(data).execute()
+    from app.cache import invalidate_workstations
+    await invalidate_workstations(org_id)
     return res.data[0]
 
 async def update_workstation(org_id: str, workstation_id: str, payload: WorkstationUpdate, db):
@@ -103,18 +122,30 @@ async def update_workstation(org_id: str, workstation_id: str, payload: Workstat
     res = db.table("workstations").update(update_data).eq("id", workstation_id).eq("org_id", org_id).execute()
     if not res.data:
         raise HTTPException(404, "Workstation not found")
+    from app.cache import invalidate_workstations
+    await invalidate_workstations(org_id)
     return res.data[0]
 
 async def delete_workstation(org_id: str, workstation_id: str, db):
     res = db.table("workstations").delete().eq("id", workstation_id).eq("org_id", org_id).execute()
+    from app.cache import invalidate_workstations
+    await invalidate_workstations(org_id)
     return {"status": "deleted"}
 
 async def get_workstations(org_id: str, venue_id: Optional[str], db):
+    from app.cache import cache
+    cache_key = f"sales:workstations:{org_id}:{venue_id or 'all'}"
+    cached = await cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     query = db.table("workstations").select("*").eq("org_id", org_id)
     if venue_id:
         query = query.eq("venue_id", venue_id)
     res = query.execute()
-    return res.data
+    result = res.data or []
+    await cache.set(cache_key, result, ttl=32400)
+    return result
 
 # --- POS Sessions ---
 
@@ -127,14 +158,30 @@ async def open_pos_session(org_id: str, cashier_id: Optional[str], payload: PosS
     res = db.table("pos_sessions").insert(data).execute()
     if not res.data:
         raise HTTPException(400, "Could not open POS session")
-    return res.data[0]
+    session = res.data[0]
+
+    from app.cache import invalidate_pos_session
+    await invalidate_pos_session(org_id)
+    return session
 
 async def get_active_pos_session(org_id: str, workstation_id: Optional[str], db):
+    from app.cache import cache
+    cache_key = f"pos:session:active:{org_id}:{workstation_id or 'all'}"
+    cached = await cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     query = db.table("pos_sessions").select("*").eq("org_id", org_id).eq("status", "open")
     if workstation_id:
         query = query.eq("workstation_id", workstation_id)
     res = query.order("opened_at", desc=True).limit(1).execute()
-    return res.data[0] if res.data else None
+    session = res.data[0] if res.data else None
+
+    if session:
+        # Cache active open session for 2 hours (invalidated on session close/open)
+        await cache.set(cache_key, session, ttl=7200)
+
+    return session
 
 # --- Catalog Service ---
 
@@ -885,6 +932,162 @@ async def resolve_pos_config(org_id: str, workstation_id: str, mode: str, db: An
     }
     await cache.set(cache_key, result, ttl=32400)
     return result
+
+
+# ── POS Table Orders (Multi-terminal real-time sync) ──
+
+async def list_active_table_orders(org_id: str, venue_id: Optional[str] = None, db: Any = None):
+    from app.cache import cache
+    cache_key = f"sales:table_orders:{org_id}:{venue_id or 'all'}"
+    cached = await cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    query = db.table("pos_table_orders").select("*").eq("org_id", org_id).eq("status", "active")
+    if venue_id:
+        query = query.eq("venue_id", str(venue_id))
+    res = query.order("updated_at", desc=True).execute()
+    orders = res.data or []
+
+    # Cache for 30s in Redis
+    await cache.set(cache_key, orders, ttl=30)
+    return orders
+
+
+async def get_active_table_order(org_id: str, table_id: str, db: Any = None):
+    res = db.table("pos_table_orders").select("*").eq("org_id", org_id).eq("table_id", str(table_id)).eq("status", "active").limit(1).execute()
+    return res.data[0] if res.data else None
+
+
+async def sync_table_order(org_id: str, user_id: str, payload: Any, db: Any = None):
+    from app.cache import invalidate_table_orders
+
+    mode = getattr(payload, "mode", "tables") or "tables"
+    table_id = str(payload.table_id) if payload.table_id else None
+    tab_name = payload.tab_name or payload.table_name or (
+        "Barra" if mode == "bar" else
+        "Delivery" if mode == "delivery" else
+        "Para Llevar" if mode == "takeout" else
+        "Pick-up" if mode == "pickup" else "Mesa"
+    )
+    cart = payload.cart or []
+    total = float(payload.total or 0)
+
+    # 1. If cart is empty or cleared, mark cancelled / clear active order
+    if not cart or total <= 0:
+        query = db.table("pos_table_orders").update({
+            "status": "cancelled",
+            "updated_at": "now()"
+        }).eq("org_id", org_id).eq("status", "active")
+        if table_id:
+            query = query.eq("table_id", table_id)
+        elif getattr(payload, "id", None):
+            query = query.eq("id", str(payload.id))
+        else:
+            query = query.eq("mode", mode).eq("workstation_id", str(payload.workstation_id) if payload.workstation_id else None)
+        query.execute()
+
+        await invalidate_table_orders(org_id)
+        return {"status": "cleared", "table_id": table_id}
+
+    # 2. Find existing active order
+    query = db.table("pos_table_orders").select("id").eq("org_id", org_id).eq("status", "active")
+    if table_id:
+        query = query.eq("table_id", table_id)
+    elif getattr(payload, "id", None):
+        query = query.eq("id", str(payload.id))
+    else:
+        # Match on workstation & mode
+        query = query.eq("mode", mode)
+        if payload.workstation_id:
+            query = query.eq("workstation_id", str(payload.workstation_id))
+
+    existing = query.limit(1).execute()
+
+    venue_id = str(payload.venue_id) if payload.venue_id else None
+    if not venue_id and payload.workstation_id:
+        try:
+            wk_res = db.table("workstations").select("venue_id").eq("id", str(payload.workstation_id)).execute()
+            if wk_res.data and wk_res.data[0].get("venue_id"):
+                venue_id = str(wk_res.data[0]["venue_id"])
+        except Exception:
+            pass
+
+    if not venue_id:
+        try:
+            v_res = db.table("venues").select("id").eq("org_id", org_id).limit(1).execute()
+            if v_res.data:
+                venue_id = str(v_res.data[0]["id"])
+        except Exception:
+            pass
+
+    if not venue_id:
+        raise HTTPException(400, "venue_id is required to register an active POS order")
+
+    if existing.data:
+        order_id = existing.data[0]["id"]
+        update_data = {
+            "venue_id": venue_id,
+            "mode": mode,
+            "table_id": table_id,
+            "table_name": payload.table_name,
+            "tab_name": tab_name,
+            "customer_id": str(payload.customer_id) if payload.customer_id else None,
+            "customer_name": payload.customer_name,
+            "customer_tax_id": payload.customer_tax_id,
+            "cart": cart,
+            "total": total,
+            "order_number": payload.order_number,
+            "workstation_id": str(payload.workstation_id) if payload.workstation_id else None,
+            "updated_at": "now()",
+        }
+        res = db.table("pos_table_orders").update(update_data).eq("id", order_id).execute()
+        saved = res.data[0] if res.data else update_data
+    else:
+        insert_data = {
+            "org_id": org_id,
+            "venue_id": venue_id,
+            "mode": mode,
+            "table_id": table_id,
+            "table_name": payload.table_name,
+            "tab_name": tab_name,
+            "customer_id": str(payload.customer_id) if payload.customer_id else None,
+            "customer_name": payload.customer_name,
+            "customer_tax_id": payload.customer_tax_id,
+            "cart": cart,
+            "total": total,
+            "order_number": payload.order_number,
+            "workstation_id": str(payload.workstation_id) if payload.workstation_id else None,
+            "created_by": str(user_id) if user_id else None,
+            "status": "active",
+        }
+        res = db.table("pos_table_orders").insert(insert_data).execute()
+        saved = res.data[0] if res.data else insert_data
+
+    await invalidate_table_orders(org_id)
+    return saved
+
+
+async def delete_table_order(org_id: str, table_id: str, db: Any = None):
+    from app.cache import invalidate_table_orders
+    query = db.table("pos_table_orders").update({
+        "status": "cancelled",
+        "updated_at": "now()"
+    }).eq("org_id", org_id).eq("status", "active")
+
+    # table_id can be a table_id string or a record UUID
+    try:
+        from uuid import UUID
+        UUID(str(table_id))
+        query = query.or_(f"table_id.eq.{table_id},id.eq.{table_id}")
+    except ValueError:
+        query = query.eq("table_id", str(table_id))
+
+    query.execute()
+    await invalidate_table_orders(org_id)
+    return {"status": "deleted", "table_id": table_id}
+
+
 
 
 

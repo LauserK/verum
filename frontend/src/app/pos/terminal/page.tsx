@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { 
   Utensils, 
@@ -12,7 +12,8 @@ import {
   UserCircle2,
   MonitorCheck,
   LayoutGrid,
-  MapPin
+  MapPin,
+  Receipt
 } from 'lucide-react'
 import { usePosStore, PosMode } from '@/store/posStore'
 import { useProfile } from '@/hooks/useProfile'
@@ -21,7 +22,8 @@ import PosCart from './components/PosCart'
 import PosTableMap from './components/PosTableMap'
 import { CustomerSelectorModal } from './components/CustomerSelectorModal'
 import { CheckoutModal } from './components/CheckoutModal'
-import { usePosConfig, useWorkstations, useActivePosSession } from '@/hooks/useSales'
+import { OpenOrdersModal } from './components/OpenOrdersModal'
+import { usePosConfig, useWorkstations, useActivePosSession, useSyncTableOrder, useTableOrders } from '@/hooks/useSales'
 import { useVenue } from '@/components/VenueContext'
 
 interface PosModeTab {
@@ -92,6 +94,47 @@ export default function PosTerminalPage() {
     }
   }, [serverSession, activeSessionId, setSessionOpening])
 
+  // Open Orders / Cuentas Abiertas Across All Terminals
+  const [showOpenOrdersModal, setShowOpenOrdersModal] = useState(false)
+  const currentVenueId = selectedVenueId || workstations.find((w) => w.id === activeWorkstationId)?.venue_id || serverSession?.venue_id || null
+  const { data: serverTableOrders = [] } = useTableOrders(currentVenueId || undefined)
+  const openOrdersCount = serverTableOrders.filter((o) => o.status === 'active').length
+
+  // Multi-Terminal Real-Time Sync for all active orders (Tables, Bar, Delivery, Takeout, Pickup)
+  const syncTableOrderMutation = useSyncTableOrder()
+
+  React.useEffect(() => {
+    if (cart.length > 0) {
+      const timer = setTimeout(() => {
+        const tabName = activeTableName || (
+          posMode === 'bar' ? (customerName ? `Barra - ${customerName}` : 'Barra') :
+          posMode === 'delivery' ? (customerName ? `Delivery - ${customerName}` : 'Delivery') :
+          posMode === 'takeout' ? (customerName ? `Llevar - ${customerName}` : 'Para Llevar') :
+          posMode === 'pickup' ? (customerName ? `Pick-up - ${customerName}` : 'Pick-up') : 'Mesa'
+        )
+
+        syncTableOrderMutation.mutate({
+          tableId: activeTableId || `direct:${posMode}:${activeWorkstationId || 'default'}`,
+          data: {
+            venue_id: currentVenueId || null,
+            mode: posMode,
+            table_id: activeTableId || null,
+            table_name: activeTableName || null,
+            tab_name: tabName,
+            customer_id: customerId || null,
+            customer_name: customerName || null,
+            customer_tax_id: customerTaxId || null,
+            cart: cart,
+            total: total,
+            order_number: orderNumber,
+            workstation_id: activeWorkstationId || null,
+          }
+        })
+      }, 500)
+      return () => clearTimeout(timer)
+    }
+  }, [posMode, activeTableId, activeTableName, cart, total, customerId, customerName, customerTaxId, orderNumber, currentVenueId, activeWorkstationId])
+
   const { data: posConfig } = usePosConfig(activeWorkstationId || undefined, posMode)
   const customerRequirement = posConfig?.customer_requirement || 'optional'
 
@@ -114,10 +157,6 @@ export default function PosTerminalPage() {
 
   const handleModeChange = (newMode: PosMode) => {
     setPosMode(newMode)
-    // If switching away from tables mode, reset active table
-    if (newMode !== 'tables') {
-      setActiveTable(null, null)
-    }
   }
 
   return (
@@ -187,6 +226,21 @@ export default function PosTerminalPage() {
             </button>
           )}
 
+          {/* Cuentas Abiertas Button */}
+          <button
+            onClick={() => setShowOpenOrdersModal(true)}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-surface-raised hover:bg-primary/10 border border-border hover:border-primary/30 text-xs font-bold text-text-primary transition-all cursor-pointer shadow-sm"
+            title="Ver todas las cuentas y comandas abiertas en la sede"
+          >
+            <Receipt className="w-3.5 h-3.5 text-primary" />
+            <span className="hidden md:inline">Cuentas Abiertas</span>
+            {openOrdersCount > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono font-black bg-primary text-black">
+                {openOrdersCount}
+              </span>
+            )}
+          </button>
+
           {/* Cashier Chip */}
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-surface-raised border border-border text-xs">
             <UserCircle2 className="w-4 h-4 text-primary shrink-0" />
@@ -226,6 +280,12 @@ export default function PosTerminalPage() {
           </>
         )}
       </main>
+
+      {/* Open Orders Across All Terminals Modal */}
+      <OpenOrdersModal
+        isOpen={showOpenOrdersModal}
+        onClose={() => setShowOpenOrdersModal(false)}
+      />
 
       {/* Customer Selector Modal */}
       <CustomerSelectorModal

@@ -146,6 +146,11 @@ async def test_invalidation_helpers(mock_cache):
     await invalidate_recipes("org1")
     mock_cache.delete.assert_any_call("recipes:graph:org1")
 
+    from app.cache import invalidate_sales_config
+    await invalidate_sales_config("org1")
+    mock_cache.delete.assert_any_call("sales:config:org1")
+    mock_cache.delete.assert_any_call("sales:payment_methods:org1")
+
 @pytest.mark.asyncio
 @patch("app.cache.cache")
 async def test_super_admin_cache_endpoints(mock_cache):

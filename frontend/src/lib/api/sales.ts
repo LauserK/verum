@@ -293,6 +293,58 @@ export const salesApi = {
         }),
     getActivePosSession: (workstationId?: string) =>
         fetchWithAuth<PosSession | null>(`/sales/sessions/active${workstationId ? `?workstation_id=${workstationId}` : ''}`),
+
+    // Table Orders (Multi-terminal sync)
+    getTableOrders: (venueId?: string) =>
+        fetchWithAuth<TableOrder[]>(`/sales/table-orders${venueId ? `?venue_id=${venueId}` : ''}`),
+    getTableOrder: (tableId: string) =>
+        fetchWithAuth<TableOrder | null>(`/sales/table-orders/${tableId}`),
+    syncTableOrder: (tableId: string, data: Partial<TableOrderSyncPayload>) =>
+        fetchWithAuth<TableOrder>(`/sales/table-orders/${tableId}`, {
+            method: 'PUT',
+            body: JSON.stringify(data),
+        }),
+    deleteTableOrder: (tableId: string) =>
+        fetchWithAuth(`/sales/table-orders/${tableId}`, {
+            method: 'DELETE',
+        }),
+}
+
+export interface TableOrderSyncPayload {
+    id?: string
+    venue_id?: string | null
+    mode?: string
+    table_id?: string | null
+    table_name?: string | null
+    tab_name?: string | null
+    customer_id?: string | null
+    customer_name?: string | null
+    customer_tax_id?: string | null
+    cart: any[]
+    total: number
+    order_number?: number | null
+    workstation_id?: string | null
+}
+
+export interface TableOrder {
+    id: string
+    org_id: string
+    venue_id?: string | null
+    mode?: string
+    table_id?: string | null
+    table_name?: string | null
+    tab_name?: string | null
+    customer_id?: string | null
+    customer_name?: string | null
+    customer_tax_id?: string | null
+    cart: any[]
+    total: number
+    order_number?: number | null
+    workstation_id?: string | null
+    created_by?: string | null
+    status: 'active' | 'billed' | 'cancelled'
+    created_at?: string
+    updated_at?: string
 }
 
 export interface PosSession {

@@ -89,4 +89,60 @@ describe('usePosStore', () => {
     setSelectedCategory('drinks')
     expect(usePosStore.getState().selectedCategoryId).toBe('drinks')
   })
+
+  it('isolates tables but preserves direct counter order across bar, takeout, pickup, delivery', () => {
+    const { setActiveTable, addItem, setPosMode } = usePosStore.getState()
+
+    // 1. Select Mesa 1 and add 2 items
+    setActiveTable('table-1', 'Mesa 1')
+    addItem({ id: 'burger', name: 'Burger', price: 10 })
+    addItem({ id: 'soda', name: 'Soda', price: 2 })
+    expect(usePosStore.getState().cart.length).toBe(2)
+    expect(usePosStore.getState().total).toBe(12)
+
+    // 2. Click "Cambiar mesa" (unselect table) -> active cart is empty on table map
+    setActiveTable(null, null)
+    expect(usePosStore.getState().activeTableId).toBeNull()
+    expect(usePosStore.getState().cart).toEqual([])
+    expect(usePosStore.getState().total).toBe(0)
+
+    // 3. Switch to Bar mode -> empty cart for new direct order
+    setPosMode('bar')
+    expect(usePosStore.getState().posMode).toBe('bar')
+    expect(usePosStore.getState().cart).toEqual([])
+    addItem({ id: 'beer', name: 'Beer', price: 6 })
+    addItem({ id: 'peanuts', name: 'Peanuts', price: 4 })
+    expect(usePosStore.getState().cart.length).toBe(2)
+    expect(usePosStore.getState().total).toBe(10)
+
+    // 4. Switch from Bar to Takeout -> cart is preserved!
+    setPosMode('takeout')
+    expect(usePosStore.getState().posMode).toBe('takeout')
+    expect(usePosStore.getState().cart.length).toBe(2)
+    expect(usePosStore.getState().total).toBe(10)
+
+    // 5. Switch from Takeout to Pick-up -> cart is preserved!
+    setPosMode('pickup')
+    expect(usePosStore.getState().posMode).toBe('pickup')
+    expect(usePosStore.getState().cart.length).toBe(2)
+    expect(usePosStore.getState().total).toBe(10)
+
+    // 6. Select Mesa 2 -> Mesa 2 is clean ($0)
+    setPosMode('tables')
+    setActiveTable('table-2', 'Mesa 2')
+    expect(usePosStore.getState().cart).toEqual([])
+    expect(usePosStore.getState().total).toBe(0)
+
+    // 7. Switch back to Mesa 1 -> restores Mesa 1's 2 items ($12)
+    setActiveTable('table-1', 'Mesa 1')
+    expect(usePosStore.getState().cart.length).toBe(2)
+    expect(usePosStore.getState().total).toBe(12)
+
+    // 8. Switch back to Bar/Takeout -> restores the 2 items ($10)
+    setPosMode('bar')
+    expect(usePosStore.getState().cart.length).toBe(2)
+    expect(usePosStore.getState().cart[0].name).toBe('Beer')
+    expect(usePosStore.getState().total).toBe(10)
+  })
 })
+

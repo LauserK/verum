@@ -14,7 +14,8 @@ import {
   Coins,
   Clock,
   CheckCircle2,
-  Delete
+  Delete,
+  Loader2
 } from 'lucide-react'
 import { useVenue } from '@/components/VenueContext'
 import { useProfile } from '@/hooks/useProfile'
@@ -170,8 +171,31 @@ export default function PosSessionPage() {
     }
   }
 
+  const isCheckingSession = loadingStations || (checkingSession && !activeSession) || (activeSession?.status === 'open')
+
+  if (isCheckingSession) {
+    return (
+      <div className="h-screen w-screen bg-bg text-text-primary flex flex-col items-center justify-center p-6 select-none overflow-hidden animate-in fade-in duration-150">
+        <div className="flex flex-col items-center gap-5 text-center max-w-sm">
+          <div className="relative">
+            <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-black text-2xl shadow-inner">
+              V
+            </div>
+            <div className="absolute -bottom-1 -right-1 p-1 bg-surface rounded-full border border-border">
+              <Loader2 className="w-4 h-4 text-primary animate-spin" />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <h2 className="text-lg font-bold tracking-tight text-text-primary">Accediendo al POS</h2>
+            <p className="text-xs text-text-secondary">Verificando sesión activa de caja...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="h-screen w-screen bg-bg text-text-primary flex flex-col justify-between p-4 sm:p-6 select-none overflow-hidden">
+    <div className="h-screen w-screen bg-bg text-text-primary flex flex-col justify-between p-4 sm:p-6 select-none overflow-hidden animate-in fade-in duration-200">
       {/* Top Bar / Header */}
       <header className="w-full max-w-6xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-3 pb-3 border-b border-border shrink-0">
         <div className="flex items-center gap-3">

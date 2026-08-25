@@ -11,7 +11,8 @@ import {
   AlertCircle,
   ArrowRight,
   Sparkles,
-  DollarSign
+  DollarSign,
+  Loader2
 } from 'lucide-react'
 import { PaymentCalculator } from './PaymentCalculator'
 import { ChangeRegistration } from './ChangeRegistration'
@@ -260,7 +261,8 @@ export function CheckoutModal({
                 <button
                   type="button"
                   onClick={() => handleSelectFlow('complete')}
-                  className="flex flex-col items-center text-center p-8 bg-surface-raised/50 hover:bg-surface-raised border border-border/80 hover:border-primary/50 rounded-3xl transition-all group cursor-pointer hover:shadow-xl hover:shadow-primary/5 hover:-translate-y-1"
+                  disabled={checkoutMutation.isPending}
+                  className="flex flex-col items-center text-center p-8 bg-surface-raised/50 hover:bg-surface-raised border border-border/80 hover:border-primary/50 rounded-3xl transition-all group cursor-pointer hover:shadow-xl hover:shadow-primary/5 hover:-translate-y-1 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none"
                 >
                   <div className="w-16 h-16 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mb-5 border border-primary/20 group-hover:scale-110 transition-transform">
                     <CreditCard className="w-8 h-8" />
@@ -281,7 +283,8 @@ export function CheckoutModal({
                 <button
                   type="button"
                   onClick={() => handleSelectFlow('mixed')}
-                  className="flex flex-col items-center text-center p-8 bg-surface-raised/50 hover:bg-surface-raised border border-border/80 hover:border-amber-500/50 rounded-3xl transition-all group cursor-pointer hover:shadow-xl hover:shadow-amber-500/5 hover:-translate-y-1"
+                  disabled={checkoutMutation.isPending}
+                  className="flex flex-col items-center text-center p-8 bg-surface-raised/50 hover:bg-surface-raised border border-border/80 hover:border-amber-500/50 rounded-3xl transition-all group cursor-pointer hover:shadow-xl hover:shadow-amber-500/5 hover:-translate-y-1 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none"
                 >
                   <div className="w-16 h-16 rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center mb-5 border border-amber-500/20 group-hover:scale-110 transition-transform">
                     <Layers className="w-8 h-8" />
@@ -302,10 +305,15 @@ export function CheckoutModal({
                 <button
                   type="button"
                   onClick={() => handleSelectFlow('cxc')}
-                  className="flex flex-col items-center text-center p-8 bg-surface-raised/50 hover:bg-surface-raised border border-border/80 hover:border-purple-500/50 rounded-3xl transition-all group cursor-pointer hover:shadow-xl hover:shadow-purple-500/5 hover:-translate-y-1"
+                  disabled={checkoutMutation.isPending}
+                  className="flex flex-col items-center text-center p-8 bg-surface-raised/50 hover:bg-surface-raised border border-border/80 hover:border-purple-500/50 rounded-3xl transition-all group cursor-pointer hover:shadow-xl hover:shadow-purple-500/5 hover:-translate-y-1 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none"
                 >
                   <div className="w-16 h-16 rounded-2xl bg-purple-500/10 text-purple-500 flex items-center justify-center mb-5 border border-purple-500/20 group-hover:scale-110 transition-transform">
-                    <FileCheck2 className="w-8 h-8" />
+                    {checkoutMutation.isPending && paymentFlow === 'cxc' ? (
+                      <Loader2 className="w-8 h-8 animate-spin" />
+                    ) : (
+                      <FileCheck2 className="w-8 h-8" />
+                    )}
                   </div>
                   <h3 className="text-lg font-bold text-text-primary group-hover:text-purple-500 transition-colors">
                     Crédito / CXC
@@ -314,8 +322,14 @@ export function CheckoutModal({
                     Cargar al saldo pendiente del cliente con factura confirmada.
                   </p>
                   <div className="mt-6 flex items-center gap-1.5 text-xs font-bold text-purple-500 group-hover:translate-x-1 transition-transform">
-                    <span>Confirmar CXC</span>
-                    <ArrowRight className="w-4 h-4" />
+                    {checkoutMutation.isPending && paymentFlow === 'cxc' ? (
+                      <span>Procesando CXC...</span>
+                    ) : (
+                      <>
+                        <span>Confirmar CXC</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </>
+                    )}
                   </div>
                 </button>
               </div>
@@ -326,6 +340,7 @@ export function CheckoutModal({
             <PaymentCalculator
               total={total}
               paymentType={paymentFlow === 'mixed' ? 'mixed' : 'complete'}
+              isProcessing={checkoutMutation.isPending}
               onBack={() => setStep('decision')}
               onComplete={(payments, change) => {
                 setRegisteredPayments(payments)

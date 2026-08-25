@@ -728,6 +728,45 @@ class CheckoutCreate(BaseModel):
 class CheckoutResponse(BaseModel):
     invoice: dict
 
+# ── POS Table & Open Orders (Multi-terminal real-time sync) ──
+
+class PosTableOrderSync(BaseModel):
+    id: Optional[UUID] = None
+    venue_id: Optional[UUID] = None
+    mode: Optional[str] = 'tables'
+    table_id: Optional[str] = None
+    table_name: Optional[str] = None
+    tab_name: Optional[str] = None
+    customer_id: Optional[UUID] = None
+    customer_name: Optional[str] = None
+    customer_tax_id: Optional[str] = None
+    cart: List[dict] = []
+    total: float = 0
+    order_number: Optional[int] = None
+    workstation_id: Optional[UUID] = None
+
+class PosTableOrderOut(BaseModel):
+    id: UUID
+    org_id: UUID
+    venue_id: Optional[UUID] = None
+    mode: Optional[str] = 'tables'
+    table_id: Optional[str] = None
+    table_name: Optional[str] = None
+    tab_name: Optional[str] = None
+    customer_id: Optional[UUID] = None
+    customer_name: Optional[str] = None
+    customer_tax_id: Optional[str] = None
+    cart: List[dict] = []
+    total: float = 0
+    order_number: Optional[int] = None
+    workstation_id: Optional[UUID] = None
+    created_by: Optional[UUID] = None
+    status: str = 'active'
+    created_at: Optional[Union[dt_datetime, str]] = None
+    updated_at: Optional[Union[dt_datetime, str]] = None
+
+
+
 
 
 
