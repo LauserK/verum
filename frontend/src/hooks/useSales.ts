@@ -77,7 +77,8 @@ export function useInvoiceByTableOrder(tableOrderId?: string | null) {
         queryKey: ['sales', 'invoices', 'by-table-order', tableOrderId],
         queryFn: () => salesApi.getInvoiceByTableOrder(tableOrderId!),
         enabled: !!tableOrderId,
-        refetchInterval: 3000,
+        staleTime: 10000, // 10 seconds fresh
+        refetchInterval: 15000, // Background check every 15s instead of 3s
     })
 }
 
