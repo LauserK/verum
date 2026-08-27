@@ -69,9 +69,9 @@ async def process_checkout(org_id: str, payload: CheckoutCreate, user_id: str, d
             table_order_id = None
 
 
-    # 4.6 Check for existing partial invoice if is_partial
+    # 4.6 Check for existing partial invoice for this table order (whether this payment is partial or the final settling payment)
     existing_invoice = None
-    if payload.is_partial and (table_order_id or payload.table_id):
+    if table_order_id or payload.table_id:
         search_ids = [i for i in [table_order_id, str(payload.table_id) if payload.table_id else None] if i]
         for s_id in search_ids:
             try:
@@ -81,6 +81,7 @@ async def process_checkout(org_id: str, payload: CheckoutCreate, user_id: str, d
                     break
             except Exception:
                 pass
+
 
     if existing_invoice:
         invoice = existing_invoice
@@ -324,13 +325,15 @@ async def process_checkout(org_id: str, payload: CheckoutCreate, user_id: str, d
 
         db.table("payments").insert(payment_data).execute()
 
-    # 11. Update customer outstanding balance for CXC
-    if not payload.is_partial and (balance_due > 0.01) and customer_id:
+    # 11. Update customer outstanding balance ONLY for actual direct CXC sales
+
+    if not payload.is_partial and not payload.split_mode and (balance_due > 0.05) and len(payload.payments) == 0 and customer_id:
         try:
             db.rpc("increment_customer_balance", {
                 "p_customer_id": customer_id,
                 "p_amount": float(balance_due)
             }).execute()
+
         except Exception:
             # Fallback direct update to customers table (current_balance)
             try:
