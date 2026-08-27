@@ -1,3 +1,4 @@
+import { describe, it, expect, beforeEach } from 'vitest'
 import { usePosStore } from './posStore'
 
 describe('usePosStore', () => {
@@ -9,6 +10,8 @@ describe('usePosStore', () => {
       activeTableName: null,
       searchQuery: '',
       selectedCategoryId: 'all',
+      activeSeatId: null,
+      cartsByContext: {},
     })
   })
 
@@ -19,6 +22,7 @@ describe('usePosStore', () => {
     expect(state.posMode).toBe('tables')
     expect(state.activeTableId).toBeNull()
     expect(state.activeTableName).toBeNull()
+    expect(state.activeSeatId).toBeNull()
   })
 
   it('adds new item and calculates total', () => {
@@ -144,5 +148,104 @@ describe('usePosStore', () => {
     expect(usePosStore.getState().cart[0].name).toBe('Beer')
     expect(usePosStore.getState().total).toBe(10)
   })
+
+  describe('Seats management (M4)', () => {
+    it('initializes table with default seat-1 and selects it as activeSeatId', () => {
+      const { setActiveTable } = usePosStore.getState()
+      setActiveTable('table-10', 'Mesa 10')
+
+      const state = usePosStore.getState()
+      expect(state.activeSeatId).toBe('seat-1')
+      const ctx = state.cartsByContext['table:table-10']
+      expect(ctx?.seats).toEqual([{ id: 'seat-1', label: 'Asiento 1' }])
+    })
+
+    it('adds new seats and assigns them as activeSeatId', () => {
+      const { setActiveTable, addSeat } = usePosStore.getState()
+      setActiveTable('table-10', 'Mesa 10')
+
+      addSeat('Pedro')
+      let state = usePosStore.getState()
+      let ctx = state.cartsByContext['table:table-10']
+      expect(ctx?.seats?.length).toBe(2)
+      expect(ctx?.seats?.[1].label).toBe('Pedro')
+      expect(state.activeSeatId).toBe(ctx?.seats?.[1].id)
+
+      addSeat()
+      state = usePosStore.getState()
+      ctx = state.cartsByContext['table:table-10']
+      expect(ctx?.seats?.length).toBe(3)
+      expect(ctx?.seats?.[2].label).toBe('Asiento 3')
+      expect(state.activeSeatId).toBe(ctx?.seats?.[2].id)
+    })
+
+    it('renames a seat', () => {
+      const { setActiveTable, renameSeat } = usePosStore.getState()
+      setActiveTable('table-10', 'Mesa 10')
+
+      renameSeat('seat-1', 'Carlos')
+      const ctx = usePosStore.getState().cartsByContext['table:table-10']
+      expect(ctx?.seats?.[0].label).toBe('Carlos')
+    })
+
+    it('removes a seat and reassigns orphan items to fallback seat', () => {
+      const { setActiveTable, addSeat, addItem, removeSeat } = usePosStore.getState()
+      setActiveTable('table-10', 'Mesa 10')
+      addSeat('Maria')
+
+      const state = usePosStore.getState()
+      const seat2Id = state.activeSeatId!
+
+      // Add item to seat 2 (Maria)
+      addItem({ id: 'pasta', name: 'Pasta', price: 15 })
+      expect(usePosStore.getState().cart[0].seat).toBe(seat2Id)
+
+      // Remove seat 2
+      removeSeat(seat2Id)
+      const afterState = usePosStore.getState()
+      const ctx = afterState.cartsByContext['table:table-10']
+
+      expect(ctx?.seats?.length).toBe(1)
+      expect(ctx?.seats?.[0].id).toBe('seat-1')
+      // Item moved to seat-1
+      expect(afterState.cart[0].seat).toBe('seat-1')
+      expect(afterState.activeSeatId).toBe('seat-1')
+    })
+
+    it('assigns items to activeSeatId in tables mode', () => {
+      const { setActiveTable, addSeat, setActiveSeat, addItem } = usePosStore.getState()
+      setActiveTable('table-10', 'Mesa 10')
+
+      // In seat-1
+      addItem({ id: 'burger', name: 'Burger', price: 10 })
+      expect(usePosStore.getState().cart[0].seat).toBe('seat-1')
+
+      // Add seat-2 and add item
+      addSeat('Pedro')
+      const seat2Id = usePosStore.getState().activeSeatId!
+      addItem({ id: 'fries', name: 'Fries', price: 5 })
+      expect(usePosStore.getState().cart[1].seat).toBe(seat2Id)
+
+      // When activeSeatId is 'all', assigns to last seat
+      setActiveSeat('all')
+      addItem({ id: 'soda', name: 'Soda', price: 2 })
+      expect(usePosStore.getState().cart[2].seat).toBe(seat2Id)
+    })
+
+    it('allows moving an item to another seat', () => {
+      const { setActiveTable, addSeat, addItem, moveItemToSeat } = usePosStore.getState()
+      setActiveTable('table-10', 'Mesa 10')
+      addSeat('Pedro')
+      const seat2Id = usePosStore.getState().activeSeatId!
+
+      addItem({ id: 'burger', name: 'Burger', price: 10 })
+      const cartItemId = usePosStore.getState().cart[0].cartItemId
+      expect(usePosStore.getState().cart[0].seat).toBe(seat2Id)
+
+      moveItemToSeat(cartItemId, 'seat-1')
+      expect(usePosStore.getState().cart[0].seat).toBe('seat-1')
+    })
+  })
 })
+
 
