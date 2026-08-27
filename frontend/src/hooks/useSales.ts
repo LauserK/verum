@@ -182,6 +182,9 @@ export function useExchangeRates() {
     })
 }
 
+export const useLatestExchangeRates = useExchangeRates
+
+
 export function useCreateExchangeRate() {
     const queryClient = useQueryClient()
     return useMutation({
