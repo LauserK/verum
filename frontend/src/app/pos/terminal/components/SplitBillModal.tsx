@@ -11,7 +11,9 @@ import {
   CheckCircle2,
   AlertCircle,
   DollarSign,
-  User
+  User,
+  RefreshCw,
+  Divide
 } from 'lucide-react'
 import { usePosStore, Seat } from '@/store/posStore'
 import { useInvoiceByTableOrder, useCheckout, useBillingConfig, useCurrencies, useExchangeRates, useWorkstations, useActivePosSession } from '@/hooks/useSales'
@@ -70,9 +72,15 @@ export function SplitBillModal({ isOpen, onClose, onSuccess }: SplitBillModalPro
   }, [currentCtx])
 
   // Fetch partial table invoice & existing payments
-  const { data: tableInvoiceData, refetch: refetchInvoice } = useInvoiceByTableOrder(activeTableId)
+  const { 
+    data: tableInvoiceData, 
+    isLoading: isLoadingInvoice,
+    isFetching: isFetchingInvoice,
+    refetch: refetchInvoice 
+  } = useInvoiceByTableOrder(activeTableId)
   
   const existingPayments = useMemo(() => tableInvoiceData?.payments || [], [tableInvoiceData])
+
   const partialInvoice = useMemo(() => tableInvoiceData?.invoice || null, [tableInvoiceData])
 
   // Paid covered item IDs
@@ -386,9 +394,23 @@ export function SplitBillModal({ isOpen, onClose, onSuccess }: SplitBillModalPro
         )}
 
         {/* Inner Content Area */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* View 1: Final Table Confirmation when balance = 0 */}
-          {lastInvoice ? (
+        <div className="flex-1 flex flex-col overflow-hidden relative">
+          {/* Loading Overlay / Screen on initial sync */}
+          {isLoadingInvoice && !tableInvoiceData ? (
+            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-4">
+              <div className="w-14 h-14 rounded-2xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-teal-400 animate-spin">
+                <RefreshCw className="w-7 h-7" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-text-primary">
+                  Sincronizando estado de la mesa...
+                </h3>
+                <p className="text-xs text-text-secondary max-w-sm">
+                  Cargando pagos parciales y balance actualizado desde el servidor.
+                </p>
+              </div>
+            </div>
+          ) : lastInvoice ? (
             <CheckoutConfirmation
               invoice={lastInvoice}
               onNewOrder={handleFinishTable}
@@ -409,45 +431,54 @@ export function SplitBillModal({ isOpen, onClose, onSuccess }: SplitBillModalPro
             <div className="flex-1 flex flex-col overflow-hidden">
               {/* Tab Navigation Header */}
               <div className="flex items-center justify-between px-8 py-3 bg-surface-raised/20 border-b border-border/60">
-                <div className="flex items-center gap-2 bg-surface-raised p-1.5 rounded-2xl border border-border">
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('seats')}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      activeTab === 'seats'
-                        ? 'bg-primary text-black shadow-md'
-                        : 'text-text-secondary hover:text-text-primary'
-                    }`}
-                  >
-                    <Users className="w-4 h-4" />
-                    <span>Por Asientos</span>
-                  </button>
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 bg-surface-raised p-1.5 rounded-2xl border border-border">
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('seats')}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        activeTab === 'seats'
+                          ? 'bg-primary text-black shadow-md'
+                          : 'text-text-secondary hover:text-text-primary'
+                      }`}
+                    >
+                      <Users className="w-4 h-4" />
+                      <span>Por Asientos</span>
+                    </button>
 
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('equal')}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      activeTab === 'equal'
-                        ? 'bg-primary text-black shadow-md'
-                        : 'text-text-secondary hover:text-text-primary'
-                    }`}
-                  >
-                    <PieChart className="w-4 h-4" />
-                    <span>Partes Iguales</span>
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('equal')}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        activeTab === 'equal'
+                          ? 'bg-primary text-black shadow-md'
+                          : 'text-text-secondary hover:text-text-primary'
+                      }`}
+                    >
+                      <Divide className="w-4 h-4" />
+                      <span>Partes Iguales</span>
+                    </button>
 
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('manual')}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      activeTab === 'manual'
-                        ? 'bg-primary text-black shadow-md'
-                        : 'text-text-secondary hover:text-text-primary'
-                    }`}
-                  >
-                    <CheckSquare className="w-4 h-4" />
-                    <span>Manual / Por Items</span>
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('manual')}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        activeTab === 'manual'
+                          ? 'bg-primary text-black shadow-md'
+                          : 'text-text-secondary hover:text-text-primary'
+                      }`}
+                    >
+                      <CheckSquare className="w-4 h-4" />
+                      <span>Manual / Items</span>
+                    </button>
+                  </div>
+
+                  {isFetchingInvoice && (
+                    <div className="flex items-center gap-1.5 text-[11px] font-medium text-teal-400 bg-teal-500/10 px-3 py-1.5 rounded-xl border border-teal-500/20 animate-pulse">
+                      <RefreshCw className="w-3 h-3 animate-spin" />
+                      <span>Sincronizando...</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Status chip */}
