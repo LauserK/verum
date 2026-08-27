@@ -1088,6 +1088,12 @@ async def delete_table_order(org_id: str, table_id: str, db: Any = None):
     return {"status": "deleted", "table_id": table_id}
 
 
+async def get_invoice_by_table_order(org_id: str, table_order_id: str, db: Any = None):
+    from app.sales.invoice_service import get_invoice_by_table_order as _get_inv
+    return await _get_inv(org_id, table_order_id, db)
+
+
+
 
 
 

@@ -255,3 +255,33 @@ async def list_invoices(
         inv["tax_summary"] = inv.get("invoice_tax_summary", [])
     return invoices
 
+
+async def get_invoice_by_table_order(org_id: str, table_order_id: str, db) -> Optional[dict]:
+    # 1. Search for active partial invoice directly with table_order_id
+    inv_res = db.table("invoices").select("*, invoice_items(*), invoice_tax_summary(*)").eq("org_id", org_id).eq("table_order_id", str(table_order_id)).eq("status", "partial").order("created_at", desc=True).limit(1).execute()
+    invoice = inv_res.data[0] if inv_res.data else None
+
+    # 2. If not found by table_order_id directly, check if table_order_id is a table_id in pos_table_orders
+    if not invoice:
+        t_res = db.table("pos_table_orders").select("id").eq("org_id", org_id).eq("table_id", str(table_order_id)).in_("status", ["active", "pre_bill"]).limit(1).execute()
+        if t_res.data:
+            actual_order_id = t_res.data[0]["id"]
+            inv_res2 = db.table("invoices").select("*, invoice_items(*), invoice_tax_summary(*)").eq("org_id", org_id).eq("table_order_id", str(actual_order_id)).eq("status", "partial").order("created_at", desc=True).limit(1).execute()
+            if inv_res2.data:
+                invoice = inv_res2.data[0]
+
+    if not invoice:
+        return None
+
+    invoice["items"] = invoice.get("invoice_items", [])
+    invoice["tax_summary"] = invoice.get("invoice_tax_summary", [])
+
+    # Fetch payments for this invoice
+    pay_res = db.table("payments").select("*").eq("invoice_id", invoice["id"]).execute()
+    payments = pay_res.data or []
+
+    return {
+        "invoice": invoice,
+        "payments": payments
+    }
+

@@ -500,6 +500,15 @@ async def create_invoice(
 ):
     return await invoice_svc.create_invoice(org_id, payload, user.id, db)
 
+@router.get("/invoices/by-table-order/{table_order_id}")
+async def get_invoice_by_table_order(
+    table_order_id: str,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.view_invoices"))
+):
+    return await invoice_svc.get_invoice_by_table_order(org_id, table_order_id, db)
+
 @router.get("/invoices/{invoice_id}", response_model=InvoiceOut)
 async def get_invoice(
     invoice_id: str,

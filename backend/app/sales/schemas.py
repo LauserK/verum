@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List, Literal, Any, Union
 from uuid import UUID
 from datetime import date as dt_date, datetime as dt_datetime
@@ -512,6 +512,8 @@ class PaymentCreate(BaseModel):
     reference: Optional[str] = None
     cash_tendered: Optional[Decimal] = None
     cash_change: Optional[Decimal] = None
+    seat_label: Optional[str] = None
+    covered_items: Optional[List[str]] = None
     notes: Optional[str] = None
 
 class PaymentOut(BaseModel):
@@ -529,6 +531,8 @@ class PaymentOut(BaseModel):
     reference: Optional[str] = None
     cash_tendered: Optional[Decimal] = None
     cash_change: Optional[Decimal] = None
+    seat_label: Optional[str] = None
+    covered_items: Optional[List[str]] = None
     status: str
     notes: Optional[str] = None
     recorded_by: Optional[UUID] = None
@@ -703,6 +707,8 @@ class CheckoutPaymentCreate(BaseModel):
     exchange_rate: float = 1.0
     reference: Optional[str] = None
     cash_tendered: Optional[float] = None
+    seat_label: Optional[str] = None
+    covered_items: Optional[List[str]] = None
 
 class CheckoutChangeCreate(BaseModel):
     amount: float
@@ -715,6 +721,7 @@ class CheckoutCreate(BaseModel):
     venue_id: Optional[UUID] = None
     mode: Literal['tables', 'takeout', 'delivery', 'pickup', 'bar']
     table_id: Optional[UUID] = None
+    table_order_id: Optional[UUID] = None
     customer_id: Optional[UUID] = None
     customer_name: Optional[str] = None
     customer_tax_id: Optional[str] = None
@@ -724,6 +731,11 @@ class CheckoutCreate(BaseModel):
     document_type: str = "invoice"
     discount_amount: float = 0
     notes: Optional[str] = None
+    # M4 Additions
+    split_mode: Optional[str] = None  # "seats", "equal", "manual"
+    is_partial: bool = False
+    seat_label: Optional[str] = None
+    covered_item_ids: Optional[List[str]] = None
 
 class CheckoutResponse(BaseModel):
     invoice: dict
@@ -764,6 +776,69 @@ class PosTableOrderOut(BaseModel):
     status: str = 'active'
     created_at: Optional[Union[dt_datetime, str]] = None
     updated_at: Optional[Union[dt_datetime, str]] = None
+
+# ── POS M4 Seats & Split Bill Schemas ──
+
+class SeatSchema(BaseModel):
+    id: str
+    label: str = Field(..., max_length=50)
+
+class CartItemSchema(BaseModel):
+    cartItemId: str
+    id: str
+    name: str
+    price: Decimal
+    quantity: int = Field(1, ge=1)
+    seat: Optional[str] = None
+    sentToKitchen: bool = False
+    tax_id: Optional[str] = None
+    tax_rate: Optional[Decimal] = None
+    tax_included: bool = True
+    notes: Optional[str] = None
+    category_id: Optional[str] = None
+
+class TableOrderUpdate(BaseModel):
+    cart: Optional[List[CartItemSchema]] = None
+    seats: Optional[List[SeatSchema]] = None
+    assigned_to: Optional[UUID] = None
+    status: Optional[str] = None
+    customer_id: Optional[UUID] = None
+    customer_name: Optional[str] = None
+    customer_tax_id: Optional[str] = None
+    payment_pending: Optional[bool] = None
+
+class SplitCheckoutCreate(BaseModel):
+    workstation_id: UUID
+    pos_session_id: UUID
+    venue_id: Optional[UUID] = None
+    mode: str
+    table_id: Optional[UUID] = None
+    customer_id: Optional[UUID] = None
+    customer_name: Optional[str] = None
+    customer_tax_id: Optional[str] = None
+    items: list
+    payments: list = []
+    change: Optional[dict] = None
+    document_type: str = "invoice"
+    discount_amount: Decimal = Decimal("0")
+    notes: Optional[str] = None
+    # M4 Additions
+    split_mode: Optional[str] = None  # "seats", "equal", "manual"
+    is_partial: bool = False
+    seat_label: Optional[str] = None
+    covered_item_ids: Optional[List[str]] = None
+
+class TransferRequest(BaseModel):
+    source_table_id: str
+    target_table_id: str
+    transfer_type: str  # 'full', 'items', 'seat'
+    item_ids: Optional[List[str]] = []
+    seat_id: Optional[str] = None
+
+class MergeRequest(BaseModel):
+    source_table_id: str
+    target_table_id: str
+
 
 
 
