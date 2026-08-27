@@ -214,9 +214,7 @@ async def process_checkout(org_id: str, payload: CheckoutCreate, user_id: str, d
         amount_paid = sum(p.amount * (p.exchange_rate or 1.0) for p in payload.payments)
         balance_due = max(0.0, round(float(total_amount) - float(amount_paid), 2))
 
-        # CXC is only when no payments are made OR remaining balance is left without being a partial/split checkout,
-        # but only if payment method isn't covering the total.
-        is_cxc = balance_due > 0.05 and not payload.is_partial and len(payload.payments) == 0
+        is_cxc = balance_due > 0.01 and not payload.is_partial
         if is_cxc and not customer_id:
             raise HTTPException(400, "CXC_REQUIRES_CUSTOMER")
 
@@ -224,6 +222,7 @@ async def process_checkout(org_id: str, payload: CheckoutCreate, user_id: str, d
             status = "paid" if balance_due <= 0.01 else "partial"
         else:
             status = "paid" if balance_due <= 0.01 else "partial" if amount_paid > 0 else "confirmed"
+
 
 
         # 8. Resolve real venue_id if not valid
@@ -325,14 +324,14 @@ async def process_checkout(org_id: str, payload: CheckoutCreate, user_id: str, d
 
         db.table("payments").insert(payment_data).execute()
 
-    # 11. Update customer outstanding balance ONLY for actual direct CXC sales
-
-    if not payload.is_partial and not payload.split_mode and (balance_due > 0.05) and len(payload.payments) == 0 and customer_id:
+    # 11. Update customer outstanding balance for CXC
+    if not payload.is_partial and (balance_due > 0.01) and customer_id:
         try:
             db.rpc("increment_customer_balance", {
                 "p_customer_id": customer_id,
                 "p_amount": float(balance_due)
             }).execute()
+
 
         except Exception:
             # Fallback direct update to customers table (current_balance)
