@@ -753,6 +753,11 @@ class PosTableOrderSync(BaseModel):
     customer_name: Optional[str] = None
     customer_tax_id: Optional[str] = None
     cart: List[dict] = []
+    seats: Optional[List[dict]] = None
+    assigned_to: Optional[UUID] = None
+    status: Optional[str] = None
+    pre_bill_requested_at: Optional[Union[dt_datetime, str]] = None
+    payment_pending: Optional[bool] = None
     total: float = 0
     order_number: Optional[int] = None
     workstation_id: Optional[UUID] = None
@@ -769,6 +774,12 @@ class PosTableOrderOut(BaseModel):
     customer_name: Optional[str] = None
     customer_tax_id: Optional[str] = None
     cart: List[dict] = []
+    seats: Optional[List[dict]] = []
+    assigned_to: Optional[UUID] = None
+    pre_bill_requested_at: Optional[Union[dt_datetime, str]] = None
+    opened_at: Optional[Union[dt_datetime, str]] = None
+    merged_from: Optional[List[UUID]] = []
+    payment_pending: Optional[bool] = False
     total: float = 0
     order_number: Optional[int] = None
     workstation_id: Optional[UUID] = None
@@ -798,10 +809,11 @@ class CartItemSchema(BaseModel):
     category_id: Optional[str] = None
 
 class TableOrderUpdate(BaseModel):
-    cart: Optional[List[CartItemSchema]] = None
+    cart: Optional[List[dict]] = None
     seats: Optional[List[SeatSchema]] = None
     assigned_to: Optional[UUID] = None
     status: Optional[str] = None
+    pre_bill_requested_at: Optional[Union[dt_datetime, str]] = None
     customer_id: Optional[UUID] = None
     customer_name: Optional[str] = None
     customer_tax_id: Optional[str] = None

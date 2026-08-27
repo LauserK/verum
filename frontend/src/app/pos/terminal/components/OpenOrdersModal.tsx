@@ -252,13 +252,18 @@ export function OpenOrdersModal({ isOpen, onClose }: OpenOrdersModalProps) {
                           {getModeIcon(mode)}
                         </div>
                         <div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <h4 className="font-bold text-sm text-text-primary group-hover:text-primary transition-colors">
                               {title}
                             </h4>
                             <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-surface-raised border border-border text-text-secondary font-medium">
                               {getModeLabel(mode)}
                             </span>
+                            {order.payment_pending && (
+                              <span className="text-[9px] px-2 py-0.5 rounded-md bg-rose-500/15 border border-rose-500/40 text-rose-500 font-black tracking-wide uppercase animate-pulse">
+                                💳 Pendiente de Pago
+                              </span>
+                            )}
                           </div>
                           {order.customer_name && (
                             <p className="text-xs text-text-secondary flex items-center gap-1 mt-0.5">
@@ -312,6 +317,17 @@ export function OpenOrdersModal({ isOpen, onClose }: OpenOrdersModalProps) {
                           title="Liberar cuenta"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleOpenOrder(order)
+                            usePosStore.getState().setShowCheckout(true)
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-primary/10 hover:bg-primary text-primary hover:text-text-inverse text-[11px] font-bold transition-all cursor-pointer shadow-xs"
+                        >
+                          Cobrar
                         </button>
                         <span className="text-xs font-bold text-primary flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
                           <span>Atender</span>

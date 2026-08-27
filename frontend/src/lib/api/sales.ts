@@ -102,6 +102,8 @@ export const salesApi = {
     // Invoices
     getInvoices: () => fetchWithAuth<Invoice[]>('/sales/invoices'),
     getInvoice: (id: string) => fetchWithAuth<Invoice>(`/sales/invoices/${id}`),
+    getInvoiceByTableOrder: (tableOrderId: string) =>
+        fetchWithAuth<PartialTableInvoiceResponse | null>(`/sales/invoices/by-table-order/${tableOrderId}`),
     createInvoice: (data: CreateInvoicePayload) => fetchWithAuth<Invoice>('/sales/invoices', {
         method: 'POST',
         body: JSON.stringify(data),
@@ -304,6 +306,42 @@ export const salesApi = {
             method: 'PUT',
             body: JSON.stringify(data),
         }),
+    updateTableOrder: (tableId: string, data: Partial<TableOrder>) =>
+        fetchWithAuth<TableOrder>(`/sales/table-orders/${tableId}`, {
+            method: 'PATCH',
+            body: JSON.stringify(data),
+        }),
+    transferTableOrder: (payload: {
+        source_table_id: string
+        target_table_id: string
+        transfer_type: 'full' | 'items' | 'seat'
+        item_ids?: string[]
+        seat_id?: string | null
+    }) =>
+        fetchWithAuth<{
+            status: string
+            source_table_id: string
+            target_table_id: string
+            transfer_type: string
+            transferred_count: number
+        }>('/sales/table-orders/transfer', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        }),
+    mergeTableOrders: (payload: {
+        source_table_id: string
+        target_table_id: string
+    }) =>
+        fetchWithAuth<{
+            status: string
+            source_table_id: string
+            target_table_id: string
+            merged_items_count: number
+            new_total: number
+        }>('/sales/table-orders/merge', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        }),
     deleteTableOrder: (tableId: string) =>
         fetchWithAuth(`/sales/table-orders/${tableId}`, {
             method: 'DELETE',
@@ -321,6 +359,11 @@ export interface TableOrderSyncPayload {
     customer_name?: string | null
     customer_tax_id?: string | null
     cart: any[]
+    seats?: any[]
+    assigned_to?: string | null
+    status?: string
+    pre_bill_requested_at?: string | null
+    payment_pending?: boolean
     total: number
     order_number?: number | null
     workstation_id?: string | null
@@ -338,11 +381,17 @@ export interface TableOrder {
     customer_name?: string | null
     customer_tax_id?: string | null
     cart: any[]
+    seats?: any[]
+    assigned_to?: string | null
+    pre_bill_requested_at?: string | null
+    opened_at?: string | null
+    merged_from?: string[]
+    payment_pending?: boolean
     total: number
     order_number?: number | null
     workstation_id?: string | null
     created_by?: string | null
-    status: 'active' | 'billed' | 'cancelled'
+    status: 'active' | 'pre_bill' | 'billed' | 'cancelled'
     created_at?: string
     updated_at?: string
 }
@@ -555,6 +604,8 @@ export interface CheckoutPayment {
     exchange_rate?: number
     reference?: string | null
     cash_tendered?: number | null
+    seat_label?: string | null
+    covered_items?: string[] | null
 }
 
 export interface CheckoutChange {
@@ -569,6 +620,7 @@ export interface CheckoutPayload {
     venue_id?: string | null
     mode: string
     table_id?: string | null
+    table_order_id?: string | null
     customer_id?: string | null
     customer_name?: string | null
     customer_tax_id?: string | null
@@ -578,6 +630,25 @@ export interface CheckoutPayload {
     document_type?: string
     discount_amount?: number
     notes?: string | null
+    split_mode?: 'seats' | 'equal' | 'manual' | string | null
+    is_partial?: boolean
+    seat_label?: string | null
+    covered_item_ids?: string[] | null
+}
+
+export interface PartialTableInvoiceResponse {
+    invoice: Invoice & {
+        amount_paid: number
+        balance_due: number
+        items?: any[]
+        tax_summary?: any[]
+    }
+    payments: Array<CheckoutPayment & {
+        id: string
+        created_at: string
+        seat_label?: string | null
+        covered_items?: string[] | null
+    }>
 }
 
 export interface CheckoutResponse {

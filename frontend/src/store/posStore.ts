@@ -1,12 +1,19 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 
+export interface Seat {
+  id: string
+  label: string
+}
+
 export interface CartItem {
   cartItemId: string
   id: string
   name: string
   price: number
   quantity: number
+  seat?: string | null
+  sentToKitchen?: boolean
   tax_id?: string | null
   tax_rate?: number | null
   tax_included?: boolean
@@ -19,6 +26,7 @@ export type PosMode = 'tables' | 'takeout' | 'delivery' | 'pickup' | 'bar'
 export interface PosCartContext {
   cart: CartItem[]
   total: number
+  seats?: Seat[]
   customerId: string | null
   customerName: string | null
   customerTaxId: string | null
@@ -44,6 +52,7 @@ export interface PosState {
   showCheckout: boolean
   showCustomerSelector: boolean
   cartsByContext: Record<string, PosCartContext>
+  activeSeatId: string | null
 
   setPosMode: (mode: PosMode) => void
   setActiveTable: (id: string | null, name?: string | null) => void
@@ -56,6 +65,11 @@ export interface PosState {
   clearCustomer: () => void
   setShowCheckout: (show: boolean) => void
   setShowCustomerSelector: (show: boolean) => void
+  setActiveSeat: (seatId: string | null) => void
+  addSeat: (label?: string) => void
+  removeSeat: (seatId: string) => void
+  renameSeat: (seatId: string, label: string) => void
+  moveItemToSeat: (cartItemId: string, targetSeatId: string | null) => void
   addItem: (item: {
     id: string
     name: string
@@ -64,6 +78,8 @@ export interface PosState {
     tax_id?: string | null
     tax_rate?: number | null
     tax_included?: boolean
+    seat?: string | null
+    sentToKitchen?: boolean
   }) => void
   removeItem: (cartItemId: string) => void
   updateQuantity: (cartItemId: string, qty: number) => void
@@ -109,6 +125,7 @@ export const usePosStore = create<PosState>()(
       showCheckout: false,
       showCustomerSelector: false,
       cartsByContext: {},
+      activeSeatId: null,
 
       setPosMode: (mode: PosMode) => {
         set((state) => {
@@ -118,9 +135,11 @@ export const usePosStore = create<PosState>()(
           const prevKey = getContextKey(state.posMode, state.activeTableId)
           const updatedCarts = { ...state.cartsByContext }
           if (prevKey !== 'tables:map') {
+            const prevCtx = updatedCarts[prevKey]
             updatedCarts[prevKey] = {
               cart: state.cart,
               total: state.total,
+              seats: prevCtx?.seats,
               customerId: state.customerId,
               customerName: state.customerName,
               customerTaxId: state.customerTaxId,
@@ -144,6 +163,16 @@ export const usePosStore = create<PosState>()(
             nextCtx = updatedCarts[nextKey]
           }
 
+          let nextActiveSeatId: string | null = null
+          if (mode === 'tables' && nextTableId) {
+            const tableSeats = nextCtx.seats && nextCtx.seats.length > 0
+              ? nextCtx.seats
+              : [{ id: 'seat-1', label: 'Asiento 1' }]
+            nextCtx = { ...nextCtx, seats: tableSeats }
+            updatedCarts[nextKey] = nextCtx
+            nextActiveSeatId = tableSeats[0].id
+          }
+
           return {
             posMode: mode,
             activeTableId: nextTableId,
@@ -154,6 +183,7 @@ export const usePosStore = create<PosState>()(
             customerId: nextCtx.customerId,
             customerName: nextCtx.customerName,
             customerTaxId: nextCtx.customerTaxId,
+            activeSeatId: nextActiveSeatId,
           }
         })
       },
@@ -164,9 +194,11 @@ export const usePosStore = create<PosState>()(
           const prevKey = getContextKey(state.posMode, state.activeTableId)
           const updatedCarts = { ...state.cartsByContext }
           if (prevKey !== 'tables:map') {
+            const prevCtx = updatedCarts[prevKey]
             updatedCarts[prevKey] = {
               cart: state.cart,
               total: state.total,
+              seats: prevCtx?.seats,
               customerId: state.customerId,
               customerName: state.customerName,
               customerTaxId: state.customerTaxId,
@@ -184,6 +216,7 @@ export const usePosStore = create<PosState>()(
               customerId: null,
               customerName: null,
               customerTaxId: null,
+              activeSeatId: null,
             }
           }
 
@@ -197,15 +230,26 @@ export const usePosStore = create<PosState>()(
             customerTaxId: null,
           }
 
+          const tableSeats = existing.seats && existing.seats.length > 0
+            ? existing.seats
+            : [{ id: 'seat-1', label: 'Asiento 1' }]
+
+          const initializedCtx: PosCartContext = {
+            ...existing,
+            seats: tableSeats,
+          }
+          updatedCarts[nextKey] = initializedCtx
+
           return {
             activeTableId: id,
             activeTableName: name ?? null,
             cartsByContext: updatedCarts,
-            cart: existing.cart,
-            total: existing.total,
-            customerId: existing.customerId,
-            customerName: existing.customerName,
-            customerTaxId: existing.customerTaxId,
+            cart: initializedCtx.cart,
+            total: initializedCtx.total,
+            customerId: initializedCtx.customerId,
+            customerName: initializedCtx.customerName,
+            customerTaxId: initializedCtx.customerTaxId,
+            activeSeatId: tableSeats[0].id,
           }
         })
       },
@@ -213,17 +257,25 @@ export const usePosStore = create<PosState>()(
       loadTableOrder: (id: string, name: string, data: PosCartContext) => {
         set((state) => {
           const currentKey = `table:${id}`
-          const updatedCarts = { ...state.cartsByContext, [currentKey]: data }
+          const seats = data.seats && data.seats.length > 0
+            ? data.seats
+            : [{ id: 'seat-1', label: 'Asiento 1' }]
+          const orderData: PosCartContext = {
+            ...data,
+            seats,
+          }
+          const updatedCarts = { ...state.cartsByContext, [currentKey]: orderData }
           return {
             posMode: 'tables',
             activeTableId: id,
             activeTableName: name,
             cartsByContext: updatedCarts,
-            cart: data.cart || [],
-            total: data.total || 0,
-            customerId: data.customerId || null,
-            customerName: data.customerName || null,
-            customerTaxId: data.customerTaxId || null,
+            cart: orderData.cart || [],
+            total: orderData.total || 0,
+            customerId: orderData.customerId || null,
+            customerName: orderData.customerName || null,
+            customerTaxId: orderData.customerTaxId || null,
+            activeSeatId: seats[0].id,
           }
         })
       },
@@ -284,6 +336,148 @@ export const usePosStore = create<PosState>()(
 
       setShowCustomerSelector: (show: boolean) => set({ showCustomerSelector: show }),
 
+      setActiveSeat: (seatId: string | null) => set({ activeSeatId: seatId }),
+
+      addSeat: (label?: string) => {
+        set((state) => {
+          const currentKey = state.posMode === 'tables' && state.activeTableId ? `table:${state.activeTableId}` : 'tables:map'
+          if (currentKey === 'tables:map') return state
+
+          const ctx = state.cartsByContext[currentKey] || {
+            cart: state.cart,
+            total: state.total,
+            customerId: state.customerId,
+            customerName: state.customerName,
+            customerTaxId: state.customerTaxId,
+            seats: [],
+          }
+          const currentSeats = ctx.seats || []
+          const nextIndex = currentSeats.length + 1
+          const newSeatId = `seat-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+          const newSeat: Seat = {
+            id: newSeatId,
+            label: label?.trim() ? label.trim() : `Asiento ${nextIndex}`,
+          }
+          const updatedSeats = [...currentSeats, newSeat]
+          const updatedCarts = {
+            ...state.cartsByContext,
+            [currentKey]: {
+              ...ctx,
+              seats: updatedSeats,
+            },
+          }
+
+          return {
+            cartsByContext: updatedCarts,
+            activeSeatId: newSeatId,
+          }
+        })
+      },
+
+      removeSeat: (seatId: string) => {
+        set((state) => {
+          const currentKey = state.posMode === 'tables' && state.activeTableId ? `table:${state.activeTableId}` : 'tables:map'
+          if (currentKey === 'tables:map') return state
+
+          const ctx = state.cartsByContext[currentKey] || {
+            cart: state.cart,
+            total: state.total,
+            customerId: state.customerId,
+            customerName: state.customerName,
+            customerTaxId: state.customerTaxId,
+            seats: [],
+          }
+          const currentSeats = ctx.seats || []
+          const updatedSeats = currentSeats.filter((s) => s.id !== seatId)
+          const fallbackSeatId = updatedSeats.length > 0 ? updatedSeats[0].id : null
+
+          // Reassign orphan items that had the removed seat to the first available seat (or null)
+          const updatedCart = (ctx.cart || state.cart).map((item) =>
+            item.seat === seatId ? { ...item, seat: fallbackSeatId } : item
+          )
+
+          let nextActiveSeatId = state.activeSeatId
+          if (state.activeSeatId === seatId) {
+            nextActiveSeatId = fallbackSeatId
+          }
+
+          const updatedCarts = {
+            ...state.cartsByContext,
+            [currentKey]: {
+              ...ctx,
+              cart: updatedCart,
+              seats: updatedSeats,
+            },
+          }
+
+          return {
+            cart: updatedCart,
+            cartsByContext: updatedCarts,
+            activeSeatId: nextActiveSeatId,
+          }
+        })
+      },
+
+      renameSeat: (seatId: string, label: string) => {
+        set((state) => {
+          const currentKey = state.posMode === 'tables' && state.activeTableId ? `table:${state.activeTableId}` : 'tables:map'
+          if (currentKey === 'tables:map') return state
+
+          const ctx = state.cartsByContext[currentKey] || {
+            cart: state.cart,
+            total: state.total,
+            customerId: state.customerId,
+            customerName: state.customerName,
+            customerTaxId: state.customerTaxId,
+            seats: [],
+          }
+          const currentSeats = ctx.seats || []
+          const updatedSeats = currentSeats.map((s) =>
+            s.id === seatId ? { ...s, label: label.trim() || s.label } : s
+          )
+
+          const updatedCarts = {
+            ...state.cartsByContext,
+            [currentKey]: {
+              ...ctx,
+              seats: updatedSeats,
+            },
+          }
+
+          return {
+            cartsByContext: updatedCarts,
+          }
+        })
+      },
+
+      moveItemToSeat: (cartItemId: string, targetSeatId: string | null) => {
+        set((state) => {
+          const updatedCart = state.cart.map((item) =>
+            item.cartItemId === cartItemId ? { ...item, seat: targetSeatId } : item
+          )
+          const currentKey = getContextKey(state.posMode, state.activeTableId)
+          const updatedCarts = { ...state.cartsByContext }
+          if (currentKey !== 'tables:map') {
+            const ctx = updatedCarts[currentKey] || {
+              cart: state.cart,
+              total: state.total,
+              customerId: state.customerId,
+              customerName: state.customerName,
+              customerTaxId: state.customerTaxId,
+            }
+            updatedCarts[currentKey] = {
+              ...ctx,
+              cart: updatedCart,
+            }
+          }
+
+          return {
+            cart: updatedCart,
+            cartsByContext: updatedCarts,
+          }
+        })
+      },
+
       addItem: (item: {
         id: string
         name: string
@@ -292,11 +486,35 @@ export const usePosStore = create<PosState>()(
         tax_id?: string | null
         tax_rate?: number | null
         tax_included?: boolean
+        seat?: string | null
+        sentToKitchen?: boolean
       }) => {
         const cleanPrice = typeof item.price === 'number' && !isNaN(item.price) ? item.price : parseFloat(item.price as any) || 0
 
         set((state) => {
-          const existingIndex = state.cart.findIndex((i) => i.id === item.id)
+          const currentKey = getContextKey(state.posMode, state.activeTableId)
+          let assignedSeatId: string | null = null
+          let updatedSeats = state.cartsByContext[currentKey]?.seats
+
+          if (state.posMode === 'tables') {
+            if (item.seat !== undefined) {
+              assignedSeatId = item.seat
+            } else if (state.activeSeatId && state.activeSeatId !== 'all') {
+              assignedSeatId = state.activeSeatId
+            } else {
+              // activeSeatId === 'all' or not explicitly set
+              const seats = updatedSeats && updatedSeats.length > 0
+                ? updatedSeats
+                : [{ id: 'seat-1', label: 'Asiento 1' }]
+              updatedSeats = seats
+              assignedSeatId = seats[seats.length - 1].id
+            }
+          }
+
+          // Match by id AND seat if in tables mode, or just id otherwise
+          const existingIndex = state.cart.findIndex(
+            (i) => i.id === item.id && (state.posMode !== 'tables' || i.seat === assignedSeatId)
+          )
           let newCart: CartItem[]
 
           if (existingIndex > -1) {
@@ -312,6 +530,8 @@ export const usePosStore = create<PosState>()(
               name: item.name,
               price: cleanPrice,
               quantity: 1,
+              seat: assignedSeatId,
+              sentToKitchen: item.sentToKitchen ?? false,
               category_id: item.category_id,
               tax_id: item.tax_id ?? null,
               tax_rate: item.tax_rate ?? null,
@@ -321,12 +541,20 @@ export const usePosStore = create<PosState>()(
           }
 
           const newTotal = calculateTotal(newCart)
-          const currentKey = getContextKey(state.posMode, state.activeTableId)
           const updatedCarts = { ...state.cartsByContext }
           if (currentKey !== 'tables:map') {
+            const existingCtx = updatedCarts[currentKey] || {
+              cart: state.cart,
+              total: state.total,
+              customerId: state.customerId,
+              customerName: state.customerName,
+              customerTaxId: state.customerTaxId,
+            }
             updatedCarts[currentKey] = {
+              ...existingCtx,
               cart: newCart,
               total: newTotal,
+              seats: updatedSeats || existingCtx.seats,
               customerId: state.customerId,
               customerName: state.customerName,
               customerTaxId: state.customerTaxId,
@@ -348,7 +576,9 @@ export const usePosStore = create<PosState>()(
           const currentKey = getContextKey(state.posMode, state.activeTableId)
           const updatedCarts = { ...state.cartsByContext }
           if (currentKey !== 'tables:map') {
+            const existingCtx = updatedCarts[currentKey]
             updatedCarts[currentKey] = {
+              ...existingCtx,
               cart: newCart,
               total: newTotal,
               customerId: state.customerId,
@@ -378,7 +608,9 @@ export const usePosStore = create<PosState>()(
           const currentKey = getContextKey(state.posMode, state.activeTableId)
           const updatedCarts = { ...state.cartsByContext }
           if (currentKey !== 'tables:map') {
+            const existingCtx = updatedCarts[currentKey]
             updatedCarts[currentKey] = {
+              ...existingCtx,
               cart: newCart,
               total: newTotal,
               customerId: state.customerId,
@@ -407,6 +639,7 @@ export const usePosStore = create<PosState>()(
             customerId: null,
             customerName: null,
             customerTaxId: null,
+            activeSeatId: null,
             cartsByContext: updatedCarts,
           }
         })
@@ -428,8 +661,10 @@ export const usePosStore = create<PosState>()(
         customerId: state.customerId,
         customerName: state.customerName,
         customerTaxId: state.customerTaxId,
+        activeSeatId: state.activeSeatId,
         cartsByContext: state.cartsByContext,
       }),
     }
   )
 )
+

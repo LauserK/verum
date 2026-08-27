@@ -1068,12 +1068,280 @@ async def sync_table_order(org_id: str, user_id: str, payload: Any, db: Any = No
     return saved
 
 
+async def update_table_order(org_id: str, table_id: str, payload: Any, db: Any = None):
+    from app.cache import invalidate_table_orders
+    data = payload.model_dump(exclude_unset=True) if hasattr(payload, "model_dump") else {k: v for k, v in payload.items() if v is not None}
+    
+    # Handle UUID string conversion
+    if "assigned_to" in data and data["assigned_to"]:
+        data["assigned_to"] = str(data["assigned_to"])
+    if "customer_id" in data and data["customer_id"]:
+        data["customer_id"] = str(data["customer_id"])
+    if "status" in data and data["status"] == "pre_bill" and "pre_bill_requested_at" not in data:
+        data["pre_bill_requested_at"] = "now()"
+
+    data["updated_at"] = "now()"
+
+    query = db.table("pos_table_orders").update(data).eq("org_id", org_id).in_("status", ["active", "pre_bill"])
+    try:
+        from uuid import UUID
+        UUID(str(table_id))
+        query = query.or_(f"table_id.eq.{table_id},id.eq.{table_id}")
+    except ValueError:
+        query = query.eq("table_id", str(table_id))
+
+    res = query.execute()
+    if not res.data:
+        raise HTTPException(404, "Active table order not found")
+
+    await invalidate_table_orders(org_id)
+    return res.data[0]
+
+
+async def transfer_table_order(org_id: str, user_id: str, payload: Any, db: Any = None):
+    from app.cache import invalidate_table_orders
+
+    source_table_id = str(payload.source_table_id)
+    target_table_id = str(payload.target_table_id)
+    transfer_type = payload.transfer_type  # 'full', 'items', 'seat'
+    item_ids = [str(x) for x in (payload.item_ids or [])]
+    seat_id = str(payload.seat_id) if payload.seat_id else None
+
+    # 1. Fetch active source order
+    src_res = db.table("pos_table_orders").select("*").eq("org_id", org_id).eq("table_id", source_table_id).in_("status", ["active", "pre_bill"]).limit(1).execute()
+    if not src_res.data:
+        raise HTTPException(404, f"No active order found for source table {source_table_id}")
+    source_order = src_res.data[0]
+    source_cart = source_order.get("cart") or []
+    source_seats = source_order.get("seats") or []
+
+    # 2. Fetch destination table details (to get name)
+    target_table_res = db.table("tables").select("name, venue_id").eq("id", target_table_id).execute()
+    target_table_name = target_table_res.data[0]["name"] if target_table_res.data else f"Mesa {target_table_id}"
+    target_venue_id = target_table_res.data[0]["venue_id"] if target_table_res.data and target_table_res.data[0].get("venue_id") else source_order.get("venue_id")
+
+    # 3. Check if target table already has an active order
+    tgt_res = db.table("pos_table_orders").select("*").eq("org_id", org_id).eq("table_id", target_table_id).in_("status", ["active", "pre_bill"]).limit(1).execute()
+    target_order = tgt_res.data[0] if tgt_res.data else None
+
+    items_transferred = []
+
+    if transfer_type == "full":
+        items_transferred = list(source_cart)
+        if target_order:
+            # Merge whole source into target
+            new_cart = list(target_order.get("cart") or []) + source_cart
+            new_seats = list(target_order.get("seats") or [])
+            for s in source_seats:
+                if not any(ts.get("id") == s.get("id") for ts in new_seats):
+                    new_seats.append(s)
+            new_total = sum(float(i.get("price", 0)) * int(i.get("quantity", 1)) for i in new_cart)
+            
+            merged_from = list(target_order.get("merged_from") or [])
+            if source_order["id"] not in merged_from:
+                merged_from.append(source_order["id"])
+
+            db.table("pos_table_orders").update({
+                "cart": new_cart,
+                "seats": new_seats,
+                "total": new_total,
+                "merged_from": merged_from,
+                "updated_at": "now()"
+            }).eq("id", target_order["id"]).execute()
+        else:
+            # Move source order to target table
+            db.table("pos_table_orders").update({
+                "table_id": target_table_id,
+                "table_name": target_table_name,
+                "venue_id": target_venue_id,
+                "updated_at": "now()"
+            }).eq("id", source_order["id"]).execute()
+
+        # If target existed and merged into, mark source cancelled
+        if target_order:
+            db.table("pos_table_orders").update({
+                "status": "cancelled",
+                "updated_at": "now()"
+            }).eq("id", source_order["id"]).execute()
+
+    elif transfer_type in ("items", "seat"):
+        # Identify items to transfer
+        if transfer_type == "seat" and seat_id:
+            items_to_move = [i for i in source_cart if str(i.get("seat")) == seat_id]
+            remaining_items = [i for i in source_cart if str(i.get("seat")) != seat_id]
+            # Also move seat definition if present
+            moving_seat_def = [s for s in source_seats if str(s.get("id")) == seat_id]
+            remaining_seats = [s for s in source_seats if str(s.get("id")) != seat_id]
+        else:
+            # By item_ids (cartItemId or id)
+            items_to_move = [i for i in source_cart if str(i.get("cartItemId", i.get("id"))) in item_ids or str(i.get("id")) in item_ids]
+            remaining_items = [i for i in source_cart if str(i.get("cartItemId", i.get("id"))) not in item_ids and str(i.get("id")) not in item_ids]
+            moving_seat_def = []
+            remaining_seats = source_seats
+
+        if not items_to_move:
+            raise HTTPException(400, "No items selected to transfer")
+
+        items_transferred = items_to_move
+
+        # Add items to target order (create target order if none exists)
+        if target_order:
+            target_cart = list(target_order.get("cart") or []) + items_to_move
+            target_seats = list(target_order.get("seats") or [])
+            for s in moving_seat_def:
+                if not any(ts.get("id") == s.get("id") for ts in target_seats):
+                    target_seats.append(s)
+            target_total = sum(float(i.get("price", 0)) * int(i.get("quantity", 1)) for i in target_cart)
+            
+            db.table("pos_table_orders").update({
+                "cart": target_cart,
+                "seats": target_seats,
+                "total": target_total,
+                "updated_at": "now()"
+            }).eq("id", target_order["id"]).execute()
+        else:
+            target_total = sum(float(i.get("price", 0)) * int(i.get("quantity", 1)) for i in items_to_move)
+            db.table("pos_table_orders").insert({
+                "org_id": org_id,
+                "venue_id": target_venue_id,
+                "mode": "tables",
+                "table_id": target_table_id,
+                "table_name": target_table_name,
+                "tab_name": f"Mesa {target_table_name}",
+                "cart": items_to_move,
+                "seats": moving_seat_def,
+                "total": target_total,
+                "created_by": str(user_id) if user_id else None,
+                "status": "active",
+                "opened_at": "now()"
+            }).execute()
+
+        # Update or cancel source order
+        if not remaining_items:
+            db.table("pos_table_orders").update({
+                "cart": [],
+                "total": 0,
+                "status": "cancelled",
+                "updated_at": "now()"
+            }).eq("id", source_order["id"]).execute()
+        else:
+            remaining_total = sum(float(i.get("price", 0)) * int(i.get("quantity", 1)) for i in remaining_items)
+            db.table("pos_table_orders").update({
+                "cart": remaining_items,
+                "seats": remaining_seats,
+                "total": remaining_total,
+                "updated_at": "now()"
+            }).eq("id", source_order["id"]).execute()
+
+    else:
+        raise HTTPException(400, f"Unsupported transfer_type: {transfer_type}")
+
+    # 4. Log to pos_transfer_log
+    try:
+        db.table("pos_transfer_log").insert({
+            "org_id": org_id,
+            "source_table_id": source_table_id,
+            "target_table_id": target_table_id,
+            "transfer_type": transfer_type,
+            "items_transferred": items_transferred,
+            "performed_by": str(user_id) if user_id else None,
+        }).execute()
+    except Exception:
+        pass
+
+    await invalidate_table_orders(org_id)
+    return {
+        "status": "transferred",
+        "source_table_id": source_table_id,
+        "target_table_id": target_table_id,
+        "transfer_type": transfer_type,
+        "transferred_count": len(items_transferred)
+    }
+
+
+async def merge_table_orders(org_id: str, user_id: str, payload: Any, db: Any = None):
+    from app.cache import invalidate_table_orders
+
+    source_table_id = str(payload.source_table_id)
+    target_table_id = str(payload.target_table_id)
+
+    if source_table_id == target_table_id:
+        raise HTTPException(400, "Source and target table must be different")
+
+    # 1. Fetch source order
+    src_res = db.table("pos_table_orders").select("*").eq("org_id", org_id).eq("table_id", source_table_id).in_("status", ["active", "pre_bill"]).limit(1).execute()
+    if not src_res.data:
+        raise HTTPException(404, f"No active order found for source table {source_table_id}")
+    source_order = src_res.data[0]
+
+    # 2. Fetch destination table & order
+    tgt_res = db.table("pos_table_orders").select("*").eq("org_id", org_id).eq("table_id", target_table_id).in_("status", ["active", "pre_bill"]).limit(1).execute()
+    if not tgt_res.data:
+        raise HTTPException(404, f"No active order found for target table {target_table_id}")
+    target_order = tgt_res.data[0]
+
+    source_cart = source_order.get("cart") or []
+    source_seats = source_order.get("seats") or []
+    target_cart = target_order.get("cart") or []
+    target_seats = target_order.get("seats") or []
+
+    # Merge items and seats
+    merged_cart = list(target_cart) + list(source_cart)
+    merged_seats = list(target_seats)
+    for s in source_seats:
+        if not any(ts.get("id") == s.get("id") for ts in merged_seats):
+            merged_seats.append(s)
+
+    merged_total = sum(float(i.get("price", 0)) * int(i.get("quantity", 1)) for i in merged_cart)
+
+    merged_from = list(target_order.get("merged_from") or [])
+    if source_order["id"] not in merged_from:
+        merged_from.append(source_order["id"])
+
+    # Update target order
+    db.table("pos_table_orders").update({
+        "cart": merged_cart,
+        "seats": merged_seats,
+        "total": merged_total,
+        "merged_from": merged_from,
+        "updated_at": "now()"
+    }).eq("id", target_order["id"]).execute()
+
+    # Cancel source order
+    db.table("pos_table_orders").update({
+        "status": "cancelled",
+        "updated_at": "now()"
+    }).eq("id", source_order["id"]).execute()
+
+    # Log to pos_transfer_log
+    try:
+        db.table("pos_transfer_log").insert({
+            "org_id": org_id,
+            "source_table_id": source_table_id,
+            "target_table_id": target_table_id,
+            "transfer_type": "merge",
+            "items_transferred": source_cart,
+            "performed_by": str(user_id) if user_id else None,
+        }).execute()
+    except Exception:
+        pass
+
+    await invalidate_table_orders(org_id)
+    return {
+        "status": "merged",
+        "source_table_id": source_table_id,
+        "target_table_id": target_table_id,
+        "merged_items_count": len(source_cart),
+        "new_total": merged_total
+    }
+
+
 async def delete_table_order(org_id: str, table_id: str, db: Any = None):
     from app.cache import invalidate_table_orders
     query = db.table("pos_table_orders").update({
         "status": "cancelled",
         "updated_at": "now()"
-    }).eq("org_id", org_id).eq("status", "active")
+    }).eq("org_id", org_id).in_("status", ["active", "pre_bill"])
 
     # table_id can be a table_id string or a record UUID
     try:

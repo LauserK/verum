@@ -23,6 +23,7 @@ import PosTableMap from './components/PosTableMap'
 import { CustomerSelectorModal } from './components/CustomerSelectorModal'
 import { CheckoutModal } from './components/CheckoutModal'
 import { OpenOrdersModal } from './components/OpenOrdersModal'
+import { PreBillPreview } from './components/PreBillPreview'
 import { usePosConfig, useWorkstations, useActivePosSession, useSyncTableOrder, useTableOrders } from '@/hooks/useSales'
 import { useVenue } from '@/components/VenueContext'
 
@@ -68,6 +69,9 @@ export default function PosTerminalPage() {
     setShowCustomerSelector,
     orderNumber
   } = usePosStore()
+
+  // Pre-bill Modal State
+  const [showPreBillModal, setShowPreBillModal] = useState(false)
 
   // Auto-resolve workstation if not set in store
   React.useEffect(() => {
@@ -275,11 +279,27 @@ export default function PosTerminalPage() {
               <PosCatalog />
             </div>
             <aside className="w-[30%] h-full flex flex-col overflow-hidden">
-              <PosCart onCheckout={handleCheckoutClick} />
+              <PosCart 
+                onCheckout={handleCheckoutClick} 
+                onPreBill={() => setShowPreBillModal(true)}
+              />
             </aside>
           </>
         )}
       </main>
+
+      {/* Pre-Bill Preview Modal */}
+      <PreBillPreview
+        isOpen={showPreBillModal}
+        onClose={() => setShowPreBillModal(false)}
+        tableId={activeTableId}
+        tableName={activeTableName || (posMode === 'bar' ? 'Barra' : posMode === 'delivery' ? 'Delivery' : 'Para Llevar')}
+        customerName={customerName}
+        customerTaxId={customerTaxId}
+        cartItems={cart}
+        orderNumber={orderNumber}
+        total={total}
+      />
 
       {/* Open Orders Across All Terminals Modal */}
       <OpenOrdersModal

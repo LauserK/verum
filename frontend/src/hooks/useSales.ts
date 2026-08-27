@@ -64,6 +64,23 @@ export function useInvoices() {
     })
 }
 
+export function useInvoice(id: string) {
+    return useQuery({
+        queryKey: [...salesKeys.invoices(), id],
+        queryFn: () => salesApi.getInvoice(id),
+        enabled: !!id,
+    })
+}
+
+export function useInvoiceByTableOrder(tableOrderId?: string | null) {
+    return useQuery({
+        queryKey: ['sales', 'invoices', 'by-table-order', tableOrderId],
+        queryFn: () => salesApi.getInvoiceByTableOrder(tableOrderId!),
+        enabled: !!tableOrderId,
+        refetchInterval: 3000,
+    })
+}
+
 export function useCreateInvoice() {
     const queryClient = useQueryClient()
     return useMutation({
@@ -460,6 +477,37 @@ export function useSyncTableOrder() {
     return useMutation({
         mutationFn: ({ tableId, data }: { tableId: string; data: any }) =>
             salesApi.syncTableOrder(tableId, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['sales', 'table-orders'] })
+        },
+    })
+}
+
+export function useUpdateTableOrder() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ tableId, data }: { tableId: string; data: Partial<any> }) =>
+            salesApi.updateTableOrder(tableId, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['sales', 'table-orders'] })
+        },
+    })
+}
+
+export function useTransferTableOrder() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: salesApi.transferTableOrder,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['sales', 'table-orders'] })
+        },
+    })
+}
+
+export function useMergeTableOrders() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: salesApi.mergeTableOrders,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['sales', 'table-orders'] })
         },

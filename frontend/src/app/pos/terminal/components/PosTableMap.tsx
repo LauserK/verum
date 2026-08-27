@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect, useRef } from 'react'
 import { 
   Utensils, 
   Users, 
@@ -11,29 +11,75 @@ import {
   Layers, 
   Plus, 
   Clock,
-  ArrowRight
+  ArrowRight,
+  Bell,
+  User,
+  Receipt,
+  RotateCw
 } from 'lucide-react'
 import { useVenue } from '@/components/VenueContext'
 import { useFloorPlans, useTableOrders, useWorkstations } from '@/hooks/useSales'
 import { usePosStore } from '@/store/posStore'
+import { TableContextMenu } from './TableContextMenu'
+import { TransferModal } from './TransferModal'
+import { MergeModal } from './MergeModal'
+import { AssignWaiterModal } from './AssignWaiterModal'
+import { PreBillPreview } from './PreBillPreview'
+import { TableItem, TableOrder } from '@/lib/api/sales'
 
 export default function PosTableMap() {
   const { selectedVenueId, selectedVenueName } = useVenue()
-  const { activeTableId, setActiveTable, loadTableOrder, cartsByContext, cart, total, activeWorkstationId } = usePosStore()
+  const { 
+    activeTableId, 
+    setActiveTable, 
+    loadTableOrder, 
+    cartsByContext, 
+    cart, 
+    total, 
+    activeWorkstationId,
+    setShowCheckout
+  } = usePosStore()
 
   const { data: workstations = [] } = useWorkstations(selectedVenueId || undefined)
   const currentVenueId = selectedVenueId || workstations.find((w) => w.id === activeWorkstationId)?.venue_id || null
 
   const { data: floorPlans = [], isLoading } = useFloorPlans(currentVenueId || undefined)
-  const { data: serverTableOrders = [] } = useTableOrders(currentVenueId || undefined)
+  const { data: serverTableOrders = [], refetch: refetchOrders } = useTableOrders(currentVenueId || undefined)
 
   const [selectedPlanId, setSelectedPlanId] = useState<string>('')
 
-  // Map of active orders from backend across all terminals
+  // Live timer tick for table elapsed times (updates every 15s)
+  const [nowTimestamp, setNowTimestamp] = useState<number>(Date.now())
+  useEffect(() => {
+    const interval = setInterval(() => setNowTimestamp(Date.now()), 15000)
+    return () => clearInterval(interval)
+  }, [])
+
+  // Modals and Context Menu State
+  const [contextMenuState, setContextMenuState] = useState<{
+    isOpen: boolean
+    table: TableItem | null
+    order: TableOrder | null
+    position: { x: number; y: number }
+  }>({
+    isOpen: false,
+    table: null,
+    order: null,
+    position: { x: 0, y: 0 },
+  })
+
+  const [transferModalOpen, setTransferModalOpen] = useState(false)
+  const [mergeModalOpen, setMergeModalOpen] = useState(false)
+  const [assignWaiterModalOpen, setAssignWaiterModalOpen] = useState(false)
+  const [preBillModalOpen, setPreBillModalOpen] = useState(false)
+  const [selectedTableForAction, setSelectedTableForAction] = useState<TableItem | null>(null)
+  const [selectedOrderForAction, setSelectedOrderForAction] = useState<TableOrder | null>(null)
+
+  // Map of active/pre_bill orders from backend
   const serverOrdersMap = useMemo(() => {
-    const map = new Map<string, any>()
+    const map = new Map<string, TableOrder>()
     for (const order of serverTableOrders) {
-      if (order.status === 'active' && order.table_id) {
+      if ((order.status === 'active' || order.status === 'pre_bill') && order.table_id) {
         map.set(order.table_id, order)
       }
     }
@@ -53,6 +99,16 @@ export default function PosTableMap() {
     return currentPlan?.tables?.filter((t) => t.is_active) || []
   }, [currentPlan])
 
+  const allVenueTables = useMemo(() => {
+    const tables: TableItem[] = []
+    for (const p of floorPlans) {
+      if (p.tables) {
+        tables.push(...p.tables.filter((t) => t.is_active))
+      }
+    }
+    return tables
+  }, [floorPlans])
+
   const handleSelectTable = (tableId: string, tableName: string) => {
     const serverOrder = serverOrdersMap.get(tableId)
     if (serverOrder && Array.isArray(serverOrder.cart) && serverOrder.cart.length > 0) {
@@ -65,6 +121,65 @@ export default function PosTableMap() {
       })
     } else {
       setActiveTable(tableId, tableName)
+    }
+  }
+
+  // Right-click context menu trigger
+  const handleContextMenu = (e: React.MouseEvent, table: TableItem) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const order = serverOrdersMap.get(table.id) || null
+    setContextMenuState({
+      isOpen: true,
+      table,
+      order,
+      position: { x: e.clientX, y: e.clientY },
+    })
+    setSelectedTableForAction(table)
+    setSelectedOrderForAction(order)
+  }
+
+  // Long-press detection for touch tablets
+  const touchTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const handleTouchStart = (e: React.TouchEvent, table: TableItem) => {
+    const touch = e.touches[0]
+    const posX = touch.clientX
+    const posY = touch.clientY
+
+    touchTimerRef.current = setTimeout(() => {
+      const order = serverOrdersMap.get(table.id) || null
+      setContextMenuState({
+        isOpen: true,
+        table,
+        order,
+        position: { x: posX, y: posY },
+      })
+      setSelectedTableForAction(table)
+      setSelectedOrderForAction(order)
+    }, 600)
+  }
+
+  const handleTouchEnd = () => {
+    if (touchTimerRef.current) {
+      clearTimeout(touchTimerRef.current)
+      touchTimerRef.current = null
+    }
+  }
+
+  const formatElapsedTime = (openedAtStr?: string | null) => {
+    if (!openedAtStr) return null
+    try {
+      const opened = new Date(openedAtStr).getTime()
+      if (isNaN(opened)) return null
+      const diffMinutes = Math.max(0, Math.floor((nowTimestamp - opened) / 60000))
+      if (diffMinutes < 60) {
+        return `${diffMinutes}m`
+      }
+      const hrs = Math.floor(diffMinutes / 60)
+      const mins = diffMinutes % 60
+      return `${hrs}h ${mins}m`
+    } catch {
+      return null
     }
   }
 
@@ -103,18 +218,21 @@ export default function PosTableMap() {
               const tableCtx = cartsByContext[`table:${tableId}`]
               const hasItems = (serverOrder && Array.isArray(serverOrder.cart) && serverOrder.cart.length > 0) || (tableCtx?.cart?.length || 0) > 0 || (activeTableId === tableId && cart.length > 0)
               const tableTotal = activeTableId === tableId ? total : (serverOrder ? Number(serverOrder.total) : (tableCtx?.total || 0))
+              const isPreBill = serverOrder?.status === 'pre_bill'
 
               return (
                 <button
                   key={i}
                   onClick={() => handleSelectTable(tableId, tableNum)}
-                  className={`p-3.5 rounded-2xl border transition-all text-center flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-95 shadow-sm ${
-                    hasItems
+                  className={`p-3.5 rounded-2xl border transition-all text-center flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-95 shadow-sm min-h-[48px] ${
+                    isPreBill
+                      ? 'bg-amber-400/20 border-amber-400 text-amber-600 dark:text-amber-300'
+                      : hasItems
                       ? 'bg-amber-500/15 border-amber-500/60 text-amber-500 hover:bg-amber-500/25'
-                      : 'bg-surface-raised border-border hover:border-primary hover:bg-primary/5 hover:text-primary'
+                      : 'bg-surface-raised border-emerald-500/30 hover:border-emerald-500 hover:bg-emerald-500/5 text-text-primary'
                   }`}
                 >
-                  <Utensils className={`w-4 h-4 ${hasItems ? 'text-amber-500' : 'text-text-secondary'}`} />
+                  <Utensils className={`w-4 h-4 ${isPreBill ? 'text-amber-400' : hasItems ? 'text-amber-500' : 'text-emerald-500'}`} />
                   <span className="text-xs font-bold text-text-primary">{tableNum}</span>
                   {hasItems && (
                     <span className="text-[9px] font-mono font-bold text-amber-500">
@@ -131,7 +249,7 @@ export default function PosTableMap() {
   }
 
   return (
-    <div className="flex flex-col h-full w-full bg-bg overflow-hidden select-none">
+    <div className="flex flex-col h-full w-full bg-bg overflow-hidden select-none relative">
       {/* Top Header / Zone Selector Tabs */}
       <div className="shrink-0 p-4 pb-3 flex items-center justify-between bg-surface/80 backdrop-blur-md border-b border-border/70 z-10">
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
@@ -146,7 +264,7 @@ export default function PosTableMap() {
               <button
                 key={plan.id}
                 onClick={() => setSelectedPlanId(plan.id)}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer ${
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer min-h-[40px] ${
                   isSelected
                     ? 'bg-primary text-text-inverse shadow-md shadow-primary/25 ring-2 ring-primary/30'
                     : 'bg-surface border border-border text-text-secondary hover:text-text-primary hover:bg-surface-raised'
@@ -173,7 +291,11 @@ export default function PosTableMap() {
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shadow-xs" />
-            <span>En Atención</span>
+            <span>Ocupada</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-xs animate-pulse" />
+            <span>Cuenta Pedida</span>
           </div>
         </div>
       </div>
@@ -205,64 +327,106 @@ export default function PosTableMap() {
               const tableCtx = cartsByContext[`table:${table.id}`]
               const hasItems = (serverOrder && Array.isArray(serverOrder.cart) && serverOrder.cart.length > 0) || (tableCtx?.cart?.length || 0) > 0 || (isSelected && cart.length > 0)
               const tableTotal = isSelected ? total : (serverOrder ? Number(serverOrder.total) : (tableCtx?.total || 0))
-              const itemCount = isSelected
-                ? cart.reduce((s, i) => s + (i.quantity || 0), 0)
-                : serverOrder && Array.isArray(serverOrder.cart)
-                ? serverOrder.cart.reduce((s: number, i: any) => s + (i.quantity || 0), 0)
-                : (tableCtx?.cart || []).reduce((s, i) => s + (i.quantity || 0), 0)
+              const isPreBill = serverOrder?.status === 'pre_bill'
+
+              const cartList = isSelected ? cart : (serverOrder?.cart || tableCtx?.cart || [])
+              const itemCount = cartList.reduce((s: number, i: any) => s + (Number(i.quantity) || 1), 0)
+              const hasKitchenItems = cartList.some((i: any) => i.sentToKitchen === true)
+
+              const elapsedDisplay = formatElapsedTime(serverOrder?.opened_at || serverOrder?.created_at)
+              const preBillTimer = formatElapsedTime(serverOrder?.pre_bill_requested_at)
 
               return (
                 <button
                   key={table.id}
                   onClick={() => handleSelectTable(table.id, table.name)}
+                  onContextMenu={(e) => handleContextMenu(e, table)}
+                  onTouchStart={(e) => handleTouchStart(e, table)}
+                  onTouchEnd={handleTouchEnd}
                   style={{
                     left: `${table.x}px`,
                     top: `${table.y}px`,
                     width: `${table.width}px`,
                     height: `${table.height}px`,
                   }}
-                  className={`absolute transition-all duration-150 flex flex-col items-center justify-center text-center p-2 cursor-pointer shadow-md select-none group active:scale-95 hover:z-20 ${
+                  className={`absolute transition-all duration-150 flex flex-col items-center justify-between text-center p-2 cursor-pointer shadow-md select-none group active:scale-95 hover:z-20 min-h-[48px] min-w-[48px] ${
                     isCircle ? 'rounded-full' : 'rounded-2xl'
                   } ${
                     isSelected
                       ? 'bg-primary text-text-inverse ring-4 ring-primary/30 border-2 border-primary shadow-lg shadow-primary/30 scale-105 z-10'
+                      : isPreBill
+                      ? 'bg-amber-400/25 border-2 border-amber-400 text-amber-500 shadow-amber-400/20 shadow-md ring-2 ring-amber-400/30'
                       : hasItems
-                      ? 'bg-amber-500/15 border-2 border-amber-500/60 text-amber-500 hover:bg-amber-500/25 hover:border-amber-500 hover:shadow-lg'
-                      : 'bg-surface border-2 border-border hover:border-primary/80 hover:bg-surface-raised hover:shadow-lg'
+                      ? 'bg-amber-500/15 border-2 border-amber-500/70 text-amber-500 hover:bg-amber-500/25 hover:border-amber-500 hover:shadow-lg'
+                      : 'bg-surface border-2 border-emerald-500/40 hover:border-emerald-500 hover:bg-emerald-500/5 hover:shadow-lg'
                   }`}
                 >
-                  {/* Table Icon / Shape Indicator */}
-                  <div className="flex items-center gap-1 mb-0.5">
-                    <Utensils className={`w-3.5 h-3.5 ${
-                      isSelected ? 'text-text-inverse' : hasItems ? 'text-amber-500' : 'text-primary'
-                    }`} />
-                    {hasItems && !isSelected && (
-                      <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                  {/* Top badges (Elapsed time / Kitchen Bell / Pre-bill tag) */}
+                  <div className="w-full flex items-center justify-between px-1 shrink-0">
+                    {/* Elapsed Time Ticker */}
+                    {hasItems && !isSelected ? (
+                      <span className="text-[9px] font-mono font-bold opacity-80 flex items-center gap-0.5">
+                        <Clock className="w-2.5 h-2.5" />
+                        {isPreBill ? `Pre: ${preBillTimer || '0m'}` : (elapsedDisplay || '1m')}
+                      </span>
+                    ) : (
+                      <div className="flex items-center gap-0.5 text-[9px] text-emerald-600 dark:text-emerald-400 font-bold">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                        <span>Libre</span>
+                      </div>
                     )}
+
+                    {/* Kitchen Bell or Waiter Avatar Badge */}
+                    <div className="flex items-center gap-1">
+                      {hasKitchenItems && !isSelected && (
+                        <span className="p-0.5 rounded-full bg-amber-500 text-black shadow-xs" title="Comanda enviada a cocina">
+                          <Bell className="w-2.5 h-2.5 fill-black" />
+                        </span>
+                      )}
+                      {serverOrder?.assigned_to && !isSelected && (
+                        <span className="w-4 h-4 rounded-full bg-sky-500/20 text-sky-500 border border-sky-500/40 flex items-center justify-center text-[8px] font-bold" title="Mesero asignado">
+                          <User className="w-2.5 h-2.5" />
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {/* Table Name */}
-                  <span className={`font-bold text-xs sm:text-sm tracking-tight leading-tight line-clamp-1 ${
-                    isSelected ? 'text-text-inverse' : hasItems ? 'text-amber-500 font-black' : 'text-text-primary'
-                  }`}>
-                    {table.name}
-                  </span>
-
-                  {/* Capacity or Amount */}
-                  {hasItems && !isSelected ? (
-                    <span className="text-[10px] font-mono font-bold text-amber-500 mt-0.5">
-                      ${tableTotal.toFixed(2)} ({itemCount})
+                  <div className="my-auto flex flex-col items-center">
+                    <span className={`font-black text-xs sm:text-sm tracking-tight leading-tight line-clamp-1 ${
+                      isSelected ? 'text-text-inverse' : isPreBill ? 'text-amber-500 font-black' : hasItems ? 'text-amber-500 font-black' : 'text-text-primary'
+                    }`}>
+                      {table.name}
                     </span>
-                  ) : (
-                    <div className="flex items-center gap-1 text-[10px] opacity-80 mt-0.5">
-                      <Users className="w-2.5 h-2.5" />
-                      <span>{table.capacity || 4}p</span>
-                    </div>
-                  )}
 
-                  {/* Quick Select Tooltip Feedback */}
-                  <div className="absolute -bottom-8 opacity-0 group-hover:opacity-100 transition-opacity bg-black/90 text-white text-[10px] font-bold px-2 py-0.5 rounded-md pointer-events-none whitespace-nowrap shadow-md">
-                    {hasItems ? `Ver Comanda ($${tableTotal.toFixed(2)})` : 'Abrir Comanda'}
+                    {/* Live Accumulated Amount or Capacity */}
+                    {hasItems && !isSelected ? (
+                      <span className="text-[10px] font-mono font-black text-amber-500 mt-0.5">
+                        ${tableTotal.toFixed(2)}
+                      </span>
+                    ) : (
+                      <div className="flex items-center gap-1 text-[10px] text-text-secondary mt-0.5">
+                        <Users className="w-2.5 h-2.5" />
+                        <span>{table.capacity || 4}p</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Status footer pill */}
+                  <div className="shrink-0 text-[9px] font-bold">
+                    {isPreBill && !isSelected ? (
+                      <span className="px-1.5 py-0.2 rounded-full bg-amber-400 text-black font-black uppercase text-[8px]">
+                        Cuenta Pedida
+                      </span>
+                    ) : hasItems && !isSelected ? (
+                      <span className="text-[9px] opacity-70">
+                        {itemCount} {itemCount === 1 ? 'ítem' : 'ítems'}
+                      </span>
+                    ) : (
+                      <span className="text-[9px] opacity-60">
+                        Cap: {table.capacity || 4}p
+                      </span>
+                    )}
                   </div>
                 </button>
               )
@@ -279,11 +443,117 @@ export default function PosTableMap() {
           <span className="text-border mx-1">|</span>
           <span>Salón: <strong className="text-text-primary">{currentPlan?.name || 'Salón'}</strong></span>
         </div>
-        <div className="flex items-center gap-1 text-primary font-bold">
-          <span>Haz clic en una mesa para tomar la orden</span>
-          <ArrowRight className="w-3.5 h-3.5" />
+        <div className="flex items-center gap-3 text-xs">
+          <span className="hidden md:inline text-text-secondary">
+            Clic derecho o mantén presionado para opciones de mesa
+          </span>
+          <div className="flex items-center gap-1 text-primary font-bold">
+            <span>Toca una mesa para comanda</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </div>
         </div>
       </div>
+
+      {/* Context Menu */}
+      {contextMenuState.isOpen && contextMenuState.table && (
+        <TableContextMenu
+          isOpen={contextMenuState.isOpen}
+          onClose={() => setContextMenuState((prev) => ({ ...prev, isOpen: false }))}
+          table={contextMenuState.table}
+          order={contextMenuState.order}
+          position={contextMenuState.position}
+          onOpenOrder={() => {
+            if (contextMenuState.table) {
+              handleSelectTable(contextMenuState.table.id, contextMenuState.table.name)
+            }
+          }}
+          onTransfer={() => {
+            setSelectedTableForAction(contextMenuState.table)
+            setSelectedOrderForAction(contextMenuState.order)
+            setTransferModalOpen(true)
+          }}
+          onMerge={() => {
+            setSelectedTableForAction(contextMenuState.table)
+            setSelectedOrderForAction(contextMenuState.order)
+            setMergeModalOpen(true)
+          }}
+          onChangeWaiter={() => {
+            setSelectedTableForAction(contextMenuState.table)
+            setSelectedOrderForAction(contextMenuState.order)
+            setAssignWaiterModalOpen(true)
+          }}
+          onPreBill={() => {
+            setSelectedTableForAction(contextMenuState.table)
+            setSelectedOrderForAction(contextMenuState.order)
+            setPreBillModalOpen(true)
+          }}
+          onCheckout={() => {
+            if (contextMenuState.table) {
+              handleSelectTable(contextMenuState.table.id, contextMenuState.table.name)
+              setShowCheckout(true)
+            }
+          }}
+        />
+      )}
+
+      {/* Transfer Modal */}
+      {transferModalOpen && selectedTableForAction && selectedOrderForAction && (
+        <TransferModal
+          isOpen={transferModalOpen}
+          onClose={() => setTransferModalOpen(false)}
+          sourceTable={selectedTableForAction}
+          sourceOrder={selectedOrderForAction}
+          availableTables={allVenueTables}
+          onSuccess={() => refetchOrders()}
+        />
+      )}
+
+      {/* Merge Modal */}
+      {mergeModalOpen && selectedTableForAction && selectedOrderForAction && (
+        <MergeModal
+          isOpen={mergeModalOpen}
+          onClose={() => setMergeModalOpen(false)}
+          sourceTable={selectedTableForAction}
+          sourceOrder={selectedOrderForAction}
+          availableTables={allVenueTables}
+          serverOrdersMap={serverOrdersMap}
+          onSuccess={() => refetchOrders()}
+        />
+      )}
+
+      {/* Assign Waiter Modal */}
+      {assignWaiterModalOpen && selectedTableForAction && (
+        <AssignWaiterModal
+          isOpen={assignWaiterModalOpen}
+          onClose={() => setAssignWaiterModalOpen(false)}
+          tableId={selectedTableForAction.id}
+          tableName={selectedTableForAction.name}
+          currentWaiterId={selectedOrderForAction?.assigned_to}
+          waiters={[
+            { id: 'waiter-1', full_name: 'Carlos Mesero' },
+            { id: 'waiter-2', full_name: 'María Atención' },
+            { id: 'waiter-3', full_name: 'José Salonero' },
+          ]}
+          onSuccess={() => refetchOrders()}
+        />
+      )}
+
+      {/* PreBill Preview Modal (triggered from Context Menu) */}
+      {preBillModalOpen && selectedTableForAction && selectedOrderForAction && (
+        <PreBillPreview
+          isOpen={preBillModalOpen}
+          onClose={() => setPreBillModalOpen(false)}
+          tableId={selectedTableForAction.id}
+          tableName={selectedTableForAction.name}
+          customerName={selectedOrderForAction.customer_name}
+          customerTaxId={selectedOrderForAction.customer_tax_id}
+          cartItems={selectedOrderForAction.cart || []}
+          seats={selectedOrderForAction.seats || []}
+          openedAt={selectedOrderForAction.opened_at || selectedOrderForAction.created_at}
+          orderNumber={selectedOrderForAction.order_number}
+          total={Number(selectedOrderForAction.total) || 0}
+        />
+      )}
     </div>
   )
 }

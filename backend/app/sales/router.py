@@ -25,7 +25,8 @@ from app.sales.schemas import (
     SaleModeConfigCreate, SaleModeConfigUpdate, SaleModeConfigOut,
     PosConfigOut, StockReserveRequest, StockAvailabilityItem,
     CheckoutCreate, CheckoutResponse,
-    PosTableOrderSync, PosTableOrderOut
+    PosTableOrderSync, PosTableOrderOut,
+    TableOrderUpdate, TransferRequest, MergeRequest
 )
 import app.sales.invoice_service as invoice_svc
 import app.sales.payment_service as payment_svc
@@ -263,6 +264,38 @@ async def sync_table_order(
     user_id = getattr(user, "id", None) or getattr(user, "user_id", None) or (user.get("id") if isinstance(user, dict) else None)
     payload.table_id = table_id
     return await sales_svc.sync_table_order(org_id, str(user_id) if user_id else None, payload, db)
+
+@router.patch("/table-orders/{table_id}")
+async def patch_table_order(
+    table_id: str,
+    payload: TableOrderUpdate,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_config"))
+):
+    return await sales_svc.update_table_order(org_id, table_id, payload, db)
+
+@router.post("/table-orders/transfer")
+async def transfer_table_order(
+    payload: TransferRequest,
+    user = Depends(get_current_user),
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_config"))
+):
+    user_id = getattr(user, "id", None) or getattr(user, "user_id", None) or (user.get("id") if isinstance(user, dict) else None)
+    return await sales_svc.transfer_table_order(org_id, str(user_id) if user_id else None, payload, db)
+
+@router.post("/table-orders/merge")
+async def merge_table_orders(
+    payload: MergeRequest,
+    user = Depends(get_current_user),
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_config"))
+):
+    user_id = getattr(user, "id", None) or getattr(user, "user_id", None) or (user.get("id") if isinstance(user, dict) else None)
+    return await sales_svc.merge_table_orders(org_id, str(user_id) if user_id else None, payload, db)
 
 @router.delete("/table-orders/{table_id}")
 async def delete_table_order(
