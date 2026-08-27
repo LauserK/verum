@@ -210,10 +210,12 @@ async def process_checkout(org_id: str, payload: CheckoutCreate, user_id: str, d
             doc_number = f"INV-{int(datetime.now().timestamp())}"
 
         # 7. Calculate payments
-        amount_paid = sum(p.amount * p.exchange_rate for p in payload.payments)
-        balance_due = max(0.0, round(total_amount - amount_paid, 2))
+        amount_paid = sum(p.amount * (p.exchange_rate or 1.0) for p in payload.payments)
+        balance_due = max(0.0, round(float(total_amount) - float(amount_paid), 2))
 
-        is_cxc = balance_due > 0.01 and not payload.is_partial
+        # CXC is only when no payments are made OR remaining balance is left without being a partial/split checkout,
+        # but only if payment method isn't covering the total.
+        is_cxc = balance_due > 0.05 and not payload.is_partial and len(payload.payments) == 0
         if is_cxc and not customer_id:
             raise HTTPException(400, "CXC_REQUIRES_CUSTOMER")
 
@@ -221,6 +223,7 @@ async def process_checkout(org_id: str, payload: CheckoutCreate, user_id: str, d
             status = "paid" if balance_due <= 0.01 else "partial"
         else:
             status = "paid" if balance_due <= 0.01 else "partial" if amount_paid > 0 else "confirmed"
+
 
         # 8. Resolve real venue_id if not valid
         venue_id_to_use = None
