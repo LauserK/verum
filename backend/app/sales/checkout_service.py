@@ -44,17 +44,30 @@ async def process_checkout(org_id: str, payload: CheckoutCreate, user_id: str, d
         customer_name = payload.customer_name
         customer_tax_id = payload.customer_tax_id
 
-    # 4.5 Resolve table_order_id if applicable
-    table_order_id = str(payload.table_order_id) if payload.table_order_id else None
+    # 4.5 Resolve table_order_id if applicable (must reference a valid pos_table_orders.id)
+    table_order_id = None
+    if payload.table_order_id:
+        try:
+            t_check = db.table("pos_table_orders").select("id").eq("org_id", org_id).eq("id", str(payload.table_order_id)).limit(1).execute()
+            if t_check.data:
+                table_order_id = str(t_check.data[0]["id"])
+        except Exception:
+            pass
+
     if not table_order_id and payload.table_id:
         try:
+            # 1. Try finding active/pre_bill order by table_id (e.g. "table-1" or table UUID)
             t_res = db.table("pos_table_orders").select("id").eq("org_id", org_id).eq("table_id", str(payload.table_id)).in_("status", ["active", "pre_bill"]).limit(1).execute()
             if t_res.data:
                 table_order_id = str(t_res.data[0]["id"])
             else:
-                table_order_id = str(payload.table_id)
+                # 2. Or check if payload.table_id was itself the pos_table_orders.id UUID
+                t_res2 = db.table("pos_table_orders").select("id").eq("org_id", org_id).eq("id", str(payload.table_id)).limit(1).execute()
+                if t_res2.data:
+                    table_order_id = str(t_res2.data[0]["id"])
         except Exception:
-            table_order_id = str(payload.table_id)
+            table_order_id = None
+
 
     # 4.6 Check for existing partial invoice if is_partial
     existing_invoice = None
@@ -249,8 +262,7 @@ async def process_checkout(org_id: str, payload: CheckoutCreate, user_id: str, d
         }
         if table_order_id:
             invoice_data["table_order_id"] = str(table_order_id)
-        elif payload.table_id:
-            invoice_data["table_order_id"] = str(payload.table_id)
+
 
         inv_res = db.table("invoices").insert(invoice_data).execute()
         if not inv_res.data:

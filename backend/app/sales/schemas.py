@@ -809,8 +809,9 @@ class CartItemSchema(BaseModel):
     category_id: Optional[str] = None
 
 class TableOrderUpdate(BaseModel):
-    cart: Optional[List[dict]] = None
+    cart: Optional[List[Union[CartItemSchema, dict]]] = None
     seats: Optional[List[SeatSchema]] = None
+
     assigned_to: Optional[UUID] = None
     status: Optional[str] = None
     pre_bill_requested_at: Optional[Union[dt_datetime, str]] = None
