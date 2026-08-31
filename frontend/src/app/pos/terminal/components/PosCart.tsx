@@ -112,17 +112,17 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
       : []
   }, [posMode, tableContext])
 
-  // Inline editing state for seats
-  const [editingSeatId, setEditingSeatId] = useState<string | null>(null)
+  // Modal editing state for seats
+  const [editingSeat, setEditingSeat] = useState<Seat | null>(null)
   const [editingSeatLabel, setEditingSeatLabel] = useState<string>('')
   const editInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    if (editingSeatId && editInputRef.current) {
+    if (editingSeat && editInputRef.current) {
       editInputRef.current.focus()
       editInputRef.current.select()
     }
-  }, [editingSeatId])
+  }, [editingSeat])
 
   // Move item seat picker popover state
   const [movingItem, setMovingItem] = useState<CartItem | null>(null)
@@ -308,16 +308,14 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
     if (seats.length === 0) {
       addSeat('Asiento 1')
       addSeat('Asiento 2')
-      showToast('Asientos 1 y 2 creados', 'info')
     } else {
       addSeat()
-      showToast('Nuevo asiento agregado', 'info')
     }
   }
 
-  const handleStartRename = (seat: Seat, e: React.MouseEvent) => {
-    e.stopPropagation()
-    setEditingSeatId(seat.id)
+  const handleStartRename = (seat: Seat, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation()
+    setEditingSeat(seat)
     setEditingSeatLabel(seat.label)
   }
 
@@ -325,14 +323,13 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
     if (editingSeatLabel.trim()) {
       renameSeat(seatId, editingSeatLabel.trim())
     }
-    setEditingSeatId(null)
+    setEditingSeat(null)
   }
 
-  const handleDeleteSeatClick = (seat: Seat, e: React.MouseEvent) => {
-    e.stopPropagation()
+  const handleDeleteSeatClick = (seat: Seat, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation()
     const itemsInSeat = cart.filter((i) => i.seat === seat.id)
     if (seats.length <= 1) {
-      showToast('Debe haber al menos un asiento', 'warning')
       return
     }
     if (itemsInSeat.length > 0) {
@@ -343,14 +340,12 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
       })
     } else {
       removeSeat(seat.id)
-      showToast(`${seat.label} eliminado`, 'info')
     }
   }
 
   const handleConfirmDeleteSeat = () => {
     if (seatDeleteConfirm) {
       removeSeat(seatDeleteConfirm.seatId)
-      showToast(`${seatDeleteConfirm.label} eliminado (items reasignados)`, 'info')
       setSeatDeleteConfirm(null)
     }
   }
@@ -575,59 +570,19 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
             {/* Individual Seat Tabs */}
             {seats.map((seat) => {
               const isActive = activeSeatId === seat.id
-              const isEditing = editingSeatId === seat.id
               const seatItemsCount = cart.filter((i) => i.seat === seat.id).length
-
-              if (isEditing) {
-                return (
-                  <div
-                    key={seat.id}
-                    className="flex items-center gap-1 bg-surface border border-primary px-2 py-1 rounded-xl shrink-0 shadow-sm"
-                  >
-                    <input
-                      ref={editInputRef}
-                      type="text"
-                      value={editingSeatLabel}
-                      onChange={(e) => setEditingSeatLabel(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleSaveRename(seat.id)
-                        if (e.key === 'Escape') setEditingSeatId(null)
-                      }}
-                      className="bg-transparent text-xs font-bold text-text-primary w-24 outline-none px-1"
-                      placeholder="Nombre..."
-                      maxLength={25}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleSaveRename(seat.id)}
-                      className="p-1 text-primary hover:bg-primary/10 rounded cursor-pointer"
-                      title="Guardar nombre"
-                    >
-                      <Check className="w-3 h-3" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditingSeatId(null)}
-                      className="p-1 text-text-secondary hover:bg-surface-raised rounded cursor-pointer"
-                      title="Cancelar"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                )
-              }
 
               return (
                 <div
                   key={seat.id}
                   onClick={() => setActiveSeat(seat.id)}
-                  onDoubleClick={(e) => handleStartRename(seat, e)}
+                  onDoubleClick={() => handleStartRename(seat)}
                   className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-150 shrink-0 cursor-pointer min-h-[36px] border ${
                     isActive
                       ? 'bg-primary text-text-inverse border-primary shadow-sm'
                       : 'bg-surface hover:bg-surface-raised text-text-secondary hover:text-text-primary border-border/80'
                   }`}
-                  title={`${seat.label} (Doble clic para editar)`}
+                  title={`${seat.label} (Clic para seleccionar, botón para editar)`}
                 >
                   <span className="truncate max-w-[90px]">{seat.label}</span>
 
@@ -638,31 +593,17 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
                     {seatItemsCount}
                   </span>
 
-                  {/* Quick Edit & Delete icons on hover / active */}
-                  <div className="flex items-center gap-0.5 opacity-60 group-hover:opacity-100 transition-opacity ml-0.5">
-                    <button
-                      type="button"
-                      onClick={(e) => handleStartRename(seat, e)}
-                      className={`p-0.5 rounded hover:bg-black/10 cursor-pointer ${
-                        isActive ? 'text-text-inverse' : 'text-text-secondary hover:text-text-primary'
-                      }`}
-                      title="Renombrar asiento"
-                    >
-                      <Edit2 className="w-2.5 h-2.5" />
-                    </button>
-                    {seats.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={(e) => handleDeleteSeatClick(seat, e)}
-                        className={`p-0.5 rounded hover:bg-error/20 cursor-pointer ${
-                          isActive ? 'text-text-inverse hover:text-error' : 'text-text-secondary hover:text-error'
-                        }`}
-                        title="Eliminar asiento"
-                      >
-                        <X className="w-2.5 h-2.5" />
-                      </button>
-                    )}
-                  </div>
+                  {/* Quick Edit icon */}
+                  <button
+                    type="button"
+                    onClick={(e) => handleStartRename(seat, e)}
+                    className={`p-1 rounded-md hover:bg-black/10 transition-colors cursor-pointer ml-0.5 ${
+                      isActive ? 'text-text-inverse' : 'text-text-secondary hover:text-text-primary'
+                    }`}
+                    title="Editar asiento"
+                  >
+                    <Edit2 className="w-3 h-3" />
+                  </button>
                 </div>
               )
             })}
@@ -680,10 +621,10 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
         </div>
       )}
 
-      {/* Undo / Info Toast Overlay */}
+      {/* Undo Toast Overlay (Positioned at bottom with dismiss button) */}
       {toastMessage && (
-        <div className="absolute top-16 left-4 right-4 z-30 p-3 rounded-xl bg-surface-raised border border-border shadow-xl flex items-center justify-between text-xs animate-in fade-in slide-in-from-top-2 duration-200">
-          <div className="flex items-center gap-2">
+        <div className="absolute bottom-20 left-4 right-4 z-40 p-3 rounded-2xl bg-surface-raised/95 backdrop-blur-sm border border-border shadow-2xl flex items-center justify-between text-xs animate-in fade-in slide-in-from-bottom-2 duration-150">
+          <div className="flex items-center gap-2 min-w-0">
             {toastType === 'success' ? (
               <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />
             ) : toastType === 'warning' ? (
@@ -691,17 +632,26 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
             ) : (
               <AlertCircle className="w-4 h-4 text-blue-500 shrink-0" />
             )}
-            <span className="font-semibold text-text-primary">{toastMessage}</span>
+            <span className="font-semibold text-text-primary truncate">{toastMessage}</span>
           </div>
-          {deletedBackup && (
+          <div className="flex items-center gap-2 shrink-0">
+            {deletedBackup && (
+              <button
+                onClick={handleUndoClear}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary/10 text-primary font-bold text-xs hover:bg-primary/20 transition-colors cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                Deshacer
+              </button>
+            )}
             <button
-              onClick={handleUndoClear}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary/10 text-primary font-bold text-xs hover:bg-primary/20 transition-colors cursor-pointer"
+              onClick={() => setToastMessage(null)}
+              className="p-1 text-text-secondary hover:text-text-primary rounded-md cursor-pointer"
+              title="Cerrar notificación"
             >
-              <RotateCcw className="w-3.5 h-3.5" />
-              Deshacer
+              <X className="w-3.5 h-3.5" />
             </button>
-          )}
+          </div>
         </div>
       )}
 
@@ -824,6 +774,104 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
               >
                 Reasignar y Eliminar
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Dialog: Edit / Rename Seat */}
+      {editingSeat && (
+        <div className="absolute inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-surface-raised border border-border rounded-3xl p-5 w-full max-w-sm shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-border/60 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-2xl bg-primary/10 text-primary border border-primary/20 flex items-center justify-center">
+                  <User className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-text-primary">Editar Asiento</h3>
+                  <p className="text-[11px] text-text-secondary">
+                    {cart.filter((i) => i.seat === editingSeat.id).length} productos asignados
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingSeat(null)}
+                className="p-1.5 rounded-xl hover:bg-surface text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-text-secondary">
+                Nombre / Identificador del Asiento
+              </label>
+              <input
+                ref={editInputRef}
+                type="text"
+                value={editingSeatLabel}
+                onChange={(e) => setEditingSeatLabel(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSaveRename(editingSeat.id)
+                  if (e.key === 'Escape') setEditingSeat(null)
+                }}
+                className="w-full bg-surface border border-border focus:border-primary px-3.5 py-2.5 rounded-2xl text-sm font-bold text-text-primary outline-none transition-all shadow-inner"
+                placeholder="Ej. Pedro, Invitado, Asiento 1..."
+                maxLength={30}
+              />
+            </div>
+
+            {/* Quick Preset Chips */}
+            <div className="space-y-1.5">
+              <span className="text-[10px] font-bold text-text-secondary uppercase">Sugerencias rápidas:</span>
+              <div className="flex flex-wrap gap-1.5">
+                {['Asiento 1', 'Asiento 2', 'Asiento 3', 'Asiento 4', 'Comensal 1', 'Comensal 2', 'Invitado'].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setEditingSeatLabel(preset)}
+                    className="px-2.5 py-1 bg-surface hover:bg-surface-raised border border-border/80 hover:border-primary/40 rounded-xl text-xs font-medium text-text-secondary hover:text-text-primary transition-all cursor-pointer active:scale-95"
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="pt-2 border-t border-border/60 flex items-center justify-between gap-2">
+              {seats.length > 1 ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const seatToDelete = editingSeat
+                    setEditingSeat(null)
+                    handleDeleteSeatClick(seatToDelete)
+                  }}
+                  className="px-3 py-2 text-error hover:bg-error/10 border border-transparent hover:border-error/20 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                >
+                  Eliminar Asiento
+                </button>
+              ) : <div />}
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingSeat(null)}
+                  className="px-3.5 py-2 bg-surface hover:bg-surface-raised border border-border rounded-xl text-xs font-bold text-text-secondary hover:text-text-primary transition-all cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSaveRename(editingSeat.id)}
+                  className="px-4 py-2 bg-primary hover:bg-primary-hover text-text-inverse font-black text-xs rounded-xl shadow-md transition-all cursor-pointer active:scale-95"
+                >
+                  Guardar
+                </button>
+              </div>
             </div>
           </div>
         </div>
