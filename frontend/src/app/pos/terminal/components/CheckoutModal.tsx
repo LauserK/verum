@@ -34,7 +34,7 @@ interface CheckoutModalProps {
   orderNumber: number
 }
 
-type CheckoutStep = 'decision' | 'calculator' | 'change' | 'confirmation'
+type CheckoutStep = 'decision' | 'calculator' | 'change' | 'confirmation' | 'processing'
 type PaymentFlowType = 'complete' | 'mixed' | 'cxc'
 
 export function CheckoutModal({
@@ -58,6 +58,7 @@ export function CheckoutModal({
   const {
     activeWorkstationId,
     activeSessionId,
+    activeTableId,
     setActiveWorkstation,
     setSessionOpening,
     customerId,
@@ -144,6 +145,9 @@ export function CheckoutModal({
       return
     }
 
+    setStep('processing')
+    setErrorMessage(null)
+
     try {
       const itemsPayload = cartItems.map((item) => ({
         sale_item_id: item.id,
@@ -156,6 +160,8 @@ export function CheckoutModal({
         workstation_id: wsId,
         pos_session_id: sessId,
         mode: mode,
+        table_id: activeTableId || null,
+        table_order_id: activeTableId || null,
         customer_id: customerId,
         customer_name: customerName,
         customer_tax_id: customerTaxId,
@@ -171,6 +177,7 @@ export function CheckoutModal({
     } catch (err: any) {
       console.error('Checkout error:', err)
       setErrorMessage(err.message || 'Error al procesar el cobro.')
+      setStep('calculator')
     }
   }
 
@@ -229,7 +236,7 @@ export function CheckoutModal({
                 </div>
               </div>
 
-              {step !== 'confirmation' && (
+              {step !== 'confirmation' && step !== 'processing' && (
                 <button
                   type="button"
                   onClick={onClose}
@@ -376,6 +383,50 @@ export function CheckoutModal({
                   handleFinalizeCheckout(payments, change)
                 }}
               />
+            )}
+
+            {step === 'processing' && (
+              <div className="flex-1 flex flex-col items-center justify-center p-12 max-w-lg mx-auto text-center space-y-6 animate-in fade-in zoom-in-95">
+                <div className="relative">
+                  <div className="w-20 h-20 rounded-full bg-primary/10 text-primary flex items-center justify-center border border-primary/20 animate-spin">
+                    <Loader2 className="w-10 h-10" />
+                  </div>
+                  <div className="absolute inset-0 rounded-full bg-primary/20 blur-xl -z-10 animate-pulse" />
+                </div>
+
+                <div className="space-y-2">
+                  <span className="text-xs font-bold text-primary uppercase tracking-widest">
+                    Procesamiento en Curso
+                  </span>
+                  <h2 className="text-2xl font-black text-text-primary tracking-tight">
+                    Registrando Venta...
+                  </h2>
+                  <p className="text-xs text-text-secondary max-w-sm">
+                    Generando comprobante fiscal, validando pagos y deduciendo inventario.
+                  </p>
+                </div>
+
+                <div className="w-full p-4 bg-surface-raised border border-border rounded-2xl space-y-2.5 text-left text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-text-secondary">Monto Total:</span>
+                    <span className="font-mono font-bold text-text-primary">
+                      {baseCurrency.symbol} {total.toFixed(2)}
+                    </span>
+                  </div>
+                  {customerName && (
+                    <div className="flex justify-between">
+                      <span className="text-text-secondary">Cliente:</span>
+                      <span className="font-semibold text-text-primary">{customerName}</span>
+                    </div>
+                  )}
+                  {tableName && (
+                    <div className="flex justify-between">
+                      <span className="text-text-secondary">Mesa:</span>
+                      <span className="font-semibold text-primary">{tableName}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
             )}
 
             {step === 'confirmation' && lastInvoice && (

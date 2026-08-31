@@ -13,7 +13,8 @@ import {
   DollarSign,
   User,
   RefreshCw,
-  Divide
+  Divide,
+  Loader2
 } from 'lucide-react'
 import { usePosStore, Seat } from '@/store/posStore'
 import { useInvoiceByTableOrder, useCheckout, useBillingConfig, useCurrencies, useExchangeRates, useWorkstations, useActivePosSession } from '@/hooks/useSales'
@@ -416,16 +417,54 @@ export function SplitBillModal({ isOpen, onClose, onSuccess }: SplitBillModalPro
               onNewOrder={handleFinishTable}
             />
           ) : payingTarget ? (
-            /* View 2: Embedded Payment Calculator for Split portion */
-            <PaymentCalculator
-              total={payingTarget.amount}
-              paymentType="mixed"
-              isProcessing={checkoutMutation.isPending}
-              onBack={() => setPayingTarget(null)}
-              onComplete={(payments, change) => {
-                handleFinalizePartialCheckout(payments, change)
-              }}
-            />
+            checkoutMutation.isPending ? (
+              <div className="flex-1 flex flex-col items-center justify-center p-12 max-w-lg mx-auto text-center space-y-6 animate-in fade-in zoom-in-95">
+                <div className="relative">
+                  <div className="w-20 h-20 rounded-full bg-teal-500/10 text-teal-400 flex items-center justify-center border border-teal-500/20 animate-spin">
+                    <Loader2 className="w-10 h-10" />
+                  </div>
+                  <div className="absolute inset-0 rounded-full bg-teal-500/20 blur-xl -z-10 animate-pulse" />
+                </div>
+
+                <div className="space-y-2">
+                  <span className="text-xs font-bold text-teal-400 uppercase tracking-widest">
+                    Procesamiento en Curso
+                  </span>
+                  <h2 className="text-2xl font-black text-text-primary tracking-tight">
+                    Registrando Pago de {payingTarget.description}...
+                  </h2>
+                  <p className="text-xs text-text-secondary max-w-sm">
+                    Comunicando con el servidor, actualizando balance de la comanda y registrando comprobante.
+                  </p>
+                </div>
+
+                <div className="w-full p-4 bg-surface-raised border border-border rounded-2xl space-y-2.5 text-left text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-text-secondary">Monto Procesado:</span>
+                    <span className="font-mono font-bold text-text-primary">
+                      {baseCurrency.symbol} {payingTarget.amount.toFixed(2)}
+                    </span>
+                  </div>
+                  {activeTableName && (
+                    <div className="flex justify-between">
+                      <span className="text-text-secondary">Mesa:</span>
+                      <span className="font-semibold text-teal-400">{activeTableName}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              /* View 2: Embedded Payment Calculator for Split portion */
+              <PaymentCalculator
+                total={payingTarget.amount}
+                paymentType="mixed"
+                isProcessing={checkoutMutation.isPending}
+                onBack={() => setPayingTarget(null)}
+                onComplete={(payments, change) => {
+                  handleFinalizePartialCheckout(payments, change)
+                }}
+              />
+            )
           ) : (
             /* View 3: Mode Selection and Split Views */
             <div className="flex-1 flex flex-col overflow-hidden">
