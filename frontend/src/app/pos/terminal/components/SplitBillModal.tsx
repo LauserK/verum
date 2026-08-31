@@ -46,6 +46,7 @@ export function SplitBillModal({ isOpen, onClose, onSuccess }: SplitBillModalPro
 
   const [lastInvoice, setLastInvoice] = useState<any | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [isProcessingPartial, setIsProcessingPartial] = useState<boolean>(false)
 
   const {
     cart,
@@ -260,6 +261,8 @@ export function SplitBillModal({ isOpen, onClose, onSuccess }: SplitBillModalPro
       return
     }
 
+    setIsProcessingPartial(true)
+
     try {
       const itemsPayload = cart.map((item) => ({
         sale_item_id: item.id,
@@ -300,17 +303,21 @@ export function SplitBillModal({ isOpen, onClose, onSuccess }: SplitBillModalPro
       }
 
       const res = await checkoutMutation.mutateAsync(payload)
-      await refetchInvoice()
 
+      // Immediately clear paying target and selection to avoid any calculator flash
       setPayingTarget(null)
       setSelectedItemIds([])
 
       if (willBeFullyPaid || res.invoice.status === 'paid' || res.invoice.balance_due <= 0.01) {
         setLastInvoice(res.invoice)
       }
+
+      await refetchInvoice()
     } catch (err: any) {
       console.error('Partial checkout error:', err)
       setErrorMessage(err.message || 'Error al procesar el pago parcial.')
+    } finally {
+      setIsProcessingPartial(false)
     }
   }
 
@@ -419,7 +426,7 @@ export function SplitBillModal({ isOpen, onClose, onSuccess }: SplitBillModalPro
               onNewOrder={handleFinishTable}
             />
           ) : payingTarget ? (
-            checkoutMutation.isPending ? (
+            isProcessingPartial || checkoutMutation.isPending ? (
               <div className="flex-1 flex flex-col items-center justify-center p-12 max-w-lg mx-auto text-center space-y-6 animate-in fade-in zoom-in-95">
                 <div className="relative">
                   <div className="w-20 h-20 rounded-full bg-teal-500/10 text-teal-400 flex items-center justify-center border border-teal-500/20 animate-spin">
@@ -460,7 +467,7 @@ export function SplitBillModal({ isOpen, onClose, onSuccess }: SplitBillModalPro
               <PaymentCalculator
                 total={payingTarget.amount}
                 paymentType="mixed"
-                isProcessing={checkoutMutation.isPending}
+                isProcessing={isProcessingPartial || checkoutMutation.isPending}
                 onBack={() => setPayingTarget(null)}
                 onComplete={(payments, change) => {
                   handleFinalizePartialCheckout(payments, change)
