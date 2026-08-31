@@ -54,7 +54,7 @@ export function TransferModal({
     if (Array.isArray(sourceOrder.seats) && sourceOrder.seats.length > 0) {
       return sourceOrder.seats
     }
-    return [{ id: 'seat-1', label: 'Asiento 1' }]
+    return []
   }, [sourceOrder.seats])
 
   const cartItems = sourceOrder.cart || []

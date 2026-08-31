@@ -257,18 +257,29 @@ async def list_invoices(
 
 
 async def get_invoice_by_table_order(org_id: str, table_order_id: str, db) -> Optional[dict]:
-    # 1. Search for active partial invoice directly with table_order_id
-    inv_res = db.table("invoices").select("*, invoice_items(*), invoice_tax_summary(*)").eq("org_id", org_id).eq("table_order_id", str(table_order_id)).eq("status", "partial").order("created_at", desc=True).limit(1).execute()
-    invoice = inv_res.data[0] if inv_res.data else None
+    invoice = None
 
-    # 2. If not found by table_order_id directly, check if table_order_id is a table_id in pos_table_orders
+    # 1. Search for active partial invoice directly if table_order_id is valid UUID
+    try:
+        from uuid import UUID
+        UUID(str(table_order_id))
+        inv_res = db.table("invoices").select("*, invoice_items(*), invoice_tax_summary(*)").eq("org_id", org_id).eq("table_order_id", str(table_order_id)).eq("status", "partial").order("created_at", desc=True).limit(1).execute()
+        if inv_res.data:
+            invoice = inv_res.data[0]
+    except Exception:
+        pass
+
+    # 2. If not found by direct UUID, search pos_table_orders by table_id (e.g. "quick-table-1" or table_id)
     if not invoice:
-        t_res = db.table("pos_table_orders").select("id").eq("org_id", org_id).eq("table_id", str(table_order_id)).in_("status", ["active", "pre_bill"]).limit(1).execute()
-        if t_res.data:
-            actual_order_id = t_res.data[0]["id"]
-            inv_res2 = db.table("invoices").select("*, invoice_items(*), invoice_tax_summary(*)").eq("org_id", org_id).eq("table_order_id", str(actual_order_id)).eq("status", "partial").order("created_at", desc=True).limit(1).execute()
-            if inv_res2.data:
-                invoice = inv_res2.data[0]
+        try:
+            t_res = db.table("pos_table_orders").select("id").eq("org_id", org_id).eq("table_id", str(table_order_id)).in_("status", ["active", "pre_bill"]).order("created_at", desc=True).limit(1).execute()
+            if t_res.data:
+                actual_order_id = t_res.data[0]["id"]
+                inv_res2 = db.table("invoices").select("*, invoice_items(*), invoice_tax_summary(*)").eq("org_id", org_id).eq("table_order_id", str(actual_order_id)).eq("status", "partial").order("created_at", desc=True).limit(1).execute()
+                if inv_res2.data:
+                    invoice = inv_res2.data[0]
+        except Exception:
+            pass
 
     if not invoice:
         return None

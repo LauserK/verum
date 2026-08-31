@@ -109,7 +109,7 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
     if (posMode !== 'tables') return []
     return tableContext?.seats && tableContext.seats.length > 0
       ? tableContext.seats
-      : [{ id: 'seat-1', label: 'Asiento 1' }]
+      : []
   }, [posMode, tableContext])
 
   // Inline editing state for seats
@@ -516,6 +516,19 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
             </span>
           </button>
 
+          {/* Add Seat Button when in tables mode and no seats exist yet */}
+          {posMode === 'tables' && seats.length === 0 && (
+            <button
+              type="button"
+              onClick={handleAddSeat}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold text-primary hover:bg-primary/10 border border-primary/20 hover:border-primary/40 transition-all cursor-pointer min-h-[36px]"
+              title="Dividir comanda por asientos"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Asiento</span>
+            </button>
+          )}
+
           {/* Clear Button */}
           {cart.length > 0 && (
             <button
@@ -530,8 +543,8 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
         </div>
       </div>
 
-      {/* Seat Tabs (Visible only in 'tables' mode) */}
-      {posMode === 'tables' && (
+      {/* Seat Tabs (Visible only in 'tables' mode when seats exist) */}
+      {posMode === 'tables' && seats.length > 0 && (
         <div className="shrink-0 bg-surface-raised/40 border-b border-border/70 px-3 py-2">
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar scroll-smooth">
             {/* "Todos" Tab */}
@@ -698,7 +711,7 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
               Agrega productos desde el catálogo para iniciar la comanda.
             </p>
           </div>
-        ) : posMode === 'tables' && activeSeatId === 'all' ? (
+        ) : posMode === 'tables' && seats.length > 0 && activeSeatId === 'all' ? (
           /* "Todos" View: Grouped by Seats with Separators & Subtotals */
           groupedSeats.map((group) => {
             if (group.items.length === 0) return null

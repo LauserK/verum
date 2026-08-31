@@ -42,7 +42,18 @@ async def process_checkout(org_id: str, payload: CheckoutCreate, user_id: str, d
             customer_tax_id = cust_res.data[0].get("tax_id")
     elif payload.customer_name:
         customer_name = payload.customer_name
-        customer_tax_id = payload.customer_tax_id
+    # 4.4 Resolve real venue_id if not valid
+    venue_id_to_use = None
+    if payload.venue_id and str(payload.venue_id) != "00000000-0000-0000-0000-000000000000":
+        venue_id_to_use = str(payload.venue_id)
+    else:
+        ws_res = db.table("workstations").select("venue_id").eq("id", str(payload.workstation_id)).execute()
+        if ws_res.data and ws_res.data[0].get("venue_id"):
+            venue_id_to_use = str(ws_res.data[0]["venue_id"])
+        else:
+            ven_res = db.table("venues").select("id").eq("org_id", org_id).execute()
+            if ven_res.data:
+                venue_id_to_use = str(ven_res.data[0]["id"])
 
     # 4.5 Resolve table_order_id if applicable (must reference a valid pos_table_orders.id)
     table_order_id = None
@@ -56,31 +67,46 @@ async def process_checkout(org_id: str, payload: CheckoutCreate, user_id: str, d
 
     if not table_order_id and payload.table_id:
         try:
-            # 1. Try finding active/pre_bill order by table_id (e.g. "table-1" or table UUID)
-            t_res = db.table("pos_table_orders").select("id").eq("org_id", org_id).eq("table_id", str(payload.table_id)).in_("status", ["active", "pre_bill"]).limit(1).execute()
+            t_res = db.table("pos_table_orders").select("id").eq("org_id", org_id).eq("table_id", str(payload.table_id)).in_("status", ["active", "pre_bill"]).order("created_at", desc=True).limit(1).execute()
             if t_res.data:
                 table_order_id = str(t_res.data[0]["id"])
             else:
-                # 2. Or check if payload.table_id was itself the pos_table_orders.id UUID
                 t_res2 = db.table("pos_table_orders").select("id").eq("org_id", org_id).eq("id", str(payload.table_id)).limit(1).execute()
                 if t_res2.data:
                     table_order_id = str(t_res2.data[0]["id"])
-        except Exception:
-            table_order_id = None
-
+                else:
+                    # Auto-provision active pos_table_orders entry so invoices.table_order_id FK is valid
+                    items_json = [i.model_dump() if hasattr(i, "model_dump") else i for i in payload.items]
+                    cart_sum = sum(float(i.unit_price) * int(i.quantity) for i in payload.items)
+                    new_to = db.table("pos_table_orders").insert({
+                        "org_id": org_id,
+                        "venue_id": venue_id_to_use,
+                        "mode": payload.mode or "tables",
+                        "table_id": str(payload.table_id),
+                        "table_name": payload.customer_name or f"Mesa {payload.table_id}",
+                        "tab_name": f"Mesa {payload.table_id}",
+                        "cart": items_json,
+                        "total": cart_sum,
+                        "order_number": 1,
+                        "workstation_id": str(payload.workstation_id) if payload.workstation_id else None,
+                        "created_by": str(user_id) if user_id else None,
+                        "status": "active",
+                        "opened_at": "now()"
+                    }).execute()
+                    if new_to.data:
+                        table_order_id = str(new_to.data[0]["id"])
+        except Exception as e:
+            print(f"[CHECKOUT] Error resolving/creating pos_table_orders: {e}")
 
     # 4.6 Check for existing partial invoice for this table order (whether this payment is partial or the final settling payment)
     existing_invoice = None
-    if table_order_id or payload.table_id:
-        search_ids = [i for i in [table_order_id, str(payload.table_id) if payload.table_id else None] if i]
-        for s_id in search_ids:
-            try:
-                inv_query = db.table("invoices").select("*").eq("org_id", org_id).eq("table_order_id", s_id).eq("status", "partial").order("created_at", desc=True).limit(1).execute()
-                if inv_query.data:
-                    existing_invoice = inv_query.data[0]
-                    break
-            except Exception:
-                pass
+    if table_order_id:
+        try:
+            inv_query = db.table("invoices").select("*").eq("org_id", org_id).eq("table_order_id", str(table_order_id)).eq("status", "partial").order("created_at", desc=True).limit(1).execute()
+            if inv_query.data:
+                existing_invoice = inv_query.data[0]
+        except Exception:
+            pass
 
 
     if existing_invoice:

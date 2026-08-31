@@ -69,7 +69,7 @@ export function SplitBillModal({ isOpen, onClose, onSuccess }: SplitBillModalPro
     if (currentCtx?.seats && currentCtx.seats.length > 0) {
       return currentCtx.seats
     }
-    return [{ id: 'seat-1', label: 'Asiento 1' }]
+    return []
   }, [currentCtx])
 
   // Fetch partial table invoice & existing payments
@@ -206,7 +206,9 @@ export function SplitBillModal({ isOpen, onClose, onSuccess }: SplitBillModalPro
       const isLast = i === n - 1
       const amount = isLast ? Math.round((tableTotal - accumulated) * 100) / 100 : basePart
       accumulated += amount
-      const isPaid = i < existingPayments.filter((p) => p.seat_label?.startsWith('Parte ')).length
+      const isPaidByLabel = i < existingPayments.filter((p) => p.seat_label?.startsWith('Parte ') || p.seat_label === `Parte ${i + 1}`).length
+      const isPaidByAmount = (accumulated - 0.01) <= amountPaidAccumulated
+      const isPaid = isPaidByLabel || isPaidByAmount
       
       // Proportional items round-robin
       const coveredIds = cart
@@ -222,7 +224,7 @@ export function SplitBillModal({ isOpen, onClose, onSuccess }: SplitBillModalPro
       })
     }
     return parts
-  }, [tableTotal, equalPartsCount, existingPayments, cart])
+  }, [tableTotal, equalPartsCount, existingPayments, amountPaidAccumulated, cart])
 
   // 3. Calculations for Manual / Items Mode
   const unpaidItems = useMemo(() => {
@@ -534,8 +536,37 @@ export function SplitBillModal({ isOpen, onClose, onSuccess }: SplitBillModalPro
                 {/* ─── TAB 1: POR ASIENTOS ─── */}
                 {activeTab === 'seats' && (
                   <div className="space-y-6 max-w-5xl mx-auto">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                      {seatsData.map(({ seat, items, subtotal, itemIds, isPaid }) => (
+                    {seatsData.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center p-12 text-center bg-surface-raised/40 border border-border/80 rounded-3xl space-y-4">
+                        <div className="w-14 h-14 rounded-2xl bg-surface border border-border flex items-center justify-center text-text-secondary">
+                          <User className="w-7 h-7 opacity-40" />
+                        </div>
+                        <div className="space-y-1 max-w-sm">
+                          <h4 className="text-sm font-bold text-text-primary">Sin asientos configurados</h4>
+                          <p className="text-xs text-text-secondary">
+                            Esta mesa no tiene asientos asignados. Puedes dividir el total en <strong>Partes Iguales</strong> o cobrar productos por <strong>Manual / Items</strong>.
+                          </p>
+                        </div>
+                        <div className="flex gap-3 pt-2">
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab('equal')}
+                            className="px-4 py-2 bg-primary text-black font-bold text-xs rounded-xl shadow-sm hover:bg-primary-hover cursor-pointer"
+                          >
+                            Dividir en Partes Iguales
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab('manual')}
+                            className="px-4 py-2 bg-surface hover:bg-surface-raised border border-border text-text-primary font-bold text-xs rounded-xl cursor-pointer"
+                          >
+                            Selección Manual
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                        {seatsData.map(({ seat, items, subtotal, itemIds, isPaid }) => (
                         <div
                           key={seat.id}
                           className={`flex flex-col justify-between p-5 rounded-3xl border transition-all ${
@@ -618,6 +649,7 @@ export function SplitBillModal({ isOpen, onClose, onSuccess }: SplitBillModalPro
                         </div>
                       ))}
                     </div>
+                  )}
 
                     {/* General Unassigned Pool */}
                     {unassignedItems.length > 0 && (

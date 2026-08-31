@@ -167,10 +167,10 @@ export const usePosStore = create<PosState>()(
           if (mode === 'tables' && nextTableId) {
             const tableSeats = nextCtx.seats && nextCtx.seats.length > 0
               ? nextCtx.seats
-              : [{ id: 'seat-1', label: 'Asiento 1' }]
+              : []
             nextCtx = { ...nextCtx, seats: tableSeats }
             updatedCarts[nextKey] = nextCtx
-            nextActiveSeatId = tableSeats[0].id
+            nextActiveSeatId = tableSeats.length > 0 ? tableSeats[0].id : null
           }
 
           return {
@@ -232,7 +232,7 @@ export const usePosStore = create<PosState>()(
 
           const tableSeats = existing.seats && existing.seats.length > 0
             ? existing.seats
-            : [{ id: 'seat-1', label: 'Asiento 1' }]
+            : []
 
           const initializedCtx: PosCartContext = {
             ...existing,
@@ -249,7 +249,7 @@ export const usePosStore = create<PosState>()(
             customerId: initializedCtx.customerId,
             customerName: initializedCtx.customerName,
             customerTaxId: initializedCtx.customerTaxId,
-            activeSeatId: tableSeats[0].id,
+            activeSeatId: tableSeats.length > 0 ? tableSeats[0].id : null,
           }
         })
       },
@@ -259,7 +259,7 @@ export const usePosStore = create<PosState>()(
           const currentKey = `table:${id}`
           const seats = data.seats && data.seats.length > 0
             ? data.seats
-            : [{ id: 'seat-1', label: 'Asiento 1' }]
+            : []
           const orderData: PosCartContext = {
             ...data,
             seats,
@@ -275,7 +275,7 @@ export const usePosStore = create<PosState>()(
             customerId: orderData.customerId || null,
             customerName: orderData.customerName || null,
             customerTaxId: orderData.customerTaxId || null,
-            activeSeatId: seats[0].id,
+            activeSeatId: seats.length > 0 ? seats[0].id : null,
           }
         })
       },
@@ -503,11 +503,11 @@ export const usePosStore = create<PosState>()(
               assignedSeatId = state.activeSeatId
             } else {
               // activeSeatId === 'all' or not explicitly set
-              const seats = updatedSeats && updatedSeats.length > 0
-                ? updatedSeats
-                : [{ id: 'seat-1', label: 'Asiento 1' }]
-              updatedSeats = seats
-              assignedSeatId = seats[seats.length - 1].id
+              if (updatedSeats && updatedSeats.length > 0) {
+                assignedSeatId = updatedSeats[updatedSeats.length - 1].id
+              } else {
+                assignedSeatId = null
+              }
             }
           }
 
