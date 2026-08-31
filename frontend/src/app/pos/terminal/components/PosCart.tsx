@@ -196,15 +196,15 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
 
   // Filtered items based on active seat selection
   const displayedItems = useMemo(() => {
-    if (posMode !== 'tables' || !activeSeatId || activeSeatId === 'all') {
+    if (posMode !== 'tables' || seats.length < 2 || !activeSeatId || activeSeatId === 'all') {
       return cart
     }
     return cart.filter((item) => item.seat === activeSeatId)
-  }, [cart, posMode, activeSeatId])
+  }, [cart, posMode, seats, activeSeatId])
 
   // Grouped items by seat for the "Todos" view
   const groupedSeats = useMemo(() => {
-    if (posMode !== 'tables') return []
+    if (posMode !== 'tables' || seats.length < 2) return []
 
     // Map existing seats
     const groups: { seat: Seat; items: CartItem[]; subtotal: number }[] = seats.map((seat) => {
@@ -305,8 +305,14 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
 
   // Seat management handlers
   const handleAddSeat = () => {
-    addSeat()
-    showToast('Nuevo asiento agregado', 'info')
+    if (seats.length === 0) {
+      addSeat('Asiento 1')
+      addSeat('Asiento 2')
+      showToast('Asientos 1 y 2 creados', 'info')
+    } else {
+      addSeat()
+      showToast('Nuevo asiento agregado', 'info')
+    }
   }
 
   const handleStartRename = (seat: Seat, e: React.MouseEvent) => {
@@ -516,8 +522,8 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
             </span>
           </button>
 
-          {/* Add Seat Button when in tables mode and no seats exist yet */}
-          {posMode === 'tables' && seats.length === 0 && (
+          {/* Add Seat Button when in tables mode and less than 2 seats exist */}
+          {posMode === 'tables' && seats.length < 2 && (
             <button
               type="button"
               onClick={handleAddSeat}
@@ -543,8 +549,8 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
         </div>
       </div>
 
-      {/* Seat Tabs (Visible only in 'tables' mode when seats exist) */}
-      {posMode === 'tables' && seats.length > 0 && (
+      {/* Seat Tabs (Visible only in 'tables' mode when at least 2 seats exist) */}
+      {posMode === 'tables' && seats.length >= 2 && (
         <div className="shrink-0 bg-surface-raised/40 border-b border-border/70 px-3 py-2">
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar scroll-smooth">
             {/* "Todos" Tab */}
@@ -711,7 +717,7 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
               Agrega productos desde el catálogo para iniciar la comanda.
             </p>
           </div>
-        ) : posMode === 'tables' && seats.length > 0 && activeSeatId === 'all' ? (
+        ) : posMode === 'tables' && seats.length >= 2 && activeSeatId === 'all' ? (
           /* "Todos" View: Grouped by Seats with Separators & Subtotals */
           groupedSeats.map((group) => {
             if (group.items.length === 0) return null
