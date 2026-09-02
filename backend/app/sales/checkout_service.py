@@ -2,24 +2,48 @@ from datetime import datetime
 from fastapi import HTTPException
 from app.sales.schemas import CheckoutCreate
 from app.sales.service import resolve_pos_config
-from app.sales.stock_service import release_session_reservations
+from app.sales.stock_service import release_session_reservations, validate_checkout_stock
+from app.cache import cache
 
 
 async def process_checkout(org_id: str, payload: CheckoutCreate, user_id: str, db):
     """
-    Atomic checkout: validate → create invoice → register payments
-    → confirm → deduct inventory → release reservations.
+    Atomic checkout: validate idempotency → lock warehouse → validate stock
+    → create invoice → register payments → confirm → deduct inventory
+    → release reservations & lock → record idempotency.
     """
+    # 0. Idempotency check
+    idempotency_key = getattr(payload, "idempotency_key", None)
+    idemp_cache_key = f"sales:idempotency:{org_id}:{idempotency_key}" if idempotency_key else None
+    if idemp_cache_key:
+        cached_result = await cache.get(idemp_cache_key)
+        if cached_result:
+            if cached_result.get("status") == "processing":
+                raise HTTPException(409, "TRANSACTION_IN_PROGRESS")
+            return cached_result
+        # Mark in-flight for 30s
+        await cache.set(idemp_cache_key, {"status": "processing"}, ttl=30)
+
     # 1. Resolve POS config
     pos_config = await resolve_pos_config(
         org_id, str(payload.workstation_id), payload.mode, db
     )
     warehouse_id = pos_config.get("warehouse_id") if isinstance(pos_config, dict) else pos_config.warehouse_id
 
-    # 2. Validate customer requirement
-    cr = pos_config.get("customer_requirement") if isinstance(pos_config, dict) else pos_config.customer_requirement
-    if cr == "required" and not payload.customer_id and not payload.customer_name:
-        raise HTTPException(400, "CUSTOMER_REQUIRED")
+    # Acquire distributed lock on warehouse
+    lock_key = f"stock:lock:{warehouse_id}" if warehouse_id else None
+    if lock_key:
+        await cache.setnx(lock_key, "locked", ttl=10)
+
+    try:
+        # Atomic stock validation (respects allow_negative_stock)
+        if warehouse_id and payload.items:
+            await validate_checkout_stock(org_id, str(warehouse_id), payload.items, db)
+
+        # 2. Validate customer requirement
+        cr = pos_config.get("customer_requirement") if isinstance(pos_config, dict) else pos_config.customer_requirement
+        if cr == "required" and not payload.customer_id and not payload.customer_name:
+            raise HTTPException(400, "CUSTOMER_REQUIRED")
 
     # 3. Validate session
     session_res = db.table("pos_sessions").select("id, status").eq(
@@ -418,8 +442,17 @@ async def process_checkout(org_id: str, payload: CheckoutCreate, user_id: str, d
                         "updated_at": "now()"
                     }).eq("org_id", org_id).eq("table_id", str(payload.table_id)).in_("status", ["active", "pre_bill"]).execute()
                 from app.cache import invalidate_table_orders
-                await invalidate_table_orders(org_id)
-            except Exception as te:
-                print(f"[CHECKOUT] Error updating table order payment_pending: {te}")
+    finally:
+        # Release distributed lock
+        if lock_key:
+            await cache.delete(lock_key)
 
-    return {"invoice": invoice}
+    # Invalidate stock availability cache for warehouse
+    if warehouse_id:
+        await cache.delete(f"sales:stock:availability:{org_id}:{warehouse_id}")
+
+    res_data = {"invoice": invoice}
+    if idemp_cache_key:
+        await cache.set(idemp_cache_key, res_data, ttl=86400) # Cache completed checkout for 24h
+
+    return res_data

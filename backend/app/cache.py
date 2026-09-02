@@ -198,6 +198,19 @@ class CacheManager:
         except Exception as e:
             logger.warning(f"Cache EXPIRE error for '{raw_key}': {e}")
 
+    async def setnx(self, raw_key: str, value: Any, ttl: int = 60) -> bool:
+        """Set a key if it does not exist (atomic lock). Returns True if key was set, False otherwise."""
+        if not self._enabled:
+            return True
+        try:
+            key = self._make_key(raw_key)
+            serialized = orjson.dumps(value)
+            res = await self._redis.set(key, serialized, ex=ttl, nx=True)
+            return bool(res)
+        except Exception as e:
+            logger.warning(f"Cache SETNX error for '{raw_key}': {e}")
+            return True
+
     async def health(self) -> dict:
         """Return cache health status and metrics."""
         if not self._enabled:
@@ -349,6 +362,10 @@ async def invalidate_pos_session(org_id: str):
 async def invalidate_table_orders(org_id: str):
     """Invalidate active table orders cache for an organization."""
     await cache.delete_pattern(f"sales:table_orders:{org_id}:*")
+
+async def invalidate_floor_plans(org_id: str):
+    """Invalidate floor plans and tables cache for an organization."""
+    await cache.delete_pattern(f"sales:floor_plans:{org_id}:*")
 
 
 

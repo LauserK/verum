@@ -299,7 +299,8 @@ export function SplitBillModal({ isOpen, onClose, onSuccess }: SplitBillModalPro
         is_partial: !willBeFullyPaid,
         split_mode: payingTarget.splitMode,
         seat_label: payingTarget.seatLabel || null,
-        covered_item_ids: payingTarget.coveredItemIds
+        covered_item_ids: payingTarget.coveredItemIds,
+        idempotency_key: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `idemp-${Date.now()}-${Math.random()}`
       }
 
       const res = await checkoutMutation.mutateAsync(payload)
@@ -315,7 +316,8 @@ export function SplitBillModal({ isOpen, onClose, onSuccess }: SplitBillModalPro
       await refetchInvoice()
     } catch (err: any) {
       console.error('Partial checkout error:', err)
-      setErrorMessage(err.message || 'Error al procesar el pago parcial.')
+      const detailMsg = err?.response?.data?.detail || err?.detail || err?.message || 'Error al procesar el pago parcial.'
+      setErrorMessage(typeof detailMsg === 'string' ? detailMsg : JSON.stringify(detailMsg))
     } finally {
       setIsProcessingPartial(false)
     }
@@ -334,43 +336,43 @@ export function SplitBillModal({ isOpen, onClose, onSuccess }: SplitBillModalPro
       <div className="w-full h-full max-w-6xl max-h-[92vh] mx-4 bg-surface border border-border/80 rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
         
         {/* Top Header */}
-        <div className="flex items-center justify-between px-8 py-5 border-b border-border/80 bg-surface-raised/40">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-teal-500/10 text-teal-400 rounded-2xl border border-teal-500/20">
-              <Scissors className="w-6 h-6" />
+        <div className="flex items-center justify-between px-4 sm:px-6 md:px-8 py-3 sm:py-4 border-b border-border/80 bg-surface-raised/40 gap-3">
+          <div className="flex items-center gap-3">
+            <div className="p-2 sm:p-2.5 bg-teal-500/10 text-teal-400 rounded-xl sm:rounded-2xl border border-teal-500/20">
+              <Scissors className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div>
-              <div className="flex items-center gap-2.5">
-                <h1 className="text-xl font-black text-text-primary tracking-tight">Dividir Cuenta</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-base sm:text-lg md:text-xl font-black text-text-primary tracking-tight">Dividir Cuenta</h1>
                 {activeTableName && (
-                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-primary/10 text-primary border border-primary/20">
+                  <span className="px-2 py-0.2 sm:px-2.5 sm:py-0.5 rounded-full text-[10px] sm:text-xs font-bold bg-primary/10 text-primary border border-primary/20">
                     Mesa: {activeTableName}
                   </span>
                 )}
               </div>
-              <p className="text-xs text-text-secondary mt-0.5">
+              <p className="text-[11px] sm:text-xs text-text-secondary mt-0.5">
                 Selecciona la modalidad para cobrar por partes independientes.
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-3 sm:gap-6">
             {/* Total Balance Indicator */}
             <div className="text-right">
-              <div className="text-[11px] font-bold text-text-secondary uppercase tracking-wider">
+              <div className="text-[10px] sm:text-[11px] font-bold text-text-secondary uppercase tracking-wider">
                 Saldo Restante / Total
               </div>
-              <div className="flex items-baseline gap-2">
-                <span className={`text-2xl font-black font-mono tracking-tight ${remainingTableBalance <= 0.01 ? 'text-emerald-400' : 'text-amber-400'}`}>
+              <div className="flex items-baseline gap-1.5 sm:gap-2">
+                <span className={`text-base sm:text-2xl font-black font-mono tracking-tight ${remainingTableBalance <= 0.01 ? 'text-emerald-400' : 'text-amber-400'}`}>
                   {baseCurrency.symbol} {remainingTableBalance.toFixed(2)}
                 </span>
-                <span className="text-xs font-bold text-text-secondary font-mono">
+                <span className="text-[10px] sm:text-xs font-bold text-text-secondary font-mono">
                   de {baseCurrency.symbol} {tableTotal.toFixed(2)}
                 </span>
               </div>
               {hasSecondary && (
-                <div className="text-[11px] text-text-secondary font-mono">
-                  ≈ {secondaryCurrency?.symbol} {(remainingTableBalance * exchangeRate).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {secondaryCurrency?.code}
+                <div className="hidden sm:block text-[10px] sm:text-[11px] text-text-secondary font-mono">
+                  ≈ {secondaryCurrency?.symbol} {(remainingTableBalance * exchangeRate).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
               )}
             </div>
@@ -379,9 +381,9 @@ export function SplitBillModal({ isOpen, onClose, onSuccess }: SplitBillModalPro
               <button
                 type="button"
                 onClick={onClose}
-                className="p-2.5 text-text-secondary hover:text-text-primary hover:bg-surface-raised rounded-2xl transition-colors cursor-pointer"
+                className="p-1.5 sm:p-2 text-text-secondary hover:text-text-primary hover:bg-surface-raised rounded-xl transition-colors cursor-pointer"
               >
-                <X className="w-6 h-6" />
+                <X className="w-5 h-5 sm:w-6 sm:h-6" />
               </button>
             )}
           </div>

@@ -260,25 +260,23 @@ export default function PosSessionPage() {
             <LogOut className="w-3.5 h-3.5" />
           </button>
         </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="w-full max-w-6xl mx-auto py-3 my-auto flex-1 flex flex-col justify-center overflow-hidden">
+      </header>      {/* Main Content */}
+      <main className="w-full max-w-5xl mx-auto py-2 my-auto flex-1 flex flex-col justify-center overflow-y-auto">
         {errorMsg && (
-          <div className="mb-3 p-3 rounded-xl bg-error/10 border border-error/20 text-error text-xs font-medium flex items-center gap-2 animate-in fade-in shrink-0">
+          <div className="mb-2 p-2.5 rounded-xl bg-error/10 border border-error/20 text-error text-xs font-medium flex items-center gap-2 animate-in fade-in shrink-0">
             <Coins className="w-3.5 h-3.5 shrink-0" />
             <span>{errorMsg}</span>
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-3.5 items-stretch">
           {/* Left Column (5 cols): Estación & Resumen */}
-          <div className="lg:col-span-5 flex flex-col justify-between gap-4">
+          <div className="md:col-span-5 flex flex-col justify-between gap-3">
             {/* Step 1: Estación de Trabajo */}
-            <section className="bg-surface border border-border rounded-2xl p-4 space-y-3 shadow-sm flex-1 flex flex-col justify-between">
+            <section className="bg-surface border border-border rounded-2xl p-3 sm:p-4 space-y-2.5 shadow-sm flex-1 flex flex-col justify-between">
               <div className="flex items-center justify-between">
                 <h2 className="text-xs font-bold uppercase tracking-wider text-text-secondary flex items-center gap-1.5">
-                  <MonitorCheck className="w-3.5 h-3.5 text-primary" /> 1. Estación de Trabajo (Caja)
+                  <MonitorCheck className="w-3.5 h-3.5 text-primary" /> 1. Estación de Trabajo
                 </h2>
                 <button
                   type="button"
@@ -292,7 +290,7 @@ export default function PosSessionPage() {
               {loadingStations ? (
                 <div className="space-y-2">
                   {[1, 2].map((i) => (
-                    <div key={i} className="h-14 rounded-xl bg-surface-raised animate-pulse" />
+                    <div key={i} className="h-12 rounded-xl bg-surface-raised animate-pulse" />
                   ))}
                 </div>
               ) : activeStations.length === 0 ? (
@@ -303,11 +301,11 @@ export default function PosSessionPage() {
                     onClick={() => router.push('/admin/sales/workstations')}
                     className="px-3 py-1 bg-primary text-text-inverse rounded-lg text-xs font-bold"
                   >
-                    Crear Estación en Admin
+                    Crear Estación
                   </button>
                 </div>
               ) : (
-                <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
+                <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1 custom-scrollbar">
                   {activeStations.map((station) => {
                     const isSelected = (selectedStationId || activeStations[0]?.id) === station.id
                     return (
@@ -315,20 +313,20 @@ export default function PosSessionPage() {
                         key={station.id}
                         type="button"
                         onClick={() => setSelectedStationId(station.id)}
-                        className={`w-full text-left p-2.5 rounded-xl border transition-all flex items-center justify-between gap-2.5 ${
+                        className={`w-full text-left p-2 rounded-xl border transition-all flex items-center justify-between gap-2 cursor-pointer ${
                           isSelected
                             ? 'bg-surface-raised border-primary ring-1 ring-primary/20 shadow-sm'
                             : 'bg-surface border-border hover:border-border-strong hover:bg-surface-raised/50'
                         }`}
                       >
-                        <div className="flex items-center gap-2.5">
-                          <div className={`p-1.5 rounded-lg ${isSelected ? 'bg-primary text-text-inverse' : 'bg-surface-raised text-text-secondary'}`}>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className={`p-1.5 rounded-lg shrink-0 ${isSelected ? 'bg-primary text-text-inverse' : 'bg-surface-raised text-text-secondary'}`}>
                             <MonitorCheck className="w-3.5 h-3.5" />
                           </div>
-                          <div>
-                            <h3 className="font-bold text-xs text-text-primary">{station.name}</h3>
-                            <p className="text-[10px] text-text-secondary">
-                              {station.allowed_modes?.length ? `${station.allowed_modes.length} modos disponibles` : 'Todos los modos'}
+                          <div className="min-w-0">
+                            <h3 className="font-bold text-xs text-text-primary truncate">{station.name}</h3>
+                            <p className="text-[10px] text-text-secondary truncate">
+                              {station.allowed_modes?.length ? `${station.allowed_modes.length} modos` : 'Todos'}
                             </p>
                           </div>
                         </div>
@@ -340,22 +338,18 @@ export default function PosSessionPage() {
               )}
             </section>
 
-              {/* Final Action Box */}
-            <div className="bg-surface border border-border rounded-2xl p-4 space-y-3 shadow-sm">
-              <div className="space-y-1.5">
+            {/* Final Action Box */}
+            <div className="bg-surface border border-border rounded-2xl p-3 sm:p-3.5 space-y-2.5 shadow-sm">
+              <div className="space-y-1">
                 <div className="flex justify-between items-center text-xs text-text-secondary">
-                  <span>Caja a operar:</span>
-                  <strong className="text-text-primary">{currentStation?.name || 'Caja Principal'}</strong>
+                  <span>Caja:</span>
+                  <strong className="text-text-primary truncate max-w-[140px]">{currentStation?.name || 'Caja Principal'}</strong>
                 </div>
                 <div className="flex justify-between items-center text-xs text-text-secondary">
-                  <span>Fondo inicial:</span>
-                  <strong className="text-emerald-500 font-mono text-sm font-bold">
+                  <span>Fondo:</span>
+                  <strong className="text-emerald-500 font-mono text-xs font-bold">
                     {currencies.find(c => c.code === currencyCode)?.symbol || baseCurrency.symbol}{parseFloat(openingBalance || '0').toFixed(2)} {currencyCode}
                   </strong>
-                </div>
-                <div className="flex justify-between items-center text-xs text-text-secondary">
-                  <span>Cajero:</span>
-                  <span className="text-text-primary">{profile?.full_name || 'Cajero activo'}</span>
                 </div>
               </div>
 
@@ -363,7 +357,7 @@ export default function PosSessionPage() {
                 type="button"
                 onClick={() => handleStartSession()}
                 disabled={isSubmitting || (activeStations.length === 0 && !loadingStations)}
-                className="w-full py-3 rounded-xl bg-primary text-text-inverse font-bold text-xs hover:bg-primary-hover transition-all shadow-md shadow-primary/20 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 cursor-pointer"
+                className="w-full py-2.5 rounded-xl bg-primary text-text-inverse font-bold text-xs hover:bg-primary-hover transition-all shadow-md shadow-primary/20 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 cursor-pointer"
               >
                 <span>{isSubmitting ? 'Abriendo Caja...' : 'Abrir Caja e Iniciar Turno'}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
@@ -372,28 +366,28 @@ export default function PosSessionPage() {
           </div>
 
           {/* Right Column (7 cols): Teclado Numérico & Fondo Inicial */}
-          <div className="lg:col-span-7">
-            <section className="bg-surface border border-border rounded-2xl p-4 sm:p-5 space-y-3 shadow-sm">
+          <div className="md:col-span-7">
+            <section className="bg-surface border border-border rounded-2xl p-3 sm:p-4 space-y-2.5 shadow-sm">
               <div>
                 <h2 className="text-xs font-bold uppercase tracking-wider text-text-secondary flex items-center gap-1.5">
-                  <Banknote className="w-3.5 h-3.5 text-primary" /> 2. Fondo de Efectivo Inicial (Base de Caja)
+                  <Banknote className="w-3.5 h-3.5 text-primary" /> 2. Fondo de Efectivo Inicial
                 </h2>
               </div>
 
               {/* Display Box */}
-              <div className="bg-surface-raised border border-border focus-within:border-primary rounded-2xl p-3 transition-all flex flex-col items-center justify-center text-center gap-1.5">
+              <div className="bg-surface-raised border border-border focus-within:border-primary rounded-2xl p-2.5 transition-all flex flex-col items-center justify-center text-center gap-1">
                 <div className="flex items-center justify-center gap-1.5 w-full">
-                  <span className="text-2xl sm:text-3xl font-black text-primary">
+                  <span className="text-xl sm:text-2xl font-black text-primary">
                     {currencies.find(c => c.code === currencyCode)?.symbol || baseCurrency.symbol}
                   </span>
-                  <span className="text-3xl sm:text-4xl font-black text-text-primary tracking-tight font-mono">
+                  <span className="text-2xl sm:text-3xl font-black text-text-primary tracking-tight font-mono">
                     {openingBalance || '0'}
                   </span>
                   {currencies.length > 1 && (
                     <select
                       value={currencyCode}
                       onChange={(e) => setCurrencyCode(e.target.value)}
-                      className="ml-2 px-2.5 py-1 bg-surface border border-border rounded-lg text-xs font-bold text-text-primary focus:outline-none focus:ring-1 focus:ring-primary/20 cursor-pointer"
+                      className="ml-2 px-2 py-0.5 bg-surface border border-border rounded-lg text-xs font-bold text-text-primary focus:outline-none focus:ring-1 focus:ring-primary/20 cursor-pointer"
                     >
                       {currencies.map(c => (
                         <option key={c.id} value={c.code}>{c.code} ({c.symbol})</option>
@@ -409,7 +403,7 @@ export default function PosSessionPage() {
                       key={amt}
                       type="button"
                       onClick={() => handleQuickAmount(amt)}
-                      className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold border transition-all active:scale-95 ${
+                      className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-all active:scale-95 cursor-pointer ${
                         parseFloat(openingBalance) === amt
                           ? 'bg-primary text-text-inverse border-primary shadow-sm'
                           : 'bg-surface text-text-secondary border-border hover:bg-surface-raised hover:text-text-primary'
@@ -421,22 +415,22 @@ export default function PosSessionPage() {
                 </div>
               </div>
 
-              {/* On-Screen Touch Keypad (Compact scale) */}
-              <div className="grid grid-cols-3 gap-2 max-w-sm mx-auto pt-1">
+              {/* Responsive Keypad Grid */}
+              <div className="grid grid-cols-3 gap-1.5 pt-0.5">
                 {['1', '2', '3', '4', '5', '6', '7', '8', '9', 'C', '0', '.'].map((key) => {
-                  const isAction = key === 'C'
+                  const isClear = key === 'C'
                   return (
                     <button
                       key={key}
                       type="button"
                       onClick={() => handleKeypadPress(key)}
-                      className={`h-11 sm:h-12 rounded-xl text-base font-bold border transition-all active:scale-90 flex items-center justify-center select-none shadow-xs ${
-                        isAction
-                          ? 'bg-error/10 text-error border-error/20 hover:bg-error/20 text-xs font-black'
-                          : 'bg-surface-raised text-text-primary border-border hover:bg-surface-raised/80 hover:border-primary/50'
+                      className={`py-2 sm:py-3 rounded-xl font-bold text-sm sm:text-base border transition-all active:scale-95 cursor-pointer flex items-center justify-center shadow-xs ${
+                        isClear
+                          ? 'bg-error/10 text-error border-error/20 hover:bg-error hover:text-white'
+                          : 'bg-surface text-text-primary border-border hover:bg-surface-raised hover:border-border-strong'
                       }`}
                     >
-                      {key === 'C' ? 'Limpiar (C)' : key}
+                      {key}
                     </button>
                   )
                 })}

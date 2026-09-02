@@ -53,6 +53,10 @@ next-env.d.ts
 *.swp
 *.swo
 
+# Tools
+graphify-out/
+**/graphify-out/
+
 # Project specific
 backend/.data/
 backend/migrations/*.db

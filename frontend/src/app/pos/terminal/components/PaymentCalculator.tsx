@@ -293,14 +293,14 @@ export function PaymentCalculator({
   }
 
   return (
-    <div className="flex-1 flex overflow-hidden">
-      {/* Left panel: Payment Methods List (38%) */}
-      <div className="w-[38%] border-r border-border bg-surface-raised/30 flex flex-col p-6 space-y-4">
+    <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+      {/* Left panel: Payment Methods List (34%-38%) */}
+      <div className="w-full md:w-[36%] lg:w-[34%] border-b md:border-b-0 md:border-r border-border bg-surface flex flex-col p-3 sm:p-4 space-y-3 shrink-0">
         <div className="flex items-center justify-between">
           <button
             type="button"
             onClick={onBack}
-            className="flex items-center gap-1.5 text-xs font-bold text-text-secondary hover:text-text-primary px-3 py-1.5 rounded-xl hover:bg-surface-raised transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 text-xs font-bold text-text-secondary hover:text-text-primary px-2.5 py-1.5 rounded-xl hover:bg-surface-raised transition-colors cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Volver</span>
@@ -308,7 +308,7 @@ export function PaymentCalculator({
           <span className="text-xs font-bold text-text-secondary uppercase">Métodos de Pago</span>
         </div>
 
-        <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
           {methods.map((method) => {
             const IconComponent = METHOD_ICONS[method.method_type] || METHOD_ICONS.other
             const isSelected = selectedMethodId === method.id
@@ -325,32 +325,32 @@ export function PaymentCalculator({
                     setInputCurrencyCode(baseCurrency.code)
                   }
                 }}
-                className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all text-left cursor-pointer ${
+                className={`w-full flex items-center justify-between p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl border transition-all text-left cursor-pointer ${
                   isSelected
-                    ? 'bg-primary/10 border-primary text-text-primary shadow-lg shadow-primary/5 ring-1 ring-primary'
+                    ? 'bg-primary/10 border-primary text-text-primary shadow-md shadow-primary/5 ring-1 ring-primary'
                     : 'bg-surface border-border/80 text-text-secondary hover:text-text-primary hover:border-border hover:bg-surface-raised'
                 }`}
               >
-                <div className="flex items-center gap-3.5">
+                <div className="flex items-center gap-2.5 sm:gap-3">
                   <div
-                    className={`w-11 h-11 rounded-xl flex items-center justify-center border ${
+                    className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center border ${
                       isSelected
                         ? 'bg-primary text-black border-primary'
                         : 'bg-surface-raised text-text-secondary border-border'
                     }`}
                   >
-                    <IconComponent className="w-5 h-5" />
+                    <IconComponent className="w-4 h-4 sm:w-5 sm:h-5" />
                   </div>
                   <div>
-                    <h4 className="text-sm font-bold text-text-primary">{method.name}</h4>
-                    <span className="text-xs text-text-secondary capitalize">
+                    <h4 className="text-xs sm:text-sm font-bold text-text-primary">{method.name}</h4>
+                    <span className="text-[10px] sm:text-xs text-text-secondary capitalize">
                       {method.method_type.replace('_', ' ')}
                     </span>
                   </div>
                 </div>
 
                 <span
-                  className={`px-2 py-0.5 rounded-lg text-xs font-mono font-bold ${
+                  className={`px-1.5 sm:px-2 py-0.5 rounded-lg text-[10px] sm:text-xs font-mono font-bold ${
                     isSelected
                       ? 'bg-primary/20 text-primary border border-primary/30'
                       : 'bg-surface-raised text-text-secondary'
@@ -364,45 +364,45 @@ export function PaymentCalculator({
         </div>
       </div>
 
-      {/* Right panel: Calculator & Payments summary (62%) */}
-      <div className="flex-1 flex flex-col p-6 space-y-5 overflow-y-auto">
+      {/* Right panel: Calculator & Payments summary (64%-66%) */}
+      <div className="flex-1 flex flex-col p-3 sm:p-5 space-y-3 sm:space-y-4 overflow-y-auto">
         {/* Summary Bar */}
-        <div className="grid grid-cols-3 gap-4 p-4 bg-surface-raised border border-border rounded-2xl">
+        <div className="grid grid-cols-3 gap-2 sm:gap-4 p-2.5 sm:p-3.5 bg-surface-raised border border-border rounded-xl sm:rounded-2xl">
           <div>
-            <span className="text-[11px] font-bold text-text-secondary uppercase">Total Cuenta</span>
-            <div className="text-lg font-black text-text-primary font-mono tracking-tight mt-0.5">
+            <span className="text-[10px] sm:text-[11px] font-bold text-text-secondary uppercase">Total Cuenta</span>
+            <div className="text-base sm:text-lg font-black text-text-primary font-mono tracking-tight mt-0.5">
               {baseCurrency.symbol} {total.toFixed(2)}
             </div>
             {hasSecondary && (
-              <span className="text-[11px] text-text-secondary font-mono">
+              <span className="text-[10px] sm:text-[11px] text-text-secondary font-mono truncate block">
                 {secondaryCurrency?.symbol} {(total * exchangeRate).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             )}
           </div>
 
           <div>
-            <span className="text-[11px] font-bold text-text-secondary uppercase">Total Pagado</span>
-            <div className="text-lg font-black text-emerald-500 font-mono tracking-tight mt-0.5">
+            <span className="text-[10px] sm:text-[11px] font-bold text-text-secondary uppercase">Total Pagado</span>
+            <div className="text-base sm:text-lg font-black text-emerald-500 font-mono tracking-tight mt-0.5">
               {baseCurrency.symbol} {totalPaidBase.toFixed(2)}
             </div>
             {hasSecondary && (
-              <span className="text-[11px] text-emerald-500/80 font-mono">
+              <span className="text-[10px] sm:text-[11px] text-emerald-500/80 font-mono truncate block">
                 {secondaryCurrency?.symbol} {(totalPaidBase * exchangeRate).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             )}
           </div>
 
           <div>
-            <span className="text-[11px] font-bold text-text-secondary uppercase">Por Pagar</span>
+            <span className="text-[10px] sm:text-[11px] font-bold text-text-secondary uppercase">Por Pagar</span>
             <div
-              className={`text-lg font-black font-mono tracking-tight mt-0.5 ${
+              className={`text-base sm:text-lg font-black font-mono tracking-tight mt-0.5 ${
                 remainingBase <= 0.009 ? 'text-emerald-500' : 'text-amber-500'
               }`}
             >
               {baseCurrency.symbol} {remainingBase.toFixed(2)}
             </div>
             {hasSecondary && (
-              <span className="text-[11px] text-text-secondary font-mono">
+              <span className="text-[10px] sm:text-[11px] text-text-secondary font-mono truncate block">
                 {secondaryCurrency?.symbol} {remainingSecondary.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             )}

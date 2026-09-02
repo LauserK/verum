@@ -187,16 +187,27 @@ async def get_active_pos_session(org_id: str, workstation_id: Optional[str], db)
 
 # Categories
 async def list_sale_categories(org_id: str, db):
+    from app.cache import cache
+    cache_key = f"sales:catalog:{org_id}:categories"
+    cached = await cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     res = db.table("sale_categories").select("*").eq("org_id", org_id).order("position").execute()
-    return res.data or []
+    data = res.data or []
+    await cache.set(cache_key, data, ttl=3600)
+    return data
 
 async def create_sale_category(org_id: str, payload: SaleCategoryCreate, db):
+    from app.cache import invalidate_sales_catalog
     data = payload.model_dump()
     data["org_id"] = org_id
     res = db.table("sale_categories").insert(data).execute()
+    await invalidate_sales_catalog(org_id)
     return res.data[0]
 
 async def update_sale_category(org_id: str, category_id: str, payload: SaleCategoryUpdate, db):
+    from app.cache import invalidate_sales_catalog
     data = payload.model_dump(exclude_unset=True)
     if not data:
         res = db.table("sale_categories").select("*").eq("id", category_id).eq("org_id", org_id).execute()
@@ -206,6 +217,7 @@ async def update_sale_category(org_id: str, category_id: str, payload: SaleCateg
     res = db.table("sale_categories").update(data).eq("id", category_id).eq("org_id", org_id).execute()
     if not res.data:
         raise HTTPException(404, "Category not found")
+    await invalidate_sales_catalog(org_id)
     return res.data[0]
 
 # Modifiers
@@ -351,6 +363,12 @@ def _populate_item_relations(item: dict, all_categories: dict, all_taxes: dict, 
     return item
 
 async def list_sale_items(org_id: str, category_id: Optional[str], active_only: bool, db):
+    from app.cache import cache
+    cache_key = f"sales:catalog:{org_id}:items:{category_id or 'all'}:{str(active_only)}"
+    cached = await cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     query = db.table("sale_items").select("*").eq("org_id", org_id)
     if category_id:
         query = query.eq("category_id", category_id)
@@ -360,6 +378,7 @@ async def list_sale_items(org_id: str, category_id: Optional[str], active_only: 
     items_res = query.order("position").order("name").execute()
     raw_items = items_res.data or []
     if not raw_items:
+        await cache.set(cache_key, [], ttl=3600)
         return []
 
     item_ids = [item["id"] for item in raw_items]
@@ -421,6 +440,7 @@ async def list_sale_items(org_id: str, category_id: Optional[str], active_only: 
         )
         result.append(populated)
 
+    await cache.set(cache_key, result, ttl=3600)
     return result
 
 async def get_sale_item(item_id: str, org_id: str, db):
@@ -763,6 +783,12 @@ async def cascade_sale_items_cost_from_inventory(db, org_id: str, item_id: str):
 # --- Floor Plans & Tables ---
 
 async def list_floor_plans(org_id: str, venue_id: Optional[str] = None, db: Any = None):
+    from app.cache import cache
+    cache_key = f"sales:floor_plans:{org_id}:{venue_id or 'all'}"
+    cached = await cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     query = db.table("floor_plans").select("*").eq("org_id", org_id)
     if venue_id:
         query = query.eq("venue_id", str(venue_id))
@@ -770,6 +796,7 @@ async def list_floor_plans(org_id: str, venue_id: Optional[str] = None, db: Any 
     plans = res.data or []
 
     if not plans:
+        await cache.set(cache_key, [], ttl=3600)
         return []
 
     plan_ids = [p["id"] for p in plans]
@@ -785,6 +812,7 @@ async def list_floor_plans(org_id: str, venue_id: Optional[str] = None, db: Any 
     for p in plans:
         p["tables"] = tables_by_plan.get(str(p["id"]), [])
 
+    await cache.set(cache_key, plans, ttl=3600)
     return plans
 
 async def get_floor_plan(org_id: str, plan_id: str, db: Any = None):
@@ -798,6 +826,7 @@ async def get_floor_plan(org_id: str, plan_id: str, db: Any = None):
     return plan
 
 async def create_floor_plan(org_id: str, payload: FloorPlanCreate, db: Any = None):
+    from app.cache import invalidate_floor_plans
     data = payload.model_dump(mode="json")
     data["org_id"] = org_id
     res = db.table("floor_plans").insert(data).execute()
@@ -805,9 +834,11 @@ async def create_floor_plan(org_id: str, payload: FloorPlanCreate, db: Any = Non
         raise HTTPException(400, "Could not create floor plan")
     plan = res.data[0]
     plan["tables"] = []
+    await invalidate_floor_plans(org_id)
     return plan
 
 async def update_floor_plan(org_id: str, plan_id: str, payload: FloorPlanUpdate, db: Any = None):
+    from app.cache import invalidate_floor_plans
     update_data = payload.model_dump(mode="json", exclude_unset=True)
 
     if not update_data:
@@ -820,13 +851,17 @@ async def update_floor_plan(org_id: str, plan_id: str, payload: FloorPlanUpdate,
 
     tables_res = db.table("tables").select("*").eq("floor_plan_id", plan_id).execute()
     plan["tables"] = tables_res.data or []
+    await invalidate_floor_plans(org_id)
     return plan
 
 async def delete_floor_plan(org_id: str, plan_id: str, db: Any = None):
+    from app.cache import invalidate_floor_plans
     res = db.table("floor_plans").delete().eq("id", plan_id).eq("org_id", org_id).execute()
+    await invalidate_floor_plans(org_id)
     return {"status": "deleted"}
 
 async def create_table(org_id: str, plan_id: str, payload: TableCreate, db: Any = None):
+    from app.cache import invalidate_floor_plans
     # Verify plan belongs to org
     plan_res = db.table("floor_plans").select("id").eq("id", plan_id).eq("org_id", org_id).execute()
     if not plan_res.data:
@@ -837,9 +872,11 @@ async def create_table(org_id: str, plan_id: str, payload: TableCreate, db: Any 
     res = db.table("tables").insert(data).execute()
     if not res.data:
         raise HTTPException(400, "Could not create table")
+    await invalidate_floor_plans(org_id)
     return res.data[0]
 
 async def update_table(org_id: str, table_id: str, payload: TableUpdate, db: Any = None):
+    from app.cache import invalidate_floor_plans
     update_data = payload.model_dump(mode="json", exclude_unset=True)
     if not update_data:
         res = db.table("tables").select("*").eq("id", table_id).execute()
@@ -850,10 +887,13 @@ async def update_table(org_id: str, table_id: str, payload: TableUpdate, db: Any
     res = db.table("tables").update(update_data).eq("id", table_id).execute()
     if not res.data:
         raise HTTPException(404, "Table not found")
+    await invalidate_floor_plans(org_id)
     return res.data[0]
 
 async def delete_table(org_id: str, table_id: str, db: Any = None):
+    from app.cache import invalidate_floor_plans
     res = db.table("tables").delete().eq("id", table_id).execute()
+    await invalidate_floor_plans(org_id)
     return {"status": "deleted"}
 
 # ── Sale Mode Config CRUD ──
@@ -943,7 +983,7 @@ async def list_active_table_orders(org_id: str, venue_id: Optional[str] = None, 
     if cached is not None:
         return cached
 
-    query = db.table("pos_table_orders").select("*").eq("org_id", org_id).eq("status", "active")
+    query = db.table("pos_table_orders").select("*").eq("org_id", org_id).in_("status", ["active", "pre_bill"])
     if venue_id:
         query = query.eq("venue_id", str(venue_id))
     res = query.order("updated_at", desc=True).execute()
@@ -955,7 +995,7 @@ async def list_active_table_orders(org_id: str, venue_id: Optional[str] = None, 
 
 
 async def get_active_table_order(org_id: str, table_id: str, db: Any = None):
-    res = db.table("pos_table_orders").select("*").eq("org_id", org_id).eq("table_id", str(table_id)).eq("status", "active").limit(1).execute()
+    res = db.table("pos_table_orders").select("*").eq("org_id", org_id).eq("table_id", str(table_id)).in_("status", ["active", "pre_bill"]).limit(1).execute()
     return res.data[0] if res.data else None
 
 
@@ -972,9 +1012,10 @@ async def sync_table_order(org_id: str, user_id: str, payload: Any, db: Any = No
     )
     cart = payload.cart or []
     total = float(payload.total or 0)
+    status = getattr(payload, "status", None) or "active"
 
-    # 1. If cart is empty or cleared, mark cancelled / clear active order
-    if not cart or total <= 0:
+    # 1. If explicitly marked cancelled/cleared, cancel active order
+    if status in ["cancelled", "cleared"]:
         query = db.table("pos_table_orders").update({
             "status": "cancelled",
             "updated_at": "now()"
@@ -1041,6 +1082,10 @@ async def sync_table_order(org_id: str, user_id: str, payload: Any, db: Any = No
             "workstation_id": str(payload.workstation_id) if payload.workstation_id else None,
             "updated_at": "now()",
         }
+        if payload.assigned_to is not None:
+            update_data["assigned_to"] = str(payload.assigned_to) if payload.assigned_to else None
+        if payload.status:
+            update_data["status"] = payload.status
         res = db.table("pos_table_orders").update(update_data).eq("id", order_id).execute()
         saved = res.data[0] if res.data else update_data
     else:
@@ -1058,8 +1103,9 @@ async def sync_table_order(org_id: str, user_id: str, payload: Any, db: Any = No
             "total": total,
             "order_number": payload.order_number,
             "workstation_id": str(payload.workstation_id) if payload.workstation_id else None,
+            "assigned_to": str(payload.assigned_to) if payload.assigned_to else None,
             "created_by": str(user_id) if user_id else None,
-            "status": "active",
+            "status": payload.status or "active",
         }
         res = db.table("pos_table_orders").insert(insert_data).execute()
         saved = res.data[0] if res.data else insert_data

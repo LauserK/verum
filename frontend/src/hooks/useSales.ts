@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { salesApi, Customer, CreateInvoicePayload, TenantBillingConfig, PaymentMethod, Tax, FloorPlan, TableItem, Workstation } from '@/lib/api/sales'
+import { settingsApi } from '@/lib/api/settings'
 
 export const salesKeys = {
     all: ['sales'] as const,
@@ -24,6 +25,9 @@ export function useCategories() {
     return useQuery({
         queryKey: salesKeys.categories(),
         queryFn: salesApi.getSaleCategories,
+        staleTime: 1000 * 60 * 60 * 2, // 2 hour cache for instantaneous POS rendering
+        gcTime: 1000 * 60 * 60 * 4,
+        refetchOnWindowFocus: false,
     })
 }
 
@@ -33,6 +37,9 @@ export function useSalesItems(categoryId?: string, activeOnly: boolean = true) {
     return useQuery({
         queryKey: salesKeys.items(categoryId, activeOnly),
         queryFn: () => salesApi.getSaleItems(categoryId === 'all' ? undefined : categoryId, activeOnly),
+        staleTime: 1000 * 60 * 60 * 2, // 2 hour cache for instantaneous POS rendering
+        gcTime: 1000 * 60 * 60 * 4,
+        refetchOnWindowFocus: false,
     })
 }
 
@@ -43,6 +50,9 @@ export function useCustomers() {
     return useQuery({
         queryKey: salesKeys.customers(),
         queryFn: salesApi.getCustomers,
+        staleTime: 1000 * 60 * 30,
+        gcTime: 1000 * 60 * 60,
+        refetchOnWindowFocus: false,
     })
 }
 
@@ -239,8 +249,9 @@ export function useFloorPlans(venueId?: string) {
     return useQuery({
         queryKey: salesKeys.floorPlans(venueId),
         queryFn: () => salesApi.getFloorPlans(venueId),
-        staleTime: 1000 * 60 * 30, // 30 min cache to avoid double loading and flickering
-        gcTime: 1000 * 60 * 60,
+        staleTime: 1000 * 60 * 60 * 2, // 2 hour cache for fast table rendering
+        gcTime: 1000 * 60 * 60 * 4,
+        refetchOnWindowFocus: false,
     })
 }
 
@@ -606,5 +617,20 @@ export function useCheckout() {
         },
     })
 }
+
+// ── Team Users / Waiters ──
+
+export function useTeamUsers() {
+    return useQuery({
+        queryKey: ['team', 'users'],
+        queryFn: () => settingsApi.getUsers(),
+        staleTime: Infinity,
+        gcTime: 1000 * 60 * 60 * 24,
+        refetchOnMount: false,
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
+    })
+}
+
 
 

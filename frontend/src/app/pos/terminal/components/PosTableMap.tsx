@@ -18,13 +18,14 @@ import {
   RotateCw
 } from 'lucide-react'
 import { useVenue } from '@/components/VenueContext'
-import { useFloorPlans, useTableOrders, useWorkstations } from '@/hooks/useSales'
+import { useFloorPlans, useTableOrders, useWorkstations, useSyncTableOrder, usePosConfig, useTeamUsers } from '@/hooks/useSales'
 import { usePosStore } from '@/store/posStore'
 import { TableContextMenu } from './TableContextMenu'
 import { TransferModal } from './TransferModal'
 import { MergeModal } from './MergeModal'
 import { AssignWaiterModal } from './AssignWaiterModal'
 import { PreBillPreview } from './PreBillPreview'
+import { OpenTableModal } from './OpenTableModal'
 import { TableItem, TableOrder } from '@/lib/api/sales'
 
 export default function PosTableMap() {
@@ -32,6 +33,7 @@ export default function PosTableMap() {
   const { 
     activeTableId, 
     setActiveTable, 
+    openTableOrder,
     loadTableOrder, 
     cartsByContext, 
     cart, 
@@ -45,6 +47,17 @@ export default function PosTableMap() {
 
   const { data: floorPlans = [], isLoading } = useFloorPlans(currentVenueId || undefined)
   const { data: serverTableOrders = [], refetch: refetchOrders } = useTableOrders(currentVenueId || undefined)
+  const { data: teamUsers = [] } = useTeamUsers()
+  const { data: posConfig } = usePosConfig(activeWorkstationId || undefined, 'tables')
+  const syncTableOrderMutation = useSyncTableOrder()
+
+  const [openTableModalState, setOpenTableModalState] = useState<{
+    isOpen: boolean
+    table: TableItem | null
+  }>({
+    isOpen: false,
+    table: null,
+  })
 
   const [selectedPlanId, setSelectedPlanId] = useState<string>('')
 
@@ -109,19 +122,85 @@ export default function PosTableMap() {
     return tables
   }, [floorPlans])
 
-  const handleSelectTable = (tableId: string, tableName: string) => {
-    const serverOrder = serverOrdersMap.get(tableId)
-    if (serverOrder && Array.isArray(serverOrder.cart) && serverOrder.cart.length > 0) {
-      loadTableOrder(tableId, tableName, {
-        cart: serverOrder.cart,
-        total: Number(serverOrder.total) || 0,
-        customerId: serverOrder.customer_id || null,
-        customerName: serverOrder.customer_name || null,
-        customerTaxId: serverOrder.customer_tax_id || null,
-      })
+  const handleSelectTable = (table: TableItem) => {
+    const serverOrder = serverOrdersMap.get(table.id)
+    const tableCtx = cartsByContext[`table:${table.id}`]
+    const isOccupied = Boolean(
+      (serverOrder && (serverOrder.status === 'active' || serverOrder.status === 'pre_bill')) ||
+      (tableCtx && (tableCtx.isOpen || (tableCtx.cart && tableCtx.cart.length > 0)))
+    )
+
+    if (isOccupied) {
+      if (serverOrder) {
+        loadTableOrder(table.id, serverOrder.tab_name || serverOrder.table_name || table.name, {
+          cart: serverOrder.cart || [],
+          total: Number(serverOrder.total) || 0,
+          customerId: serverOrder.customer_id || null,
+          customerName: serverOrder.customer_name || null,
+          customerTaxId: serverOrder.customer_tax_id || null,
+          customName: serverOrder.tab_name || null,
+          assignedTo: serverOrder.assigned_to || null,
+          guestsCount: (serverOrder as any).guests_count || null,
+          isOpen: true,
+        })
+      } else if (tableCtx) {
+        loadTableOrder(table.id, tableCtx.customName || table.name, {
+          ...tableCtx,
+          isOpen: true,
+        })
+      } else {
+        setActiveTable(table.id, table.name)
+      }
     } else {
-      setActiveTable(tableId, tableName)
+      // Table is free - Open modal to start service
+      setOpenTableModalState({
+        isOpen: true,
+        table,
+      })
     }
+  }
+
+  const handleConfirmOpenTable = async (data: {
+    customName?: string | null
+    customerId?: string | null
+    customerName?: string | null
+    customerTaxId?: string | null
+    assignedTo?: string | null
+    assignedToName?: string | null
+    guestsCount?: number
+  }) => {
+    const table = openTableModalState.table
+    if (!table) return
+
+    // 1. Open in local POS store
+    openTableOrder(table.id, table.name, data)
+
+    // 2. Sync active order in backend
+    try {
+      await syncTableOrderMutation.mutateAsync({
+        tableId: table.id,
+        data: {
+          venue_id: currentVenueId || null,
+          mode: 'tables',
+          table_id: table.id,
+          table_name: table.name,
+          tab_name: data.customName || table.name,
+          customer_id: data.customerId || null,
+          customer_name: data.customerName || null,
+          customer_tax_id: data.customerTaxId || null,
+          assigned_to: data.assignedTo || null,
+          cart: [],
+          total: 0,
+          workstation_id: activeWorkstationId || null,
+          status: 'active',
+        }
+      })
+      refetchOrders()
+    } catch (e) {
+      console.warn('Backend sync on table open (offline fallback):', e)
+    }
+
+    setOpenTableModalState({ isOpen: false, table: null })
   }
 
   // Right-click context menu trigger
@@ -213,17 +292,27 @@ export default function PosTableMap() {
           <div className="grid grid-cols-4 gap-2.5">
             {Array.from({ length: 8 }).map((_, i) => {
               const tableId = `quick-table-${i + 1}`
-              const tableNum = `Mesa ${i + 1}`
+const tableNum = `Mesa ${i + 1}`
               const serverOrder = serverOrdersMap.get(tableId)
               const tableCtx = cartsByContext[`table:${tableId}`]
               const hasItems = (serverOrder && Array.isArray(serverOrder.cart) && serverOrder.cart.length > 0) || (tableCtx?.cart?.length || 0) > 0 || (activeTableId === tableId && cart.length > 0)
               const tableTotal = activeTableId === tableId ? total : (serverOrder ? Number(serverOrder.total) : (tableCtx?.total || 0))
               const isPreBill = serverOrder?.status === 'pre_bill'
-
               return (
                 <button
                   key={i}
-                  onClick={() => handleSelectTable(tableId, tableNum)}
+                  onClick={() => handleSelectTable({
+                    id: tableId,
+                    name: tableNum,
+                    floor_plan_id: 'quick',
+                    x: 0,
+                    y: 0,
+                    width: 80,
+                    height: 80,
+                    shape: 'rectangle',
+                    capacity: 4,
+                    is_active: true
+                  })}
                   className={`p-3.5 rounded-2xl border transition-all text-center flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-95 shadow-sm min-h-[48px] ${
                     isPreBill
                       ? 'bg-amber-400/20 border-amber-400 text-amber-600 dark:text-amber-300'
@@ -307,7 +396,7 @@ export default function PosTableMap() {
             <Utensils className="w-8 h-8 text-text-secondary mx-auto mb-2 opacity-50" />
             <h4 className="font-bold text-sm text-text-primary">Salón sin mesas</h4>
             <p className="text-xs text-text-secondary mt-1">
-              No hay mesas configuradas en {currentPlan?.name}.
+              No hay mesas configuradas en {currentPlan?.name || 'este salón'}.
             </p>
           </div>
         ) : (
@@ -325,7 +414,11 @@ export default function PosTableMap() {
               const isCircle = table.shape === 'circle'
               const serverOrder = serverOrdersMap.get(table.id)
               const tableCtx = cartsByContext[`table:${table.id}`]
-              const hasItems = (serverOrder && Array.isArray(serverOrder.cart) && serverOrder.cart.length > 0) || (tableCtx?.cart?.length || 0) > 0 || (isSelected && cart.length > 0)
+              const isOccupied = Boolean(
+                (serverOrder && (serverOrder.status === 'active' || serverOrder.status === 'pre_bill')) ||
+                (tableCtx && (tableCtx.isOpen || (tableCtx.cart && tableCtx.cart.length > 0))) ||
+                (isSelected && cart.length > 0)
+              )
               const tableTotal = isSelected ? total : (serverOrder ? Number(serverOrder.total) : (tableCtx?.total || 0))
               const isPreBill = serverOrder?.status === 'pre_bill'
 
@@ -333,13 +426,16 @@ export default function PosTableMap() {
               const itemCount = cartList.reduce((s: number, i: any) => s + (Number(i.quantity) || 1), 0)
               const hasKitchenItems = cartList.some((i: any) => i.sentToKitchen === true)
 
-              const elapsedDisplay = formatElapsedTime(serverOrder?.opened_at || serverOrder?.created_at)
+              const elapsedDisplay = formatElapsedTime(serverOrder?.opened_at || tableCtx?.openedAt || serverOrder?.created_at)
               const preBillTimer = formatElapsedTime(serverOrder?.pre_bill_requested_at)
+              const tableDisplayName = serverOrder?.tab_name || tableCtx?.customName || table.name
+              const assignedWaiterId = serverOrder?.assigned_to || tableCtx?.assignedTo
+              const assignedWaiter = teamUsers.find((u) => u.id === assignedWaiterId)
 
               return (
                 <button
                   key={table.id}
-                  onClick={() => handleSelectTable(table.id, table.name)}
+                  onClick={() => handleSelectTable(table)}
                   onContextMenu={(e) => handleContextMenu(e, table)}
                   onTouchStart={(e) => handleTouchStart(e, table)}
                   onTouchEnd={handleTouchEnd}
@@ -356,7 +452,7 @@ export default function PosTableMap() {
                       ? 'bg-primary text-text-inverse ring-4 ring-primary/30 border-2 border-primary shadow-lg shadow-primary/30 scale-105 z-10'
                       : isPreBill
                       ? 'bg-amber-400/25 border-2 border-amber-400 text-amber-500 shadow-amber-400/20 shadow-md ring-2 ring-amber-400/30'
-                      : hasItems
+                      : isOccupied
                       ? 'bg-amber-500/15 border-2 border-amber-500/70 text-amber-500 hover:bg-amber-500/25 hover:border-amber-500 hover:shadow-lg'
                       : 'bg-surface border-2 border-emerald-500/40 hover:border-emerald-500 hover:bg-emerald-500/5 hover:shadow-lg'
                   }`}
@@ -364,10 +460,10 @@ export default function PosTableMap() {
                   {/* Top badges (Elapsed time / Kitchen Bell / Pre-bill tag) */}
                   <div className="w-full flex items-center justify-between px-1 shrink-0">
                     {/* Elapsed Time Ticker */}
-                    {hasItems && !isSelected ? (
+                    {isOccupied && !isSelected ? (
                       <span className="text-[9px] font-mono font-bold opacity-80 flex items-center gap-0.5">
                         <Clock className="w-2.5 h-2.5" />
-                        {isPreBill ? `Pre: ${preBillTimer || '0m'}` : (elapsedDisplay || '1m')}
+                        {isPreBill ? `Pre: ${preBillTimer || '0m'}` : (elapsedDisplay || '0m')}
                       </span>
                     ) : (
                       <div className="flex items-center gap-0.5 text-[9px] text-emerald-600 dark:text-emerald-400 font-bold">
@@ -383,8 +479,8 @@ export default function PosTableMap() {
                           <Bell className="w-2.5 h-2.5 fill-black" />
                         </span>
                       )}
-                      {serverOrder?.assigned_to && !isSelected && (
-                        <span className="w-4 h-4 rounded-full bg-sky-500/20 text-sky-500 border border-sky-500/40 flex items-center justify-center text-[8px] font-bold" title="Mesero asignado">
+                      {assignedWaiter && !isSelected && (
+                        <span className="w-4 h-4 rounded-full bg-sky-500/20 text-sky-500 border border-sky-500/40 flex items-center justify-center text-[8px] font-bold" title={`Mesero: ${assignedWaiter.full_name}`}>
                           <User className="w-2.5 h-2.5" />
                         </span>
                       )}
@@ -394,13 +490,13 @@ export default function PosTableMap() {
                   {/* Table Name */}
                   <div className="my-auto flex flex-col items-center">
                     <span className={`font-black text-xs sm:text-sm tracking-tight leading-tight line-clamp-1 ${
-                      isSelected ? 'text-text-inverse' : isPreBill ? 'text-amber-500 font-black' : hasItems ? 'text-amber-500 font-black' : 'text-text-primary'
+                      isSelected ? 'text-text-inverse' : isPreBill ? 'text-amber-500 font-black' : isOccupied ? 'text-amber-500 font-black' : 'text-text-primary'
                     }`}>
-                      {table.name}
+                      {tableDisplayName}
                     </span>
 
                     {/* Live Accumulated Amount or Capacity */}
-                    {hasItems && !isSelected ? (
+                    {isOccupied && !isSelected ? (
                       <span className="text-[10px] font-mono font-black text-amber-500 mt-0.5">
                         ${tableTotal.toFixed(2)}
                       </span>
@@ -418,9 +514,9 @@ export default function PosTableMap() {
                       <span className="px-1.5 py-0.2 rounded-full bg-amber-400 text-black font-black uppercase text-[8px]">
                         Cuenta Pedida
                       </span>
-                    ) : hasItems && !isSelected ? (
-                      <span className="text-[9px] opacity-70">
-                        {itemCount} {itemCount === 1 ? 'ítem' : 'ítems'}
+                    ) : isOccupied && !isSelected ? (
+                      <span className="text-[9px] opacity-80">
+                        {itemCount > 0 ? `${itemCount} ${itemCount === 1 ? 'ítem' : 'ítems'}` : 'En servicio'}
                       </span>
                     ) : (
                       <span className="text-[9px] opacity-60">
@@ -439,32 +535,49 @@ export default function PosTableMap() {
       <div className="shrink-0 px-6 py-3 bg-surface/80 backdrop-blur-md border-t border-border/70 flex items-center justify-between text-xs text-text-secondary">
         <div className="flex items-center gap-2">
           <MapPin className="w-3.5 h-3.5 text-primary" />
-          <span>Sede: <strong className="text-text-primary">{selectedVenueName || 'Sede Principal'}</strong></span>
-          <span className="text-border mx-1">|</span>
-          <span>Salón: <strong className="text-text-primary">{currentPlan?.name || 'Salón'}</strong></span>
-        </div>
-        <div className="flex items-center gap-3 text-xs">
-          <span className="hidden md:inline text-text-secondary">
-            Clic derecho o mantén presionado para opciones de mesa
+          <span className="font-semibold text-text-primary">
+            {selectedVenueName || 'Sucursal Principal'}
           </span>
-          <div className="flex items-center gap-1 text-primary font-bold">
-            <span>Toca una mesa para comanda</span>
-            <ArrowRight className="w-3.5 h-3.5" />
+          <span className="text-text-secondary">·</span>
+          <span>{currentPlan?.name || 'Salón Principal'}</span>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1.5">
+            <span className="font-mono font-bold text-text-primary">
+              {currentTables.length}
+            </span>
+            <span>mesas totales</span>
           </div>
+          <span className="text-text-secondary">·</span>
+          <div className="flex items-center gap-1.5">
+            <span className="font-mono font-bold text-amber-500">
+              {serverOrdersMap.size}
+            </span>
+            <span>activas</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => refetchOrders()}
+            className="p-1 hover:bg-surface-raised rounded-lg text-text-secondary hover:text-text-primary transition-colors cursor-pointer ml-1"
+            title="Refrescar estado de mesas"
+          >
+            <RotateCw className="w-3.5 h-3.5" />
+          </button>
         </div>
       </div>
 
-      {/* Context Menu */}
+      {/* Table Right-Click / Long-Press Context Menu */}
       {contextMenuState.isOpen && contextMenuState.table && (
         <TableContextMenu
           isOpen={contextMenuState.isOpen}
-          onClose={() => setContextMenuState((prev) => ({ ...prev, isOpen: false }))}
+          position={contextMenuState.position}
           table={contextMenuState.table}
           order={contextMenuState.order}
-          position={contextMenuState.position}
+          onClose={() => setContextMenuState((prev) => ({ ...prev, isOpen: false }))}
           onOpenOrder={() => {
             if (contextMenuState.table) {
-              handleSelectTable(contextMenuState.table.id, contextMenuState.table.name)
+              handleSelectTable(contextMenuState.table)
             }
           }}
           onTransfer={() => {
@@ -489,10 +602,23 @@ export default function PosTableMap() {
           }}
           onCheckout={() => {
             if (contextMenuState.table) {
-              handleSelectTable(contextMenuState.table.id, contextMenuState.table.name)
+              handleSelectTable(contextMenuState.table)
               setShowCheckout(true)
             }
           }}
+        />
+      )}
+
+      {/* Open Table Modal */}
+      {openTableModalState.isOpen && openTableModalState.table && (
+        <OpenTableModal
+          isOpen={openTableModalState.isOpen}
+          onClose={() => setOpenTableModalState({ isOpen: false, table: null })}
+          table={openTableModalState.table}
+          customerRequirement={(posConfig?.customer_requirement as any) || 'optional'}
+          teamUsers={teamUsers}
+          onConfirm={handleConfirmOpenTable}
+          isSubmitting={syncTableOrderMutation.isPending}
         />
       )}
 
@@ -529,11 +655,7 @@ export default function PosTableMap() {
           tableId={selectedTableForAction.id}
           tableName={selectedTableForAction.name}
           currentWaiterId={selectedOrderForAction?.assigned_to}
-          waiters={[
-            { id: 'waiter-1', full_name: 'Carlos Mesero' },
-            { id: 'waiter-2', full_name: 'María Atención' },
-            { id: 'waiter-3', full_name: 'José Salonero' },
-          ]}
+          waiters={teamUsers.map((u) => ({ id: u.id, full_name: u.full_name }))}
           onSuccess={() => refetchOrders()}
         />
       )}

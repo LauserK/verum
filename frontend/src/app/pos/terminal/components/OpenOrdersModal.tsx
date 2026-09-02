@@ -25,11 +25,15 @@ import { useVenue } from '@/components/VenueContext'
 interface OpenOrdersModalProps {
   isOpen: boolean
   onClose: () => void
+  venueId?: string | null
+  orders?: TableOrder[]
 }
 
-export function OpenOrdersModal({ isOpen, onClose }: OpenOrdersModalProps) {
+export function OpenOrdersModal({ isOpen, onClose, venueId, orders: passedOrders }: OpenOrdersModalProps) {
   const { selectedVenueId } = useVenue()
-  const { data: openOrders = [], isLoading, refetch, isRefetching } = useTableOrders(selectedVenueId || undefined)
+  const effectiveVenueId = venueId !== undefined ? venueId : selectedVenueId
+  const { data: fetchedOrders = [], isLoading, refetch, isRefetching } = useTableOrders(effectiveVenueId || undefined)
+  const openOrders = passedOrders || fetchedOrders
   const deleteOrderMutation = useDeleteTableOrder()
   const { loadTableOrder, setPosMode } = usePosStore()
 
@@ -38,7 +42,7 @@ export function OpenOrdersModal({ isOpen, onClose }: OpenOrdersModalProps) {
 
   // Filter active orders
   const activeOrders = useMemo(() => {
-    return openOrders.filter((o) => o.status === 'active')
+    return openOrders.filter((o) => o.status === 'active' || o.status === 'pre_bill')
   }, [openOrders])
 
   const filteredOrders = useMemo(() => {
@@ -219,7 +223,7 @@ export function OpenOrdersModal({ isOpen, onClose }: OpenOrdersModalProps) {
 
         {/* Orders List Area */}
         <div className="flex-1 overflow-y-auto p-5 bg-bg space-y-3">
-          {isLoading ? (
+          {isLoading && openOrders.length === 0 ? (
             <div className="py-16 text-center text-xs text-text-secondary flex flex-col items-center justify-center">
               <RefreshCw className="w-6 h-6 text-primary animate-spin mb-2" />
               <span>Consultando comandas abiertas...</span>

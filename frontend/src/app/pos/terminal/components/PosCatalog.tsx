@@ -145,7 +145,7 @@ export default function PosCatalog() {
       .sort((a, b) => (a.position || 0) - (b.position || 0))
   }, [categories])
 
-  const isLoading = isLoadingCategories || isLoadingItems
+  const isInitialLoading = (isLoadingCategories || isLoadingItems) && items.length === 0 && categories.length === 0
 
   return (
     <div className="flex flex-col h-full w-full bg-bg overflow-hidden">
@@ -200,20 +200,20 @@ export default function PosCatalog() {
             <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
               selectedCategoryId === 'all' ? 'bg-black/20 text-text-inverse' : 'bg-surface-raised text-text-secondary'
             }`}>
-              {items.filter(i => i.is_active).length}
+              {items.filter((i) => i.is_active).length}
             </span>
           </button>
 
           {activeCategories.map((category) => {
             const isSelected = selectedCategoryId === category.id
-            const Icon = getCategoryIcon(category.icon)
-            const count = items.filter((i) => i.is_active && i.category_id === category.id).length
+            const Icon = getCategoryIcon(category.icon || category.name)
+            const count = items.filter((i) => i.category_id === category.id && i.is_active).length
 
             return (
               <button
                 key={category.id}
                 onClick={() => setSelectedCategory(category.id)}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold shrink-0 transition-all duration-200 cursor-pointer ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold shrink-0 transition-all duration-200 cursor-pointer ${
                   isSelected
                     ? 'bg-primary text-text-inverse shadow-md shadow-primary/25 ring-2 ring-primary/30 scale-[1.02]'
                     : 'bg-surface border border-border text-text-secondary hover:text-text-primary hover:border-primary/40 hover:bg-surface-raised'
@@ -236,7 +236,7 @@ export default function PosCatalog() {
 
       {/* Product Grid Area */}
       <div className="flex-1 overflow-y-auto p-4 md:p-5">
-        {isLoading ? (
+        {isInitialLoading ? (
           // Loading Skeleton Grid
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
             {Array.from({ length: 15 }).map((_, idx) => (

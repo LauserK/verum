@@ -634,6 +634,7 @@ export interface CheckoutPayload {
     is_partial?: boolean
     seat_label?: string | null
     covered_item_ids?: string[] | null
+    idempotency_key?: string | null
 }
 
 export interface PartialTableInvoiceResponse {

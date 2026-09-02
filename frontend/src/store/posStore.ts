@@ -30,6 +30,12 @@ export interface PosCartContext {
   customerId: string | null
   customerName: string | null
   customerTaxId: string | null
+  customName?: string | null
+  assignedTo?: string | null
+  assignedToName?: string | null
+  guestsCount?: number | null
+  isOpen?: boolean
+  openedAt?: string | null
 }
 
 export interface PosState {
@@ -49,6 +55,10 @@ export interface PosState {
   customerId: string | null
   customerName: string | null
   customerTaxId: string | null
+  customName?: string | null
+  assignedTo?: string | null
+  assignedToName?: string | null
+  guestsCount?: number | null
   showCheckout: boolean
   showCustomerSelector: boolean
   cartsByContext: Record<string, PosCartContext>
@@ -56,6 +66,19 @@ export interface PosState {
 
   setPosMode: (mode: PosMode) => void
   setActiveTable: (id: string | null, name?: string | null) => void
+  openTableOrder: (
+    id: string,
+    name: string,
+    options?: {
+      customName?: string | null
+      customerId?: string | null
+      customerName?: string | null
+      customerTaxId?: string | null
+      assignedTo?: string | null
+      assignedToName?: string | null
+      guestsCount?: number | null
+    }
+  ) => void
   loadTableOrder: (id: string, name: string, data: PosCartContext) => void
   setActiveWorkstation: (id: string | null, name?: string | null) => void
   setSessionOpening: (balance: number, currency: string, sessionId?: string | null) => void
@@ -254,6 +277,65 @@ export const usePosStore = create<PosState>()(
         })
       },
 
+      openTableOrder: (id: string, name: string, options = {}) => {
+        set((state) => {
+          // 1. Save previous active table if needed
+          const prevKey = getContextKey(state.posMode, state.activeTableId)
+          const updatedCarts = { ...state.cartsByContext }
+          if (prevKey !== 'tables:map') {
+            const prevCtx = updatedCarts[prevKey]
+            updatedCarts[prevKey] = {
+              cart: state.cart,
+              total: state.total,
+              seats: prevCtx?.seats,
+              customerId: state.customerId,
+              customerName: state.customerName,
+              customerTaxId: state.customerTaxId,
+              customName: prevCtx?.customName,
+              assignedTo: prevCtx?.assignedTo,
+              assignedToName: prevCtx?.assignedToName,
+              guestsCount: prevCtx?.guestsCount,
+              isOpen: prevCtx?.isOpen,
+              openedAt: prevCtx?.openedAt,
+            }
+          }
+
+          const currentKey = `table:${id}`
+          const orderData: PosCartContext = {
+            cart: [],
+            total: 0,
+            seats: [],
+            customerId: options.customerId || null,
+            customerName: options.customerName || null,
+            customerTaxId: options.customerTaxId || null,
+            customName: options.customName || null,
+            assignedTo: options.assignedTo || null,
+            assignedToName: options.assignedToName || null,
+            guestsCount: options.guestsCount || null,
+            isOpen: true,
+            openedAt: new Date().toISOString(),
+          }
+          updatedCarts[currentKey] = orderData
+
+          return {
+            posMode: 'tables',
+            activeTableId: id,
+            activeTableName: options.customName || name,
+            cartsByContext: updatedCarts,
+            cart: [],
+            total: 0,
+            customerId: orderData.customerId,
+            customerName: orderData.customerName,
+            customerTaxId: orderData.customerTaxId,
+            customName: orderData.customName,
+            assignedTo: orderData.assignedTo,
+            assignedToName: orderData.assignedToName,
+            guestsCount: orderData.guestsCount,
+            activeSeatId: null,
+          }
+        })
+      },
+
       loadTableOrder: (id: string, name: string, data: PosCartContext) => {
         set((state) => {
           const currentKey = `table:${id}`
@@ -263,18 +345,23 @@ export const usePosStore = create<PosState>()(
           const orderData: PosCartContext = {
             ...data,
             seats,
+            isOpen: true,
           }
           const updatedCarts = { ...state.cartsByContext, [currentKey]: orderData }
           return {
             posMode: 'tables',
             activeTableId: id,
-            activeTableName: name,
+            activeTableName: data.customName || name,
             cartsByContext: updatedCarts,
             cart: orderData.cart || [],
             total: orderData.total || 0,
             customerId: orderData.customerId || null,
             customerName: orderData.customerName || null,
             customerTaxId: orderData.customerTaxId || null,
+            customName: orderData.customName || null,
+            assignedTo: orderData.assignedTo || null,
+            assignedToName: orderData.assignedToName || null,
+            guestsCount: orderData.guestsCount || null,
             activeSeatId: seats.length > 0 ? seats[0].id : null,
           }
         })

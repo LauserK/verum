@@ -736,6 +736,7 @@ class CheckoutCreate(BaseModel):
     is_partial: bool = False
     seat_label: Optional[str] = None
     covered_item_ids: Optional[List[str]] = None
+    idempotency_key: Optional[str] = None
 
 class CheckoutResponse(BaseModel):
     invoice: dict
@@ -840,6 +841,7 @@ class SplitCheckoutCreate(BaseModel):
     is_partial: bool = False
     seat_label: Optional[str] = None
     covered_item_ids: Optional[List[str]] = None
+    idempotency_key: Optional[str] = None
 
 class TransferRequest(BaseModel):
     source_table_id: str
