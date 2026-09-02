@@ -1,4 +1,4 @@
-from datetime import datetime
+﻿from datetime import datetime
 from fastapi import HTTPException
 from app.sales.schemas import CheckoutCreate
 from app.sales.service import resolve_pos_config
@@ -45,158 +45,116 @@ async def process_checkout(org_id: str, payload: CheckoutCreate, user_id: str, d
         if cr == "required" and not payload.customer_id and not payload.customer_name:
             raise HTTPException(400, "CUSTOMER_REQUIRED")
 
-    # 3. Validate session
-    session_res = db.table("pos_sessions").select("id, status").eq(
-        "id", str(payload.pos_session_id)
-    ).eq("org_id", org_id).eq("status", "open").execute()
-    if not session_res.data:
-        raise HTTPException(400, "SESSION_NOT_ACTIVE")
+        # 3. Validate session
+        session_res = db.table("pos_sessions").select("id, status").eq(
+            "id", str(payload.pos_session_id)
+        ).eq("org_id", org_id).eq("status", "open").execute()
+        if not session_res.data:
+            raise HTTPException(400, "SESSION_NOT_ACTIVE")
 
-    # 4. Resolve customer
-    customer_name = "Cliente General"
-    customer_id = None
-    customer_tax_id = None
-    if payload.customer_id:
-        cust_res = db.table("customers").select("id, name, tax_id").eq(
-            "id", str(payload.customer_id)
-        ).eq("org_id", org_id).execute()
-        if cust_res.data:
-            customer_name = cust_res.data[0]["name"]
-            customer_id = str(payload.customer_id)
-            customer_tax_id = cust_res.data[0].get("tax_id")
-    elif payload.customer_name:
-        customer_name = payload.customer_name
-    # 4.4 Resolve real venue_id if not valid
-    venue_id_to_use = None
-    if payload.venue_id and str(payload.venue_id) != "00000000-0000-0000-0000-000000000000":
-        venue_id_to_use = str(payload.venue_id)
-    else:
-        ws_res = db.table("workstations").select("venue_id").eq("id", str(payload.workstation_id)).execute()
-        if ws_res.data and ws_res.data[0].get("venue_id"):
-            venue_id_to_use = str(ws_res.data[0]["venue_id"])
+        # 4. Resolve customer
+        customer_name = "Cliente General"
+        customer_id = None
+        customer_tax_id = None
+        if payload.customer_id:
+            cust_res = db.table("customers").select("id, name, tax_id").eq(
+                "id", str(payload.customer_id)
+            ).eq("org_id", org_id).execute()
+            if cust_res.data:
+                customer_name = cust_res.data[0]["name"]
+                customer_id = str(payload.customer_id)
+                customer_tax_id = cust_res.data[0].get("tax_id")
+        elif payload.customer_name:
+            customer_name = payload.customer_name
+
+        # 4.4 Resolve real venue_id if not valid
+        venue_id_to_use = None
+        if payload.venue_id and str(payload.venue_id) != "00000000-0000-0000-0000-000000000000":
+            venue_id_to_use = str(payload.venue_id)
         else:
-            ven_res = db.table("venues").select("id").eq("org_id", org_id).execute()
-            if ven_res.data:
-                venue_id_to_use = str(ven_res.data[0]["id"])
-
-    # 4.5 Resolve table_order_id if applicable (must reference a valid pos_table_orders.id)
-    table_order_id = None
-    if payload.table_order_id:
-        try:
-            t_check = db.table("pos_table_orders").select("id").eq("org_id", org_id).eq("id", str(payload.table_order_id)).limit(1).execute()
-            if t_check.data:
-                table_order_id = str(t_check.data[0]["id"])
-        except Exception:
-            pass
-
-    if not table_order_id and payload.table_id:
-        try:
-            t_res = db.table("pos_table_orders").select("id").eq("org_id", org_id).eq("table_id", str(payload.table_id)).in_("status", ["active", "pre_bill"]).order("created_at", desc=True).limit(1).execute()
-            if t_res.data:
-                table_order_id = str(t_res.data[0]["id"])
+            ws_res = db.table("workstations").select("venue_id").eq("id", str(payload.workstation_id)).execute()
+            if ws_res.data and ws_res.data[0].get("venue_id"):
+                venue_id_to_use = str(ws_res.data[0]["venue_id"])
             else:
-                t_res2 = db.table("pos_table_orders").select("id").eq("org_id", org_id).eq("id", str(payload.table_id)).limit(1).execute()
-                if t_res2.data:
-                    table_order_id = str(t_res2.data[0]["id"])
+                ven_res = db.table("venues").select("id").eq("org_id", org_id).execute()
+                if ven_res.data:
+                    venue_id_to_use = str(ven_res.data[0]["id"])
+
+        # 4.5 Resolve table_order_id if applicable (must reference a valid pos_table_orders.id)
+        table_order_id = None
+        if payload.table_order_id:
+            try:
+                t_check = db.table("pos_table_orders").select("id").eq("org_id", org_id).eq("id", str(payload.table_order_id)).limit(1).execute()
+                if t_check.data:
+                    table_order_id = str(t_check.data[0]["id"])
+            except Exception:
+                pass
+
+        if not table_order_id and payload.table_id:
+            try:
+                t_res = db.table("pos_table_orders").select("id").eq("org_id", org_id).eq("table_id", str(payload.table_id)).in_("status", ["active", "pre_bill"]).order("created_at", desc=True).limit(1).execute()
+                if t_res.data:
+                    table_order_id = str(t_res.data[0]["id"])
                 else:
-                    # Auto-provision active pos_table_orders entry so invoices.table_order_id FK is valid
-                    items_json = [i.model_dump() if hasattr(i, "model_dump") else i for i in payload.items]
-                    cart_sum = sum(float(i.unit_price) * int(i.quantity) for i in payload.items)
-                    new_to = db.table("pos_table_orders").insert({
-                        "org_id": org_id,
-                        "venue_id": venue_id_to_use,
-                        "mode": payload.mode or "tables",
-                        "table_id": str(payload.table_id),
-                        "table_name": payload.customer_name or f"Mesa {payload.table_id}",
-                        "tab_name": f"Mesa {payload.table_id}",
-                        "cart": items_json,
-                        "total": cart_sum,
-                        "order_number": 1,
-                        "workstation_id": str(payload.workstation_id) if payload.workstation_id else None,
-                        "created_by": str(user_id) if user_id else None,
-                        "status": "active",
-                        "opened_at": "now()"
-                    }).execute()
-                    if new_to.data:
-                        table_order_id = str(new_to.data[0]["id"])
-        except Exception as e:
-            print(f"[CHECKOUT] Error resolving/creating pos_table_orders: {e}")
+                    t_res2 = db.table("pos_table_orders").select("id").eq("org_id", org_id).eq("id", str(payload.table_id)).limit(1).execute()
+                    if t_res2.data:
+                        table_order_id = str(t_res2.data[0]["id"])
+            except Exception:
+                pass
 
-    # 4.6 Check for existing partial invoice for this table order (whether this payment is partial or the final settling payment)
-    existing_invoice = None
-    if table_order_id:
-        try:
-            inv_query = db.table("invoices").select("*").eq("org_id", org_id).eq("table_order_id", str(table_order_id)).eq("status", "partial").order("created_at", desc=True).limit(1).execute()
-            if inv_query.data:
-                existing_invoice = inv_query.data[0]
-        except Exception:
-            pass
-
-
-    if existing_invoice:
-        invoice = existing_invoice
-        invoice_id = invoice["id"]
-        this_payment_total = sum(p.amount * p.exchange_rate for p in payload.payments)
-        prev_paid = float(invoice.get("amount_paid") or 0)
-        amount_paid = prev_paid + float(this_payment_total)
-        total_amount = float(invoice.get("total") or 0)
-        balance_due = max(0.0, round(total_amount - amount_paid, 2))
-        status = "paid" if balance_due <= 0.01 else "partial"
-
-        db.table("invoices").update({
-            "amount_paid": amount_paid,
-            "balance_due": balance_due,
-            "status": status,
-            "updated_at": "now()"
-        }).eq("id", invoice_id).execute()
-
-        invoice["amount_paid"] = amount_paid
-        invoice["balance_due"] = balance_due
-        invoice["status"] = status
-    else:
-        # 5. Calculate totals
-        sale_item_ids = [str(item.sale_item_id) for item in payload.items]
-        items_res = db.table("sale_items").select("id, name").in_("id", sale_item_ids).execute()
-        item_names = {i["id"]: i["name"] for i in items_res.data}
-        
+        # 5. Calculate and snapshot items (Batch fetch tax rates & item names)
+        tax_ids = [str(item.tax_id) for item in payload.items if item.tax_id]
+        item_ids = [str(item.sale_item_id) for item in payload.items]
         variant_ids = [str(item.variant_id) for item in payload.items if item.variant_id]
+
+        tax_rates_map = {}
+        if tax_ids:
+            taxes_res = db.table("taxes").select("id, rate, name").in_("id", list(set(tax_ids))).execute()
+            if taxes_res.data:
+                tax_rates_map = {t["id"]: t for t in taxes_res.data}
+
+        item_names = {}
+        if item_ids:
+            items_res = db.table("sale_items").select("id, name").in_("id", list(set(item_ids))).execute()
+            if items_res.data:
+                item_names = {i["id"]: i["name"] for i in items_res.data}
+
         variant_names = {}
         if variant_ids:
-            var_res = db.table("sale_item_variants").select("id, name").in_("id", variant_ids).execute()
-            variant_names = {v["id"]: v["name"] for v in var_res.data}
+            var_res = db.table("sale_item_variants").select("id, name").in_("id", list(set(variant_ids))).execute()
+            if var_res.data:
+                variant_names = {v["id"]: v["name"] for v in var_res.data}
 
-        tax_ids = [str(item.tax_id) for item in payload.items if item.tax_id]
-        taxes_dict = {}
-        if tax_ids:
-            tax_res = db.table("taxes").select("id, name, rate").in_("id", tax_ids).execute()
-            taxes_dict = {t["id"]: t for t in tax_res.data}
-
-        subtotal = 0
-        total_tax = 0
-        total_exempt = 0
-        total_taxable = 0
         invoice_items = []
-        
+        subtotal = 0.0
+        total_tax = 0.0
+        total_exempt = 0.0
+        total_taxable = 0.0
+
         for item in payload.items:
-            line_sub = item.quantity * item.unit_price
-            discount_amt = line_sub * (item.discount_pct / 100) if item.discount_pct else 0
-            line_total_net = line_sub - discount_amt
-            
-            tax_name = None
-            tax_rate = 0.0
-            is_exempt = True
-            
-            if item.tax_id and str(item.tax_id) in taxes_dict:
-                tax = taxes_dict[str(item.tax_id)]
-                tax_name = tax["name"]
-                tax_rate = float(tax["rate"])
-                is_exempt = False
-                
-            line_tax = line_total_net * tax_rate
-            line_total = line_total_net + line_tax
-            
+            line_raw = float(item.unit_price) * item.quantity
+            discount_amt = 0.0
+            if item.discount_pct > 0:
+                discount_amt = line_raw * (float(item.discount_pct) / 100.0)
+            elif item.discount_amount > 0:
+                discount_amt = float(item.discount_amount)
+
+            line_total_net = line_raw - discount_amt
             subtotal += line_total_net
-            total_tax += line_tax
+
+            line_tax = 0.0
+            tax_rate = 0.0
+            tax_name = None
+            is_exempt = True
+
+            if item.tax_id and str(item.tax_id) in tax_rates_map:
+                tax_obj = tax_rates_map[str(item.tax_id)]
+                tax_rate = float(tax_obj["rate"])
+                tax_name = tax_obj["name"]
+                is_exempt = False
+                line_tax = line_total_net * (tax_rate / 100.0)
+                total_tax += line_tax
+
             if is_exempt:
                 total_exempt += line_total_net
             else:
@@ -250,42 +208,34 @@ async def process_checkout(org_id: str, payload: CheckoutCreate, user_id: str, d
                 }).execute()
                 doc_number = f"{prefix}00000001"
             else:
-                cur = seq_res.data[0]
-                nxt = cur.get("next_number", 1)
-                pfx = cur.get("prefix", "INV-")
-                pad = cur.get("padding", 8)
-                db.table("document_sequences").update({"next_number": nxt + 1}).eq("id", cur["id"]).execute()
-                doc_number = f"{pfx}{str(nxt).zfill(pad)}"
+                seq = seq_res.data[0]
+                prefix = seq.get("prefix", "")
+                next_num = seq.get("next_number", 1)
+                padding = seq.get("padding", 8)
+                doc_number = f"{prefix}{str(next_num).zfill(padding)}"
+                db.table("document_sequences").update({
+                    "next_number": next_num + 1
+                }).eq("id", seq["id"]).execute()
 
-        if not doc_number:
-            doc_number = f"INV-{int(datetime.now().timestamp())}"
+        # 7. Calculate amount paid & balance
+        amount_paid = sum(float(p.amount) for p in payload.payments)
+        balance_due = max(0.0, total_amount - amount_paid)
 
-        # 7. Calculate payments
-        amount_paid = sum(p.amount * (p.exchange_rate or 1.0) for p in payload.payments)
-        balance_due = max(0.0, round(float(total_amount) - float(amount_paid), 2))
-
-        is_cxc = balance_due > 0.01 and not payload.is_partial
-        if is_cxc and not customer_id:
-            raise HTTPException(400, "CXC_REQUIRES_CUSTOMER")
-
+        # 8. Determine status
         if payload.is_partial:
-            status = "paid" if balance_due <= 0.01 else "partial"
+            status = "partial"
+        elif balance_due <= 0.009:
+            status = "paid"
+        elif amount_paid > 0:
+            status = "partial"
         else:
-            status = "paid" if balance_due <= 0.01 else "partial" if amount_paid > 0 else "confirmed"
+            status = "pending"
 
-
-
-        # 8. Resolve real venue_id if not valid
-        venue_id_to_use = None
-        if payload.venue_id and str(payload.venue_id) != "00000000-0000-0000-0000-000000000000":
-            venue_id_to_use = str(payload.venue_id)
-        else:
-            # Check workstation's venue_id
+        if not venue_id_to_use:
             ws_res = db.table("workstations").select("venue_id").eq("id", str(payload.workstation_id)).execute()
             if ws_res.data and ws_res.data[0].get("venue_id"):
                 venue_id_to_use = str(ws_res.data[0]["venue_id"])
             else:
-                # Check active venue for org
                 ven_res = db.table("venues").select("id").eq("org_id", org_id).execute()
                 if ven_res.data:
                     venue_id_to_use = str(ven_res.data[0]["id"])
@@ -316,7 +266,6 @@ async def process_checkout(org_id: str, payload: CheckoutCreate, user_id: str, d
         if table_order_id:
             invoice_data["table_order_id"] = str(table_order_id)
 
-
         inv_res = db.table("invoices").insert(invoice_data).execute()
         if not inv_res.data:
             raise HTTPException(500, "SEQUENCE_ERROR")
@@ -330,118 +279,123 @@ async def process_checkout(org_id: str, payload: CheckoutCreate, user_id: str, d
         if invoice_items:
             db.table("invoice_items").insert(invoice_items).execute()
 
-    # 10. Insert payments
-    from app.sales.service import get_payment_methods
-    cached_pms = await get_payment_methods(org_id, db)
-    pm_map = {str(pm["id"]): pm for pm in cached_pms} if cached_pms else {}
+        # 10. Insert payments
+        from app.sales.service import get_payment_methods
+        cached_pms = await get_payment_methods(org_id, db)
+        pm_map = {str(pm["id"]): pm for pm in cached_pms} if cached_pms else {}
 
-    for p in payload.payments:
-        # Snapshot payment method
-        pm = pm_map.get(str(p.payment_method_id))
-        if not pm:
-            pm_res = db.table("payment_methods").select("name, method_type").eq(
-                "id", str(p.payment_method_id)
-            ).eq("org_id", org_id).execute()
-            if not pm_res.data:
-                raise HTTPException(400, "INVALID_PAYMENT_METHOD")
-            pm = pm_res.data[0]
+        for p in payload.payments:
+            # Snapshot payment method
+            pm = pm_map.get(str(p.payment_method_id))
+            if not pm:
+                pm_res = db.table("payment_methods").select("name, method_type").eq(
+                    "id", str(p.payment_method_id)
+                ).eq("org_id", org_id).execute()
+                if not pm_res.data:
+                    raise HTTPException(400, "INVALID_PAYMENT_METHOD")
+                pm = pm_res.data[0]
 
-        seat_label = getattr(p, "seat_label", None) or payload.seat_label
-        covered_items = getattr(p, "covered_items", None) or payload.covered_item_ids
+            seat_label = getattr(p, "seat_label", None) or payload.seat_label
+            covered_items = getattr(p, "covered_items", None) or payload.covered_item_ids
 
-        payment_data = {
-            "invoice_id": invoice_id,
-            "payment_method_id": str(p.payment_method_id),
-            "method_name": pm["name"],
-            "method_type": pm["method_type"],
-            "amount": float(p.amount),
-            "currency_code": p.currency_code,
-            "exchange_rate": float(p.exchange_rate),
-            "amount_in_invoice_currency": float(p.amount * p.exchange_rate),
-            "reference": p.reference,
-            "cash_tendered": float(p.cash_tendered) if p.cash_tendered else None,
-            "status": "completed",
-            "recorded_by": user_id,
-            "seat_label": seat_label,
-            "covered_items": covered_items,
-        }
-
-        # Register change on cash payment
-        if p.cash_tendered and p.cash_tendered > p.amount and payload.change:
-            payment_data["cash_change"] = float(payload.change.amount)
-            payment_data["change_currency"] = payload.change.currency_code
-            payment_data["change_method"] = payload.change.method
-
-        db.table("payments").insert(payment_data).execute()
-
-    # 11. Update customer outstanding balance for CXC
-    if not payload.is_partial and (balance_due > 0.01) and customer_id:
-        try:
-            db.rpc("increment_customer_balance", {
-                "p_customer_id": customer_id,
-                "p_amount": float(balance_due)
+            db.table("payments").insert({
+                "invoice_id": invoice_id,
+                "pos_session_id": str(payload.pos_session_id),
+                "payment_method_id": str(p.payment_method_id),
+                "payment_method_name": pm["name"],
+                "payment_method_type": pm["method_type"],
+                "amount": float(p.amount),
+                "currency_code": p.currency_code,
+                "exchange_rate": float(p.exchange_rate),
+                "reference": p.reference,
+                "seat_label": seat_label,
+                "covered_items": covered_items,
             }).execute()
 
+        # 10.5 Insert change record if given
+        if payload.change:
+            pm_c_res = db.table("payment_methods").select("name").eq(
+                "id", str(payload.change.payment_method_id)
+            ).execute()
+            c_name = pm_c_res.data[0]["name"] if pm_c_res.data else "Efectivo"
+            db.table("changes").insert({
+                "invoice_id": invoice_id,
+                "payment_method_id": str(payload.change.payment_method_id),
+                "payment_method_name": c_name,
+                "amount": float(payload.change.amount),
+                "currency_code": payload.change.currency_code,
+                "exchange_rate": float(payload.change.exchange_rate),
+            }).execute()
 
-        except Exception:
-            # Fallback direct update to customers table (current_balance)
+        # 11. Customer balance update if CXC (status pending or balance due)
+        if customer_id and balance_due > 0:
             try:
-                c_res = db.table("customers").select("current_balance").eq("id", customer_id).execute()
-                if c_res.data:
-                    curr = float(c_res.data[0].get("current_balance") or 0)
-                    db.table("customers").update({
-                        "current_balance": curr + float(balance_due)
-                    }).eq("id", customer_id).execute()
-            except Exception as e:
-                print(f"[CHECKOUT] Customer balance update error: {e}")
+                db.rpc("increment_customer_balance", {
+                    "p_customer_id": customer_id,
+                    "p_amount": float(balance_due)
+                }).execute()
+            except Exception:
+                # Fallback direct update to customers table (current_balance)
+                try:
+                    c_res = db.table("customers").select("current_balance").eq("id", customer_id).execute()
+                    if c_res.data:
+                        curr = float(c_res.data[0].get("current_balance") or 0)
+                        db.table("customers").update({
+                            "current_balance": curr + float(balance_due)
+                        }).eq("id", customer_id).execute()
+                except Exception as e:
+                    print(f"[CHECKOUT] Customer balance update error: {e}")
 
-    # 12. Finalize based on invoice status
-    if status == "paid":
-        # 12.1 Mark table order as billed
-        if table_order_id or payload.table_id:
-            try:
-                if table_order_id:
-                    db.table("pos_table_orders").update({
-                        "status": "billed",
-                        "updated_at": "now()"
-                    }).eq("org_id", org_id).eq("id", str(table_order_id)).execute()
-                if payload.table_id:
-                    db.table("pos_table_orders").update({
-                        "status": "billed",
-                        "updated_at": "now()"
-                    }).eq("org_id", org_id).eq("table_id", str(payload.table_id)).in_("status", ["active", "pre_bill"]).execute()
-                from app.cache import invalidate_table_orders
-                await invalidate_table_orders(org_id)
-            except Exception as te:
-                print(f"[CHECKOUT] Error freeing table order: {te}")
+        # 12. Finalize based on invoice status
+        if status == "paid":
+            # 12.1 Mark table order as billed
+            if table_order_id or payload.table_id:
+                try:
+                    if table_order_id:
+                        db.table("pos_table_orders").update({
+                            "status": "billed",
+                            "updated_at": "now()"
+                        }).eq("org_id", org_id).eq("id", str(table_order_id)).execute()
+                    if payload.table_id:
+                        db.table("pos_table_orders").update({
+                            "status": "billed",
+                            "updated_at": "now()"
+                        }).eq("org_id", org_id).eq("table_id", str(payload.table_id)).in_("status", ["active", "pre_bill"]).execute()
+                    from app.cache import invalidate_table_orders
+                    await invalidate_table_orders(org_id)
+                except Exception as te:
+                    print(f"[CHECKOUT] Error freeing table order: {te}")
 
-        # 12.2 Deduct inventory
-        if warehouse_id:
-            try:
-                from app.sales.inventory_deduction import deduct_inventory_for_invoice
-                user_mock = type('User', (), {'id': user_id})()
-                await deduct_inventory_for_invoice(org_id, invoice_id, str(warehouse_id), user_mock, db)
-            except Exception as e:
-                print(f"[CHECKOUT] Inventory deduction warning: {e}")
+            # 12.2 Deduct inventory
+            if warehouse_id:
+                try:
+                    from app.sales.inventory_deduction import deduct_inventory_for_invoice
+                    user_mock = type('User', (), {'id': user_id})()
+                    await deduct_inventory_for_invoice(org_id, invoice_id, str(warehouse_id), user_mock, db)
+                except Exception as e:
+                    print(f"[CHECKOUT] Inventory deduction warning: {e}")
 
-        # 12.3 Release Redis reservations
-        item_ids = [str(item.sale_item_id) for item in payload.items]
-        await release_session_reservations(str(warehouse_id), str(payload.pos_session_id), item_ids)
-    elif payload.is_partial and status == "partial":
-        # Leave table order open, mark payment_pending = True
-        if table_order_id or payload.table_id:
-            try:
-                if table_order_id:
-                    db.table("pos_table_orders").update({
-                        "payment_pending": True,
-                        "updated_at": "now()"
-                    }).eq("org_id", org_id).eq("id", str(table_order_id)).execute()
-                if payload.table_id:
-                    db.table("pos_table_orders").update({
-                        "payment_pending": True,
-                        "updated_at": "now()"
-                    }).eq("org_id", org_id).eq("table_id", str(payload.table_id)).in_("status", ["active", "pre_bill"]).execute()
-                from app.cache import invalidate_table_orders
+            # 12.3 Release Redis reservations
+            item_ids = [str(item.sale_item_id) for item in payload.items]
+            await release_session_reservations(str(warehouse_id), str(payload.pos_session_id), item_ids)
+        elif payload.is_partial and status == "partial":
+            # Leave table order open, mark payment_pending = True
+            if table_order_id or payload.table_id:
+                try:
+                    if table_order_id:
+                        db.table("pos_table_orders").update({
+                            "payment_pending": True,
+                            "updated_at": "now()"
+                        }).eq("org_id", org_id).eq("id", str(table_order_id)).execute()
+                    if payload.table_id:
+                        db.table("pos_table_orders").update({
+                            "payment_pending": True,
+                            "updated_at": "now()"
+                        }).eq("org_id", org_id).eq("table_id", str(payload.table_id)).in_("status", ["active", "pre_bill"]).execute()
+                    from app.cache import invalidate_table_orders
+                    await invalidate_table_orders(org_id)
+                except Exception as te:
+                    print(f"[CHECKOUT] Error updating table order partial: {te}")
     finally:
         # Release distributed lock
         if lock_key:
