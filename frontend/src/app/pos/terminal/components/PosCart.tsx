@@ -354,7 +354,7 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
   const ModeIcon = modeBadge.icon
   const modeText = posMode === 'tables' && activeTableName ? `Mesa ${activeTableName}` : modeBadge.label
 
-  // Helper function to render a single cart item card
+  // Helper function to render a single cart item card (Compact & responsive)
   const renderItemCard = (item: CartItem) => {
     const lineTotal = (Number(item.price) || 0) * (Number(item.quantity) || 0)
     const isSent = item.sentToKitchen === true
@@ -363,23 +363,23 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
     return (
       <div
         key={item.cartItemId}
-        className={`group relative rounded-2xl p-3 transition-all duration-150 flex flex-col gap-2 shadow-sm border ${
+        className={`group relative rounded-xl p-2 sm:p-2.5 transition-all duration-150 flex flex-col gap-1.5 shadow-xs border ${
           isSent
             ? 'bg-surface-raised/40 border-border/50 opacity-90'
             : 'bg-surface-raised/80 hover:bg-surface-raised border-border/80 hover:border-border'
         }`}
       >
-        {/* Item Header: Name, Sent Badge, Seat badge (in all view), Line Price */}
-        <div className="flex items-start justify-between gap-2">
+        {/* Item Header: Sent/Seat badge, Name & Line Total */}
+        <div className="flex items-start justify-between gap-1.5">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5 flex-wrap">
+            <div className="flex items-center gap-1 flex-wrap">
               {/* Sent to kitchen indicator badge */}
               {isSent && (
                 <span
-                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-primary/10 text-primary border border-primary/20"
+                  className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded text-[9px] font-bold bg-primary/10 text-primary border border-primary/20"
                   title="Enviado a cocina (bloqueado para edición directa)"
                 >
-                  <Check className="w-3 h-3 stroke-[2.5]" />
+                  <Check className="w-2.5 h-2.5 stroke-[2.5]" />
                   Enviado
                 </span>
               )}
@@ -389,49 +389,39 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
                 <button
                   type="button"
                   onClick={() => setMovingItem(item)}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-surface border border-border text-text-secondary hover:text-primary hover:border-primary/40 transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-bold bg-surface border border-border text-text-secondary hover:text-primary hover:border-primary/40 transition-colors cursor-pointer"
                   title="Mover item a otro asiento"
                 >
                   <ArrowRightLeft className="w-2.5 h-2.5" />
-                  <span>{assignedSeat ? assignedSeat.label : 'Sin Asiento'}</span>
+                  <span className="truncate max-w-[60px]">{assignedSeat ? assignedSeat.label : 'Sin Asiento'}</span>
                 </button>
               )}
             </div>
 
-            <h5 className="text-xs font-bold text-text-primary leading-tight line-clamp-2 mt-1">
+            <h5 className="text-[11px] sm:text-xs font-bold text-text-primary leading-snug line-clamp-2 mt-0.5">
               {item.name}
             </h5>
-            <p className="text-[11px] font-mono text-text-secondary mt-0.5">
-              {baseCurrency.symbol}{(Number(item.price) || 0).toFixed(2)} c/u
-            </p>
           </div>
 
-          <span className="text-xs font-black text-text-primary font-mono tracking-tight shrink-0">
+          <span className="text-[11px] sm:text-xs font-black text-text-primary font-mono tracking-tight shrink-0">
             {baseCurrency.symbol}{lineTotal.toFixed(2)}
           </span>
         </div>
 
         {/* Notes or Modifiers if any */}
         {item.notes && (
-          <div className="text-[10px] text-amber-500/90 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20 font-medium">
+          <div className="text-[9px] text-amber-500/90 bg-amber-500/10 px-1.5 py-0.2 rounded border border-amber-500/20 font-medium">
             Nota: {item.notes}
           </div>
         )}
 
-        {/* Quantity Controls Stepper */}
+        {/* Bottom Row: Unit Price + Quantity Stepper */}
         <div className="flex items-center justify-between pt-1 border-t border-border/40">
-          <div className="flex items-center gap-1">
-            <span className="text-[10px] text-text-secondary font-medium">
-              Cantidad
-            </span>
-            {isSent && (
-              <span title="Item enviado a cocina">
-                <Lock className="w-3 h-3 text-text-secondary/60" />
-              </span>
-            )}
-          </div>
+          <span className="text-[10px] font-mono text-text-secondary">
+            {baseCurrency.symbol}{(Number(item.price) || 0).toFixed(2)} c/u
+          </span>
 
-          <div className="flex items-center gap-1 bg-surface border border-border rounded-xl p-0.5 shadow-inner">
+          <div className="flex items-center gap-0.5 bg-surface border border-border rounded-lg p-0.5 shadow-inner">
             {/* Decrement or Remove (Disabled if sent to kitchen) */}
             <button
               disabled={isSent}
@@ -443,7 +433,7 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
                   updateQuantity(item.cartItemId, item.quantity - 1)
                 }
               }}
-              className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all min-w-[28px] min-h-[28px] ${
+              className={`w-6 h-6 rounded flex items-center justify-center transition-all min-w-[24px] min-h-[24px] ${
                 isSent
                   ? 'opacity-30 cursor-not-allowed text-text-secondary'
                   : item.quantity === 1
@@ -453,24 +443,24 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
               title={isSent ? 'Item ya enviado a cocina' : item.quantity === 1 ? 'Eliminar de la orden' : 'Reducir cantidad'}
             >
               {item.quantity === 1 ? (
-                <Trash2 className="w-3.5 h-3.5" />
+                <Trash2 className="w-3 h-3" />
               ) : (
-                <Minus className="w-3.5 h-3.5" />
+                <Minus className="w-3 h-3" />
               )}
             </button>
 
             {/* Quantity Display */}
-            <span className="w-6 text-center text-xs font-bold font-mono text-text-primary">
+            <span className="w-5 text-center text-[11px] font-bold font-mono text-text-primary">
               {item.quantity}
             </span>
 
-            {/* Increment (Always permitted, adds more units) */}
+            {/* Increment */}
             <button
               onClick={() => updateQuantity(item.cartItemId, item.quantity + 1)}
-              className="w-7 h-7 rounded-lg flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-surface-raised transition-all cursor-pointer active:scale-90 min-w-[28px] min-h-[28px]"
+              className="w-6 h-6 rounded flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-surface-raised transition-all cursor-pointer active:scale-90 min-w-[24px] min-h-[24px]"
               title="Aumentar cantidad"
             >
-              <Plus className="w-3.5 h-3.5" />
+              <Plus className="w-3 h-3" />
             </button>
           </div>
         </div>
@@ -480,39 +470,37 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
 
   return (
     <div className="flex flex-col h-full w-full bg-surface border-l border-border/80 select-none overflow-hidden relative">
-      {/* 1. Header Area (~56px) */}
-      <div className="h-14 shrink-0 px-4 border-b border-border/70 flex items-center justify-between bg-surface/90 backdrop-blur-md z-10">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
-            <Receipt className="w-4 h-4" />
+      {/* 1. Header Area (~44px compact) */}
+      <div className="h-11 shrink-0 px-3 border-b border-border/70 flex items-center justify-between bg-surface/90 backdrop-blur-md z-10 gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="w-7 h-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shrink-0">
+            <Receipt className="w-3.5 h-3.5" />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-black text-sm text-text-primary">
-                Orden #{orderNumber || 1}
-              </span>
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${modeBadge.color}`}>
-                <ModeIcon className="w-3 h-3" />
-                {modeText}
-              </span>
-            </div>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="font-black text-xs text-text-primary shrink-0">
+              #{orderNumber || 1}
+            </span>
+            <span className={`inline-flex items-center gap-1 px-1.5 py-0.2 rounded-md text-[9px] font-bold border truncate ${modeBadge.color}`}>
+              <ModeIcon className="w-2.5 h-2.5 shrink-0" />
+              <span className="truncate">{modeText}</span>
+            </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 shrink-0">
           {/* Customer Button */}
           <button
             type="button"
             onClick={() => setShowCustomerSelector(true)}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer min-h-[36px] ${
+            className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer min-h-[28px] ${
               customerId
                 ? 'border-primary/40 text-primary bg-primary/10'
                 : 'border-border text-text-secondary hover:border-primary/30 hover:text-text-primary bg-surface-raised/40'
             }`}
             title={customerId ? `Cliente: ${customerName}` : 'Asignar cliente'}
           >
-            <User className="w-3.5 h-3.5" />
-            <span className="truncate max-w-[100px]">
+            <User className="w-3 h-3" />
+            <span className="truncate max-w-[80px]">
               {customerId ? customerName : 'Cliente'}
             </span>
           </button>
@@ -522,10 +510,10 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
             <button
               type="button"
               onClick={handleAddSeat}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold text-primary hover:bg-primary/10 border border-primary/20 hover:border-primary/40 transition-all cursor-pointer min-h-[36px]"
+              className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold text-primary hover:bg-primary/10 border border-primary/20 hover:border-primary/40 transition-all cursor-pointer min-h-[28px]"
               title="Dividir comanda por asientos"
             >
-              <Plus className="w-3.5 h-3.5" />
+              <Plus className="w-3 h-3" />
               <span>Asiento</span>
             </button>
           )}
@@ -534,33 +522,32 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
           {cart.length > 0 && (
             <button
               onClick={handleClearCart}
-              className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-text-secondary hover:text-error hover:bg-error/10 border border-transparent hover:border-error/20 transition-all cursor-pointer flex items-center gap-1.5 min-h-[36px]"
+              className="p-1.5 rounded-lg text-text-secondary hover:text-error hover:bg-error/10 border border-transparent hover:border-error/20 transition-all cursor-pointer flex items-center min-h-[28px]"
               title="Vaciar comanda"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Vaciar</span>
             </button>
           )}
         </div>
       </div>
 
-      {/* Seat Tabs (Visible only in 'tables' mode when at least 2 seats exist) */}
+      {/* Seat Tabs (Compact height in tables mode) */}
       {posMode === 'tables' && seats.length >= 2 && (
-        <div className="shrink-0 bg-surface-raised/40 border-b border-border/70 px-3 py-2">
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar scroll-smooth">
+        <div className="shrink-0 bg-surface-raised/40 border-b border-border/70 px-2.5 py-1.5">
+          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar scroll-smooth">
             {/* "Todos" Tab */}
             <button
               type="button"
               onClick={() => setActiveSeat('all')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-150 shrink-0 cursor-pointer min-h-[36px] ${
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all duration-150 shrink-0 cursor-pointer min-h-[28px] ${
                 activeSeatId === 'all'
-                  ? 'bg-primary text-text-inverse shadow-sm'
+                  ? 'bg-primary text-text-inverse shadow-xs'
                   : 'bg-surface hover:bg-surface-raised text-text-secondary hover:text-text-primary border border-border/80'
               }`}
             >
-              <Users className="w-3.5 h-3.5" />
+              <Users className="w-3 h-3" />
               <span>Todos</span>
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-black ${
+              <span className={`px-1 py-0.2 rounded-full text-[9px] font-mono font-black ${
                 activeSeatId === 'all' ? 'bg-black/20 text-white' : 'bg-surface-raised text-text-secondary'
               }`}>
                 {cart.length}
@@ -577,32 +564,30 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
                   key={seat.id}
                   onClick={() => setActiveSeat(seat.id)}
                   onDoubleClick={() => handleStartRename(seat)}
-                  className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-150 shrink-0 cursor-pointer min-h-[36px] border ${
+                  className={`group flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all duration-150 shrink-0 cursor-pointer min-h-[28px] border ${
                     isActive
-                      ? 'bg-primary text-text-inverse border-primary shadow-sm'
+                      ? 'bg-primary text-text-inverse border-primary shadow-xs'
                       : 'bg-surface hover:bg-surface-raised text-text-secondary hover:text-text-primary border-border/80'
                   }`}
                   title={`${seat.label} (Clic para seleccionar, botón para editar)`}
                 >
-                  <span className="truncate max-w-[90px]">{seat.label}</span>
+                  <span className="truncate max-w-[70px]">{seat.label}</span>
 
-                  {/* Seat item count */}
-                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-black ${
+                  <span className={`px-1 py-0.2 rounded-full text-[9px] font-mono font-black ${
                     isActive ? 'bg-black/20 text-white' : 'bg-surface-raised text-text-secondary'
                   }`}>
                     {seatItemsCount}
                   </span>
 
-                  {/* Quick Edit icon */}
                   <button
                     type="button"
                     onClick={(e) => handleStartRename(seat, e)}
-                    className={`p-1 rounded-md hover:bg-black/10 transition-colors cursor-pointer ml-0.5 ${
+                    className={`p-0.5 rounded hover:bg-black/10 transition-colors cursor-pointer ${
                       isActive ? 'text-text-inverse' : 'text-text-secondary hover:text-text-primary'
                     }`}
                     title="Editar asiento"
                   >
-                    <Edit2 className="w-3 h-3" />
+                    <Edit2 className="w-2.5 h-2.5" />
                   </button>
                 </div>
               )
@@ -612,10 +597,10 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
             <button
               type="button"
               onClick={handleAddSeat}
-              className="flex items-center justify-center w-8 h-8 rounded-xl bg-surface hover:bg-primary/10 text-primary border border-border/80 hover:border-primary/30 transition-all shrink-0 cursor-pointer shadow-sm active:scale-95"
+              className="flex items-center justify-center w-7 h-7 rounded-lg bg-surface hover:bg-primary/10 text-primary border border-border/80 hover:border-primary/30 transition-all shrink-0 cursor-pointer shadow-xs active:scale-95"
               title="Agregar nuevo asiento (+)"
             >
-              <Plus className="w-4 h-4" />
+              <Plus className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
@@ -655,16 +640,16 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
         </div>
       )}
 
-      {/* 2. Cart Items Area (Scrollable) */}
-      <div className="flex-1 overflow-y-auto p-3.5 space-y-3">
+      {/* 2. Cart Items Area (Scrollable - Compact Spacing) */}
+      <div className="flex-1 overflow-y-auto p-2 sm:p-2.5 space-y-1.5 custom-scrollbar">
         {cart.length === 0 ? (
-          <div className="h-full min-h-[260px] flex flex-col items-center justify-center text-center p-6">
-            <div className="w-16 h-16 rounded-3xl bg-surface-raised border border-border flex items-center justify-center mb-3 shadow-inner">
-              <Receipt className="w-8 h-8 opacity-30 text-primary" />
+          <div className="h-full min-h-[220px] flex flex-col items-center justify-center text-center p-4">
+            <div className="w-12 h-12 rounded-2xl bg-surface-raised border border-border flex items-center justify-center mb-2.5 shadow-inner">
+              <Receipt className="w-6 h-6 opacity-30 text-primary" />
             </div>
-            <h4 className="text-sm font-bold text-text-primary">Minuta vacía</h4>
-            <p className="text-xs text-text-secondary mt-1 max-w-[220px] leading-relaxed">
-              Agrega productos desde el catálogo para iniciar la comanda.
+            <h4 className="text-xs font-bold text-text-primary">Minuta vacía</h4>
+            <p className="text-[11px] text-text-secondary mt-0.5 max-w-[200px] leading-relaxed">
+              Agrega productos del catálogo para iniciar la orden.
             </p>
           </div>
         ) : posMode === 'tables' && seats.length >= 2 && activeSeatId === 'all' ? (
@@ -673,23 +658,23 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
             if (group.items.length === 0) return null
 
             return (
-              <div key={group.seat.id} className="space-y-2">
+              <div key={group.seat.id} className="space-y-1.5">
                 {/* Seat Header / Separator */}
-                <div className="flex items-center justify-between px-2 py-1 rounded-lg bg-surface-raised/50 border border-border/40 text-xs">
+                <div className="flex items-center justify-between px-2 py-0.5 rounded-lg bg-surface-raised/50 border border-border/40 text-[11px]">
                   <div className="flex items-center gap-1.5 font-bold text-text-primary">
-                    <span className="w-2 h-2 rounded-full bg-primary" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary" />
                     <span>{group.seat.label}</span>
-                    <span className="text-[11px] font-normal text-text-secondary font-mono">
-                      ({group.items.length} items)
+                    <span className="text-[10px] font-normal text-text-secondary font-mono">
+                      ({group.items.length})
                     </span>
                   </div>
-                  <div className="font-mono font-bold text-xs text-primary">
+                  <div className="font-mono font-bold text-[11px] text-primary">
                     {baseCurrency.symbol}{group.subtotal.toFixed(2)}
                   </div>
                 </div>
 
                 {/* Items in this seat */}
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   {group.items.map((item) => renderItemCard(item))}
                 </div>
               </div>
@@ -698,9 +683,9 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
         ) : (
           /* Filtered View (Single Seat or Direct Counter Mode) */
           displayedItems.length === 0 ? (
-            <div className="h-full min-h-[200px] flex flex-col items-center justify-center text-center p-6">
-              <p className="text-xs text-text-secondary">
-                No hay productos en este asiento. Agrega items del catálogo.
+            <div className="h-full min-h-[180px] flex flex-col items-center justify-center text-center p-4">
+              <p className="text-[11px] text-text-secondary">
+                No hay productos en este asiento.
               </p>
             </div>
           ) : (
@@ -877,17 +862,17 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
         </div>
       )}
 
-      {/* 3. Footer & Totals Area */}
-      <div className="shrink-0 p-4 border-t border-border/80 bg-surface-raised/80 backdrop-blur-md space-y-3">
+      {/* 3. Footer & Totals Area (Compact & Ergonomic for 8" Tablets) */}
+      <div className="shrink-0 p-2.5 sm:p-3 border-t border-border/80 bg-surface-raised/80 backdrop-blur-md space-y-2">
         {/* Breakdown lines */}
-        <div className="space-y-1.5 text-xs text-text-secondary font-medium pb-2 border-b border-border/60">
+        <div className="space-y-0.5 text-[10px] sm:text-[11px] text-text-secondary font-medium pb-1.5 border-b border-border/60">
           <div className="flex justify-between items-center">
             <span>Subtotal</span>
             <span className="font-mono text-text-primary font-bold">
               {baseCurrency.symbol} {(Number(subtotal) || 0).toFixed(2)}
             </span>
           </div>
-          <div className="flex justify-between items-center text-[11px]">
+          <div className="flex justify-between items-center text-[10px]">
             <span>
               {weightedTaxRate > 0 ? `IVA (${weightedTaxRate}%)` : 'IVA (Exento / 0%)'}
             </span>
@@ -897,22 +882,22 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
           </div>
         </div>
 
-        {/* Dual-Currency TOTAL Display */}
+        {/* Dual-Currency TOTAL Display (Balanced Font Size) */}
         <div className="flex items-end justify-between pt-0.5">
           <div>
-            <span className="text-[11px] uppercase tracking-wider font-bold text-text-secondary">
+            <span className="text-[10px] uppercase tracking-wider font-bold text-text-secondary">
               Total a Pagar
             </span>
-            <div className="text-2xl font-black text-primary font-mono tracking-tight leading-none mt-1">
+            <div className="text-lg sm:text-xl font-black text-primary font-mono tracking-tight leading-none mt-0.5">
               {baseCurrency.symbol} {(Number(total) || 0).toFixed(2)}
             </div>
           </div>
           {hasSecondary && (
             <div className="text-right">
-              <span className="text-[10px] text-text-secondary/70 font-mono">
+              <span className="text-[9px] text-text-secondary/70 font-mono">
                 Tasa: {(Number(exchangeRate) || 1).toFixed(2)} {secondaryCurrency?.code}/{baseCurrency.code}
               </span>
-              <div className="text-sm font-bold text-text-secondary font-mono tracking-tight">
+              <div className="text-xs font-bold text-text-secondary font-mono tracking-tight">
                 {secondaryCurrency?.symbol} {(Number(totalSecondary) || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {secondaryCurrency?.code}
               </div>
             </div>
@@ -920,16 +905,16 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
         </div>
 
         {/* 4. Action Buttons (Pre-cuenta, A Cocina, Cobrar) */}
-        <div className="grid grid-cols-3 gap-2 pt-1">
+        <div className="grid grid-cols-3 gap-1.5 pt-0.5">
           {/* Pre-cuenta Button */}
           <button
             type="button"
             disabled={cart.length === 0}
             onClick={handlePreBillClick}
-            className={`flex items-center justify-center gap-1.5 py-3 px-2 rounded-xl text-xs font-bold border transition-all duration-150 select-none min-h-[48px] ${
+            className={`flex items-center justify-center gap-1 py-2 px-1.5 rounded-xl text-[11px] font-bold border transition-all duration-150 select-none min-h-[38px] sm:min-h-[42px] ${
               cart.length === 0
                 ? 'opacity-40 border-border text-text-secondary cursor-not-allowed bg-surface'
-                : 'border-border hover:border-primary/40 text-text-primary bg-surface hover:bg-surface-raised active:scale-[0.98] cursor-pointer shadow-sm'
+                : 'border-border hover:border-primary/40 text-text-primary bg-surface hover:bg-surface-raised active:scale-[0.98] cursor-pointer shadow-xs'
             }`}
             title="Generar e imprimir pre-cuenta"
           >
@@ -942,10 +927,10 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
             type="button"
             disabled={cart.length === 0}
             onClick={handleSendToKitchen}
-            className={`flex items-center justify-center gap-1.5 py-3 px-2 rounded-xl text-xs font-bold border transition-all duration-150 select-none min-h-[48px] ${
+            className={`flex items-center justify-center gap-1 py-2 px-1.5 rounded-xl text-[11px] font-bold border transition-all duration-150 select-none min-h-[38px] sm:min-h-[42px] ${
               cart.length === 0
                 ? 'opacity-40 border-border text-text-secondary cursor-not-allowed bg-surface'
-                : 'border-primary/30 text-primary bg-primary/5 hover:bg-primary/10 hover:border-primary/50 active:scale-[0.98] cursor-pointer shadow-sm'
+                : 'border-primary/30 text-primary bg-primary/5 hover:bg-primary/10 hover:border-primary/50 active:scale-[0.98] cursor-pointer shadow-xs'
             }`}
             title="Enviar comanda a cocina"
           >
@@ -958,10 +943,10 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
             type="button"
             disabled={cart.length === 0}
             onClick={handleCobrar}
-            className={`flex items-center justify-center gap-1.5 py-3 px-2 rounded-xl text-xs font-black transition-all duration-150 select-none min-h-[48px] ${
+            className={`flex items-center justify-center gap-1 py-2 px-1.5 rounded-xl text-[11px] font-black transition-all duration-150 select-none min-h-[38px] sm:min-h-[42px] ${
               cart.length === 0
                 ? 'opacity-40 bg-surface-raised text-text-secondary border border-border cursor-not-allowed'
-                : 'bg-primary text-text-inverse shadow-lg shadow-primary/25 hover:brightness-110 active:scale-[0.98] cursor-pointer'
+                : 'bg-primary text-text-inverse shadow-md shadow-primary/20 hover:brightness-110 active:scale-[0.98] cursor-pointer'
             }`}
             title="Proceder al cobro de la comanda"
           >
