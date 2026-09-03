@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react'
 import { adminApi } from '@/lib/api'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Plus, Loader2, FileText, CheckCircle, Clock, X } from 'lucide-react'
+import { Plus, Loader2, FileText, CheckCircle, Clock, X, Calendar } from 'lucide-react'
 
 export default function AdminPhysicalInventoryList() {
   const router = useRouter()
@@ -13,6 +13,7 @@ export default function AdminPhysicalInventoryList() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [warehouses, setWarehouses] = useState<any[]>([])
   const [selectedWhId, setSelectedWhId] = useState('')
+  const [executionDate, setExecutionDate] = useState(new Date().toISOString().split('T')[0])
   const [creating, setCreating] = useState(false)
 
   useEffect(() => {
@@ -31,6 +32,7 @@ export default function AdminPhysicalInventoryList() {
   }
 
   const handleOpenCreateModal = async () => {
+    setExecutionDate(new Date().toISOString().split('T')[0])
     setShowCreateModal(true)
     if (warehouses.length === 0) {
       try {
@@ -51,6 +53,7 @@ export default function AdminPhysicalInventoryList() {
     try {
       const payload = {
         warehouse_id: selectedWhId,
+        execution_date: executionDate ? new Date(executionDate + 'T12:00:00Z').toISOString() : undefined,
         notes: 'Creado desde panel de administración',
         lines: []
       }
@@ -96,7 +99,7 @@ export default function AdminPhysicalInventoryList() {
                 <th className="p-4">Almacén</th>
                 <th className="p-4">Creado Por</th>
                 <th className="p-4">Estado</th>
-                <th className="p-4">Fecha</th>
+                <th className="p-4">Fecha Valor (Conteo)</th>
                 <th className="p-4 text-right">Acción</th>
               </tr>
             </thead>
@@ -120,8 +123,11 @@ export default function AdminPhysicalInventoryList() {
                       </span>
                     )}
                   </td>
-                  <td className="p-4 text-text-secondary">
-                    {new Date(c.created_at).toLocaleDateString()}
+                  <td className="p-4 text-text-primary font-medium">
+                    <span className="inline-flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-text-secondary" />
+                      {new Date(c.execution_date || c.created_at).toLocaleDateString('es-VE', { timeZone: 'UTC', year: 'numeric', month: '2-digit', day: '2-digit' })}
+                    </span>
                   </td>
                   <td className="p-4 text-right">
                     <Link 
@@ -159,21 +165,36 @@ export default function AdminPhysicalInventoryList() {
               </button>
             </div>
             
-            <div className="space-y-2">
-              <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest">Almacén a contar</label>
-              <select
-                value={selectedWhId}
-                onChange={(e) => setSelectedWhId(e.target.value)}
-                className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm outline-none focus:border-primary text-text-primary"
-              >
-                {warehouses.length === 0 ? (
-                  <option>Cargando almacenes...</option>
-                ) : (
-                  warehouses.map(w => (
-                    <option key={w.id} value={w.id}>{w.name}</option>
-                  ))
-                )}
-              </select>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-1.5">Almacén a contar</label>
+                <select
+                  value={selectedWhId}
+                  onChange={(e) => setSelectedWhId(e.target.value)}
+                  className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm outline-none focus:border-primary text-text-primary"
+                >
+                  {warehouses.length === 0 ? (
+                    <option>Cargando almacenes...</option>
+                  ) : (
+                    warehouses.map(w => (
+                      <option key={w.id} value={w.id}>{w.name}</option>
+                    ))
+                  )}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-text-secondary uppercase tracking-widest mb-1.5">Fecha Valor (Fecha de Ejecución)</label>
+                <input
+                  type="date"
+                  value={executionDate}
+                  onChange={(e) => setExecutionDate(e.target.value)}
+                  className="w-full bg-surface border border-border rounded-xl px-4 h-11 text-sm outline-none focus:border-primary text-text-primary font-semibold"
+                />
+                <span className="text-[11px] text-text-secondary mt-1 block">
+                  Permite retroceder la fecha contable para cierres de mes.
+                </span>
+              </div>
             </div>
 
             <div className="flex gap-3 pt-2">

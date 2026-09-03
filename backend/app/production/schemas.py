@@ -163,6 +163,7 @@ class PhysicalInventoryLineCreate(BaseModel):
 
 class PhysicalInventoryCreate(BaseModel):
     warehouse_id: UUID
+    execution_date: Optional[datetime] = None
     notes: Optional[str] = None
     lines: List[PhysicalInventoryLineCreate]
 
@@ -184,6 +185,7 @@ class PhysicalInventoryResponse(BaseModel):
     warehouse_name: Optional[str] = None
     document_number: str
     status: str
+    execution_date: Optional[datetime] = None
     notes: Optional[str] = None
     created_by: UUID
     creator_name: Optional[str] = None
@@ -199,6 +201,7 @@ class PhysicalInventoryBriefResponse(BaseModel):
     warehouse_name: Optional[str] = None
     document_number: str
     status: str
+    execution_date: Optional[datetime] = None
     notes: Optional[str] = None
     creator_name: Optional[str] = None
     processed_at: Optional[datetime] = None

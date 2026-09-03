@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { adminApi } from '@/lib/api'
-import { Loader2, ArrowLeft, AlertTriangle, Play, Save, Search, Trash2 } from 'lucide-react'
+import { Loader2, ArrowLeft, AlertTriangle, Play, Save, Search, Trash2, Calendar } from 'lucide-react'
 import Link from 'next/link'
 import ConfirmationModal from '@/components/ConfirmationModal'
 
@@ -15,6 +15,7 @@ export default function AdminPhysicalInventoryDetail() {
   const [processing, setProcessing] = useState(false)
   const [editedLines, setEditedLines] = useState<any[]>([])
   const [notes, setNotes] = useState('')
+  const [executionDate, setExecutionDate] = useState('')
   const [items, setItems] = useState<any[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [showSuggestions, setShowSuggestions] = useState(false)
@@ -69,6 +70,12 @@ export default function AdminPhysicalInventoryDetail() {
       ]) as any
       setDetail(data)
       setNotes(data.notes || '')
+      const rawDate = data.execution_date || data.created_at
+      if (rawDate) {
+        setExecutionDate(new Date(rawDate).toISOString().split('T')[0])
+      } else {
+        setExecutionDate(new Date().toISOString().split('T')[0])
+      }
       setEditedLines(data.lines || [])
       setItems(itemsData || [])
     } catch (err) {
@@ -143,6 +150,7 @@ export default function AdminPhysicalInventoryDetail() {
     try {
       const payload = {
         warehouse_id: detail.warehouse_id,
+        execution_date: executionDate ? new Date(executionDate + 'T12:00:00Z').toISOString() : undefined,
         notes: notes,
         lines: editedLines.map(l => ({
           item_id: l.item_id,
@@ -167,13 +175,14 @@ export default function AdminPhysicalInventoryDetail() {
   const handleProcess = () => {
     showConfirm(
       '¿Procesar Conteo?',
-      '¿Está seguro de procesar este conteo? Esto actualizará el stock disponible y registrará los movimientos de ajuste en el Kardex.',
+      '¿Está seguro de procesar este conteo? Esto actualizará el stock disponible y registrará los movimientos de ajuste en el Kardex con la fecha valor seleccionada.',
       async () => {
         setProcessing(true)
         try {
           // Guardar cambios automáticamente antes de procesar
           const payload = {
             warehouse_id: detail.warehouse_id,
+            execution_date: executionDate ? new Date(executionDate + 'T12:00:00Z').toISOString() : undefined,
             notes: notes,
             lines: editedLines.map(l => ({
               item_id: l.item_id,
@@ -231,11 +240,42 @@ export default function AdminPhysicalInventoryDetail() {
       </div>
 
       {/* Metadata Panel */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-surface p-4 rounded-xl border border-border">
           <span className="text-xs text-text-secondary uppercase font-bold tracking-wider">Almacén</span>
           <p className="text-base font-semibold mt-1">{detail.warehouse_name}</p>
         </div>
+
+        {/* Execution Date (Fecha Valor) */}
+        <div className="bg-surface p-4 rounded-xl border border-border flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-text-secondary uppercase font-bold tracking-wider">Fecha Valor (Conteo)</span>
+            {detail.status === 'draft' && (
+              <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-bold">Modificable</span>
+            )}
+          </div>
+          {detail.status === 'draft' ? (
+            <div className="mt-1">
+              <input
+                type="date"
+                value={executionDate}
+                onChange={(e) => setExecutionDate(e.target.value)}
+                className="w-full bg-surface-raised border border-border focus:border-primary rounded-lg px-2.5 py-1 text-sm font-semibold text-text-primary outline-none transition-colors"
+                title="Fecha contable para el ajuste de Kardex y cierre de mes"
+              />
+              <span className="text-[10px] text-text-secondary mt-0.5 block">Ajusta la fecha contable en Kardex</span>
+            </div>
+          ) : (
+            <div>
+              <p className="text-base font-semibold mt-1 flex items-center gap-1.5 text-text-primary">
+                <Calendar className="w-4 h-4 text-primary" />
+                {new Date(detail.execution_date || detail.created_at).toLocaleDateString('es-VE', { timeZone: 'UTC', year: 'numeric', month: '2-digit', day: '2-digit' })}
+              </p>
+              <span className="text-[10px] text-text-secondary">Fecha aplicada en Kardex</span>
+            </div>
+          )}
+        </div>
+
         <div className="bg-surface p-4 rounded-xl border border-border">
           <span className="text-xs text-text-secondary uppercase font-bold tracking-wider">Creado por</span>
           <p className="text-base font-semibold mt-1">{detail.creator_name} ({new Date(detail.created_at).toLocaleDateString()})</p>

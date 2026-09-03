@@ -933,11 +933,13 @@ async def create_physical_inventory(
     document_number = f"INV-2026-{count + 1:04d}"
 
     # 2. Insert header
+    exec_date = doc.execution_date.isoformat() if doc.execution_date else datetime.now(timezone.utc).isoformat()
     header_data = {
         "org_id": org_id,
         "warehouse_id": str(doc.warehouse_id),
         "document_number": document_number,
         "status": "draft",
+        "execution_date": exec_date,
         "notes": doc.notes,
         "created_by": user.id
     }
@@ -989,6 +991,7 @@ async def list_physical_inventories(
             "warehouse_name": r["warehouses"]["name"] if r.get("warehouses") else "Desconocido",
             "document_number": r["document_number"],
             "status": r["status"],
+            "execution_date": r.get("execution_date") or r["created_at"],
             "notes": r["notes"],
             "creator_name": r["profiles"]["full_name"] if r.get("profiles") else "Sistema",
             "processed_at": r["processed_at"],
@@ -1039,6 +1042,7 @@ async def get_physical_inventory_detail(
         "warehouse_name": h["warehouses"]["name"] if h.get("warehouses") else "Desconocido",
         "document_number": h["document_number"],
         "status": h["status"],
+        "execution_date": h.get("execution_date") or h["created_at"],
         "notes": h["notes"],
         "created_by": h["created_by"],
         "creator_name": h["creator"]["full_name"] if h.get("creator") else "Desconocido",
@@ -1063,8 +1067,11 @@ async def update_physical_inventory(
     if check_res.data[0]["status"] != "draft":
         raise HTTPException(status_code=400, detail="Cannot update a processed inventory count")
 
-    # Update header notes
-    db.table("physical_inventories").update({"notes": doc.notes}).eq("id", str(id)).execute()
+    # Update header notes & execution_date
+    update_data = {"notes": doc.notes}
+    if doc.execution_date:
+        update_data["execution_date"] = doc.execution_date.isoformat()
+    db.table("physical_inventories").update(update_data).eq("id", str(id)).execute()
 
     # Clear and insert new lines
     db.table("physical_inventory_lines").delete().eq("physical_inventory_id", str(id)).execute()
@@ -1109,6 +1116,9 @@ async def process_physical_inventory(
 
     warehouse_id = h["warehouse_id"]
 
+    # Effective execution date for movements & lots (for historical accuracy / month-end closing)
+    effective_date = h.get("execution_date") or h["created_at"] or datetime.now(timezone.utc).isoformat()
+
     # Fetch lines
     lines_res = db.table("physical_inventory_lines").select("*").eq("physical_inventory_id", str(id)).execute()
     lines = lines_res.data or []
@@ -1141,19 +1151,20 @@ async def process_physical_inventory(
             item_cost_res = db.table("items").select("last_purchase_cost").eq("id", item_id).execute()
             cost = float(item_cost_res.data[0]["last_purchase_cost"]) if (item_cost_res.data and item_cost_res.data[0]["last_purchase_cost"]) else 0.0
 
-            # Insert lot
+            # Insert lot with effective execution date
             lot_data = {
                 "warehouse_id": warehouse_id,
                 "item_id": item_id,
                 "lot_number": f"AJUSTE-{h['document_number']}",
                 "qty_base": difference,
                 "unit_cost_base": cost,
+                "received_at": effective_date,
                 "is_exhausted": False
             }
             lot_res = db.table("stock_lots").insert(lot_data).execute()
             lot_id = lot_res.data[0]["id"] if lot_res.data else None
 
-            # Log movement
+            # Log movement with effective execution date
             movement_data = {
                 "org_id": org_id,
                 "movement_type": "adjustment_in",
@@ -1166,7 +1177,8 @@ async def process_physical_inventory(
                 "reference_id": str(id),
                 "reference_type": "physical_inventory",
                 "notes": f"Ajuste por diferencia de inventario {h['document_number']}",
-                "created_by": user.id
+                "created_by": user.id,
+                "created_at": effective_date
             }
             db.table("stock_movements").insert(movement_data).execute()
 
@@ -1209,7 +1221,7 @@ async def process_physical_inventory(
                     "is_exhausted": new_lot_qty <= 0
                 }).eq("id", lot["id"]).execute()
                 
-                # Log movement
+                # Log movement with effective execution date
                 movement_data = {
                     "org_id": org_id,
                     "movement_type": "adjustment_out",
@@ -1222,7 +1234,8 @@ async def process_physical_inventory(
                     "reference_id": str(id),
                     "reference_type": "physical_inventory",
                     "notes": f"Consumo por ajuste físico {h['document_number']}",
-                    "created_by": user.id
+                    "created_by": user.id,
+                    "created_at": effective_date
                 }
                 db.table("stock_movements").insert(movement_data).execute()
                 
