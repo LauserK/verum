@@ -25,6 +25,7 @@ from app.sales.schemas import (
     SaleModeConfigCreate, SaleModeConfigUpdate, SaleModeConfigOut,
     PosConfigOut, StockReserveRequest, StockAvailabilityItem,
     CheckoutCreate, CheckoutResponse,
+    DeliveryZoneCreate, DeliveryZoneUpdate, DeliveryZoneOut,
     PosTableOrderSync, PosTableOrderOut,
     TableOrderUpdate, TransferRequest, MergeRequest
 )
