@@ -194,6 +194,10 @@ def preview_quick_catalog(org_id: str, db) -> Dict[str, Any]:
     local_pms_res = db.table("payment_methods").select("name").eq("org_id", org_id).execute()
     local_pm_names = {pm["name"].lower() for pm in (local_pms_res.data or []) if pm.get("name")}
 
+    remote_zones = remote_data.get("delivery_zones", [])
+    local_zones_res = db.table("delivery_zones").select("name").eq("org_id", org_id).execute()
+    local_zone_names = {z["name"].lower() for z in (local_zones_res.data or []) if z.get("name")}
+
     # Diff categories
     existing_cats = sum(1 for c in remote_cats if c.get("name", "").lower() in local_cat_names)
     new_cats = len(remote_cats) - existing_cats
@@ -215,6 +219,10 @@ def preview_quick_catalog(org_id: str, db) -> Dict[str, Any]:
     existing_pms = sum(1 for pm in remote_pms if pm.get("name", "").lower() in local_pm_names)
     new_pms = len(remote_pms) - existing_pms
 
+    # Diff delivery zones
+    existing_zones = sum(1 for z in remote_zones if z.get("name", "").lower() in local_zone_names)
+    new_zones = len(remote_zones) - existing_zones
+
     return {
         "total_categories": len(remote_cats),
         "new_categories": new_cats,
@@ -228,10 +236,14 @@ def preview_quick_catalog(org_id: str, db) -> Dict[str, Any]:
         "total_payment_methods": len(remote_pms),
         "new_payment_methods": new_pms,
         "existing_payment_methods": existing_pms,
+        "total_delivery_zones": len(remote_zones),
+        "new_delivery_zones": new_zones,
+        "existing_delivery_zones": existing_zones,
         "categories_sample": [c["name"] for c in remote_cats[:5] if c.get("name")],
         "modifier_groups_sample": [m["name"] for m in remote_mods[:5] if m.get("name")],
         "products_sample": [p["name"] for p in remote_prods[:5] if p.get("name")],
-        "payment_methods_sample": [pm["name"] for pm in remote_pms[:5] if pm.get("name")]
+        "payment_methods_sample": [pm["name"] for pm in remote_pms[:5] if pm.get("name")],
+        "delivery_zones_sample": [z["name"] for z in remote_zones[:5] if z.get("name")]
     }
 
 
@@ -245,6 +257,7 @@ async def execute_quick_catalog_import(org_id: str, payload: Any, db) -> Dict[st
     payload_dict = payload if isinstance(payload, dict) else (payload.model_dump() if hasattr(payload, "model_dump") else {})
     import_products = payload_dict.get("import_products", True)
     import_payment_methods = payload_dict.get("import_payment_methods", True)
+    import_delivery_zones = payload_dict.get("import_delivery_zones", True)
     overwrite_prices = payload_dict.get("overwrite_existing_prices", True)
 
     remote_data = fetch_quick_remote_catalog(org_id, db)
@@ -262,7 +275,8 @@ async def execute_quick_catalog_import(org_id: str, payload: Any, db) -> Dict[st
         "products_updated": 0,
         "variants_imported": 0,
         "product_modifier_links_created": 0,
-        "payment_methods_imported": 0
+        "payment_methods_imported": 0,
+        "delivery_zones_imported": 0
     }
 
     if import_products:
@@ -550,6 +564,33 @@ async def execute_quick_catalog_import(org_id: str, payload: Any, db) -> Dict[st
                 db.table("payment_methods").insert(pm_data).execute()
                 stats["payment_methods_imported"] += 1
         await invalidate_sales_config(org_id)
+
+    # 5. Delivery Zones Import
+    if import_delivery_zones:
+        from app.cache import cache
+        remote_zones = remote_data.get("delivery_zones", [])
+        local_zones_res = db.table("delivery_zones").select("id, name").eq("org_id", org_id).execute()
+        local_zone_by_name = {z["name"].lower(): z["id"] for z in (local_zones_res.data or []) if z.get("name")}
+
+        for idx, dz in enumerate(remote_zones):
+            dz_name = dz.get("name", "").strip()
+            if not dz_name:
+                continue
+            dz_lower = dz_name.lower()
+            dz_data = {
+                "name": dz_name,
+                "cost": float(dz.get("cost") or 0.0),
+                "is_active": dz.get("is_active", True),
+                "position": idx
+            }
+
+            if dz_lower in local_zone_by_name:
+                db.table("delivery_zones").update(dz_data).eq("id", local_zone_by_name[dz_lower]).eq("org_id", org_id).execute()
+            else:
+                dz_data["org_id"] = org_id
+                db.table("delivery_zones").insert(dz_data).execute()
+                stats["delivery_zones_imported"] += 1
+        await cache.delete(f"sales:delivery_zones:{org_id}")
 
     if import_products:
         await invalidate_sales_catalog(org_id)

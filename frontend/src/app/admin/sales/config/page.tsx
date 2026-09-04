@@ -13,9 +13,13 @@ import {
   useCreateExchangeRate,
   useModeConfigs,
   useCreateModeConfig,
-  useUpdateModeConfig
+  useUpdateModeConfig,
+  useDeliveryZones,
+  useCreateDeliveryZone,
+  useUpdateDeliveryZone,
+  useDeleteDeliveryZone
 } from '@/hooks/useSales'
-import { salesApi, PaymentMethod } from '@/lib/api/sales'
+import { salesApi, PaymentMethod, DeliveryZone } from '@/lib/api/sales'
 import { 
   Settings, 
   CreditCard, 
@@ -30,7 +34,8 @@ import {
   Edit2,
   Trash2,
   Power,
-  UserCheck
+  UserCheck,
+  Bike
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -50,6 +55,11 @@ export default function SalesConfigPage() {
   const { data: modeConfigs, refetch: refetchModeConfigs } = useModeConfigs()
   const { mutateAsync: createModeConfig } = useCreateModeConfig()
   const { mutateAsync: updateModeConfig } = useUpdateModeConfig()
+
+  const { data: deliveryZones, isLoading: loadingZones } = useDeliveryZones()
+  const { mutateAsync: createDeliveryZone, isPending: creatingZone } = useCreateDeliveryZone()
+  const { mutateAsync: updateDeliveryZone, isPending: updatingZone } = useUpdateDeliveryZone()
+  const { mutateAsync: deleteDeliveryZone, isPending: deletingZone } = useDeleteDeliveryZone()
 
   const [saving, setSaving] = useState(false)
   const [savedSuccess, setSavedSuccess] = useState(false)
@@ -95,6 +105,17 @@ export default function SalesConfigPage() {
     currency_code: '',
     instructions: '',
     requires_reference: true,
+    is_active: true,
+    sync_to_quick: true
+  })
+
+  // Delivery Zone Modal
+  const [isZoneModalOpen, setIsZoneModalOpen] = useState(false)
+  const [editingZone, setEditingZone] = useState<DeliveryZone | null>(null)
+  const [zoneError, setZoneError] = useState<string | null>(null)
+  const [zoneForm, setZoneForm] = useState({
+    name: '',
+    cost: 0,
     is_active: true,
     sync_to_quick: true
   })
@@ -288,6 +309,88 @@ export default function SalesConfigPage() {
       await deletePaymentMethod(method.id)
     } catch (err: any) {
       alert(err.message || 'Error eliminando método de pago.')
+    }
+  }
+
+  // Delivery Zone Handlers
+  const handleOpenCreateZone = () => {
+    setEditingZone(null)
+    setZoneError(null)
+    setZoneForm({
+      name: '',
+      cost: 0,
+      is_active: true,
+      sync_to_quick: isQuickConnected
+    })
+    setIsZoneModalOpen(true)
+  }
+
+  const handleOpenEditZone = (zone: DeliveryZone) => {
+    setEditingZone(zone)
+    setZoneError(null)
+    setZoneForm({
+      name: zone.name,
+      cost: zone.cost,
+      is_active: zone.is_active,
+      sync_to_quick: isQuickConnected
+    })
+    setIsZoneModalOpen(true)
+  }
+
+  const handleSaveZone = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setZoneError(null)
+    if (!zoneForm.name.trim()) {
+      setZoneError('El nombre de la zona de delivery es requerido.')
+      return
+    }
+    if (Number(zoneForm.cost) < 0) {
+      setZoneError('El costo de delivery no puede ser negativo.')
+      return
+    }
+
+    try {
+      if (editingZone) {
+        await updateDeliveryZone({
+          id: editingZone.id,
+          data: {
+            name: zoneForm.name.trim(),
+            cost: Number(zoneForm.cost),
+            is_active: zoneForm.is_active,
+            sync_to_quick: zoneForm.sync_to_quick
+          }
+        })
+      } else {
+        await createDeliveryZone({
+          name: zoneForm.name.trim(),
+          cost: Number(zoneForm.cost),
+          is_active: zoneForm.is_active,
+          sync_to_quick: zoneForm.sync_to_quick
+        })
+      }
+      setIsZoneModalOpen(false)
+    } catch (err: any) {
+      setZoneError(err.message || 'Error guardando zona de delivery.')
+    }
+  }
+
+  const handleToggleZone = async (zone: DeliveryZone) => {
+    try {
+      await updateDeliveryZone({
+        id: zone.id,
+        data: { is_active: !zone.is_active }
+      })
+    } catch (err: any) {
+      alert(err.message || 'Error actualizando estado de la zona de delivery.')
+    }
+  }
+
+  const handleDeleteZone = async (zone: DeliveryZone) => {
+    if (!confirm(`¿Eliminar la zona de delivery "${zone.name}"?`)) return
+    try {
+      await deleteDeliveryZone(zone.id)
+    } catch (err: any) {
+      alert(err.message || 'Error eliminando zona de delivery.')
     }
   }
 
@@ -722,6 +825,84 @@ export default function SalesConfigPage() {
         </div>
       </div>
 
+      {/* 5. Delivery Zones */}
+      <div className="bg-surface border border-border rounded-2xl p-6 shadow-sm space-y-4">
+        <div className="flex justify-between items-center border-b border-border pb-3">
+          <div>
+            <h2 className="text-base font-bold text-text-primary flex items-center gap-2">
+              <Bike className="w-5 h-5 text-primary" /> Zonas de Delivery y Tarifas
+            </h2>
+            <p className="text-xs text-text-secondary mt-0.5">Configura las zonas de envío a domicilio y sus tarifas para cobro en POS</p>
+          </div>
+          <button 
+            onClick={handleOpenCreateZone}
+            className="flex items-center justify-center gap-2 bg-primary text-text-inverse px-4 h-10 rounded-xl text-xs font-bold hover:bg-primary-hover transition-all shadow-md shadow-primary/20 active:scale-95 shrink-0"
+          >
+            <Plus className="w-3.5 h-3.5" /> Agregar Zona
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 pt-1">
+          {loadingZones ? (
+            <div className="col-span-full py-6 text-center text-text-secondary animate-pulse">Cargando zonas...</div>
+          ) : !deliveryZones || deliveryZones.length === 0 ? (
+            <div className="col-span-full py-6 text-center text-text-secondary">No hay zonas de delivery configuradas.</div>
+          ) : (
+            deliveryZones.map(z => (
+              <div key={z.id} className={`border border-border bg-surface-raised rounded-xl p-4 space-y-3 transition-all ${!z.is_active ? 'opacity-60 bg-surface/40' : ''}`}>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <span className="font-bold text-sm text-text-primary block">{z.name}</span>
+                    <span className="text-xs font-bold text-primary">
+                      ${Number(z.cost).toFixed(2)} USD
+                    </span>
+                  </div>
+                  <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border font-mono ${
+                    z.is_active ? 'bg-success/10 text-success border-success/20' : 'bg-surface text-text-secondary border-border'
+                  }`}>
+                    {z.is_active ? 'Activa' : 'Inactiva'}
+                  </span>
+                </div>
+
+                <div className="text-xs text-text-secondary flex justify-between items-center pt-2 border-t border-border/50">
+                  <span className="text-[11px] text-text-secondary">
+                    Tarifa de envío
+                  </span>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => handleToggleZone(z)}
+                      title={z.is_active ? 'Desactivar' : 'Activar'}
+                      className={`p-1.5 rounded-lg border transition-colors ${
+                        z.is_active 
+                          ? 'hover:bg-error/10 hover:text-error border-border' 
+                          : 'hover:bg-success/10 hover:text-success border-border'
+                      }`}
+                    >
+                      <Power className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleOpenEditZone(z)}
+                      title="Editar"
+                      className="p-1.5 rounded-lg border border-border hover:bg-surface text-text-secondary hover:text-primary transition-colors"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteZone(z)}
+                      title="Eliminar"
+                      className="p-1.5 rounded-lg border border-border hover:bg-error/10 text-text-secondary hover:text-error transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
       {/* Modal: Nueva Moneda */}
       {isCurrencyModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
@@ -1064,6 +1245,118 @@ export default function SalesConfigPage() {
                   {creatingPaymentMethod || updatingPaymentMethod
                     ? 'Guardando...' 
                     : editingMethod ? 'Guardar Cambios' : 'Registrar Método'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Zona de Delivery (Crear / Editar) */}
+      {isZoneModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-surface border border-border rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in zoom-in-95">
+            <div className="flex justify-between items-center pb-2 border-b border-border">
+              <h3 className="text-base font-bold text-text-primary">
+                {editingZone ? 'Editar Zona de Delivery' : 'Registrar Zona de Delivery'}
+              </h3>
+              <button onClick={() => setIsZoneModalOpen(false)} className="text-text-secondary hover:text-text-primary p-1">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {zoneError && (
+              <div className="p-3 rounded-xl bg-error/10 text-error border border-error/20 text-xs flex items-center gap-2 animate-in fade-in">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{zoneError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveZone} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-text-secondary uppercase">Nombre de la Zona *</label>
+                <input 
+                  type="text" 
+                  required
+                  placeholder="Ej: Zona Norte, Casco Central, El Rosal"
+                  value={zoneForm.name}
+                  onChange={e => setZoneForm({...zoneForm, name: e.target.value})}
+                  className="w-full bg-surface-raised border border-border rounded-xl px-3 py-2 text-sm focus:border-primary outline-none mt-1"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-text-secondary uppercase">Costo / Tarifa de Envío ($ USD) *</label>
+                <input 
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  required
+                  placeholder="Ej: 2.50"
+                  value={zoneForm.cost}
+                  onChange={e => setZoneForm({...zoneForm, cost: parseFloat(e.target.value) || 0})}
+                  className="w-full bg-surface-raised border border-border rounded-xl px-3 py-2 text-sm focus:border-primary outline-none mt-1 font-mono font-bold"
+                />
+              </div>
+
+              <div className="space-y-2 pt-1 border-t border-border/60">
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input 
+                    type="checkbox"
+                    checked={zoneForm.is_active}
+                    onChange={e => setZoneForm({...zoneForm, is_active: e.target.checked})}
+                    className="w-4 h-4 rounded text-primary focus:ring-primary border-border"
+                  />
+                  <span className="text-xs font-semibold text-text-primary">
+                    Zona de delivery activa
+                  </span>
+                </label>
+
+                {isQuickConnected && (
+                  <div 
+                    onClick={() => setZoneForm({...zoneForm, sync_to_quick: !zoneForm.sync_to_quick})}
+                    className={`flex items-start gap-3 p-3 rounded-xl border transition-all duration-200 cursor-pointer mt-2 ${
+                      zoneForm.sync_to_quick 
+                        ? 'bg-primary/5 border-primary/40 shadow-sm' 
+                        : 'bg-surface-raised border-border hover:border-border-strong'
+                    }`}
+                  >
+                    <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all duration-200 ${
+                      zoneForm.sync_to_quick
+                        ? 'bg-primary border-primary text-white shadow-sm'
+                        : 'border-border-strong bg-surface hover:border-primary/50'
+                    }`}>
+                      {zoneForm.sync_to_quick && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                    </div>
+                    <div className="flex-1 select-none">
+                      <p className="text-xs font-bold text-text-primary flex items-center gap-1.5">
+                        <TrendingUp className="w-3.5 h-3.5 text-primary" /> Sincronizar en VerumQuick
+                      </p>
+                      <p className="text-[11px] text-text-secondary mt-0.5 leading-relaxed">
+                        Al guardar, se creará o actualizará automáticamente como zona de delivery en tu catálogo de VerumQuick.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-border">
+                <button 
+                  type="button" 
+                  onClick={() => setIsZoneModalOpen(false)}
+                  className="px-4 h-11 border border-border bg-surface hover:bg-surface-raised text-text-primary rounded-xl text-sm font-semibold transition-colors flex items-center justify-center"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={creatingZone || updatingZone}
+                  className="bg-primary text-text-inverse px-5 h-11 rounded-xl text-sm font-bold hover:bg-primary-hover transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95"
+                >
+                  <Check className="w-4 h-4" />{' '}
+                  {creatingZone || updatingZone
+                    ? 'Guardando...' 
+                    : editingZone ? 'Guardar Cambios' : 'Registrar Zona'}
                 </button>
               </div>
             </form>

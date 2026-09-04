@@ -26,10 +26,14 @@ interface PreviewData {
     total_payment_methods?: number
     new_payment_methods?: number
     existing_payment_methods?: number
+    total_delivery_zones?: number
+    new_delivery_zones?: number
+    existing_delivery_zones?: number
     categories_sample?: string[]
     modifier_groups_sample?: string[]
     products_sample?: string[]
     payment_methods_sample?: string[]
+    delivery_zones_sample?: string[]
 }
 
 interface ImportResult {
@@ -42,6 +46,7 @@ interface ImportResult {
     variants_imported: number
     product_modifier_links_created: number
     payment_methods_imported?: number
+    delivery_zones_imported?: number
 }
 
 interface Props {
@@ -59,6 +64,7 @@ export default function QuickCatalogImportModal({ isOpen, onClose, onSuccess }: 
     // Options
     const [importProducts, setImportProducts] = useState(true)
     const [importPaymentMethods, setImportPaymentMethods] = useState(true)
+    const [importDeliveryZones, setImportDeliveryZones] = useState(true)
     const [overwritePrices, setOverwritePrices] = useState(true)
     const [matchBy, setMatchBy] = useState("name_or_code")
 
@@ -91,8 +97,8 @@ export default function QuickCatalogImportModal({ isOpen, onClose, onSuccess }: 
     }, [isOpen])
 
     const handleExecuteImport = async () => {
-        if (!importProducts && !importPaymentMethods) {
-            setError("Debes seleccionar al menos una opción para importar (Productos o Métodos de Pago).")
+        if (!importProducts && !importPaymentMethods && !importDeliveryZones) {
+            setError("Debes seleccionar al menos una opción para importar (Productos, Métodos de Pago o Zonas de Delivery).")
             return
         }
 
@@ -105,6 +111,7 @@ export default function QuickCatalogImportModal({ isOpen, onClose, onSuccess }: 
                 body: JSON.stringify({
                     import_products: importProducts,
                     import_payment_methods: importPaymentMethods,
+                    import_delivery_zones: importDeliveryZones,
                     overwrite_existing_prices: overwritePrices,
                     match_by: matchBy
                 })
@@ -168,7 +175,7 @@ export default function QuickCatalogImportModal({ isOpen, onClose, onSuccess }: 
 
                     {!loading && step === "preview" && preview && (
                         <div className="space-y-5">
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                                 <div className="p-3.5 bg-surface-raised border border-border rounded-2xl text-center">
                                     <span className="text-xl font-black text-text-primary">{preview.total_categories}</span>
                                     <p className="text-xs font-semibold text-text-secondary mt-0.5">Categorías</p>
@@ -189,14 +196,19 @@ export default function QuickCatalogImportModal({ isOpen, onClose, onSuccess }: 
                                     <p className="text-xs font-semibold text-text-secondary mt-0.5">Métodos Pago</p>
                                     <span className="text-[10px] text-emerald-400 font-medium">+{(preview as any).new_payment_methods ?? 0} nuevos</span>
                                 </div>
+                                <div className="p-3.5 bg-surface-raised border border-border rounded-2xl text-center">
+                                    <span className="text-xl font-black text-text-primary">{preview.total_delivery_zones ?? 0}</span>
+                                    <p className="text-xs font-semibold text-text-secondary mt-0.5">Zonas Delivery</p>
+                                    <span className="text-[10px] text-emerald-400 font-medium">+{(preview as any).new_delivery_zones ?? 0} nuevas</span>
+                                </div>
                             </div>
 
                             <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl text-xs text-amber-300 space-y-1">
                                 <p className="font-bold flex items-center gap-1.5">
-                                    <Sparkles className="w-4 h-4" /> Protección de Modificadores en POS:
+                                    <Sparkles className="w-4 h-4" /> Sincronización Segura:
                                 </p>
                                 <p className="text-amber-200/90 leading-relaxed">
-                                    Al importar los modificadores, VERUM vinculará los grupos correspondientes a cada producto para que al editarlos en el futuro no se desvinculen en VerumQuick.
+                                    Al importar los modificadores, zonas de delivery y productos, VERUM mantendrá sincronizados los datos para tus operaciones de cobro y despacho.
                                 </p>
                             </div>
                         </div>
@@ -281,6 +293,30 @@ export default function QuickCatalogImportModal({ isOpen, onClose, onSuccess }: 
                                     </p>
                                 </div>
                             </div>
+
+                            {/* Option 3: Import Delivery Zones */}
+                            <div 
+                                onClick={() => setImportDeliveryZones(!importDeliveryZones)}
+                                className={`flex items-start gap-3.5 p-4 rounded-2xl border transition-all duration-200 cursor-pointer ${
+                                    importDeliveryZones 
+                                        ? 'bg-primary/5 border-primary/40 shadow-sm' 
+                                        : 'bg-surface-raised border-border hover:border-border-strong'
+                                }`}
+                            >
+                                <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all duration-200 ${
+                                    importDeliveryZones
+                                        ? 'bg-primary border-primary text-white shadow-sm'
+                                        : 'border-border-strong bg-surface hover:border-primary/50'
+                                }`}>
+                                    {importDeliveryZones && <Check className="w-4 h-4 stroke-[3]" />}
+                                </div>
+                                <div className="flex-1 select-none">
+                                    <p className="text-sm font-bold text-text-primary">Importar Zonas de Delivery</p>
+                                    <p className="text-xs text-text-secondary mt-0.5 leading-relaxed">
+                                        Importa las zonas y tarifas de envío a domicilio configuradas en VerumQuick para calcular automáticamente el delivery en POS.
+                                    </p>
+                                </div>
+                            </div>
                         </div>
                     )}
 
@@ -293,7 +329,7 @@ export default function QuickCatalogImportModal({ isOpen, onClose, onSuccess }: 
                             <div>
                                 <h3 className="text-base font-bold text-text-primary">Importando Catálogo...</h3>
                                 <p className="text-xs text-text-secondary mt-1">
-                                    Creando categorías, modificadores, opciones, productos, variantes y métodos de pago.
+                                    Creando categorías, modificadores, opciones, productos, variantes, métodos de pago y zonas de delivery.
                                 </p>
                             </div>
                         </div>
@@ -338,6 +374,10 @@ export default function QuickCatalogImportModal({ isOpen, onClose, onSuccess }: 
                                     <span className="text-xs text-text-secondary">Métodos de Pago</span>
                                     <p className="text-base font-bold text-text-primary">{(importResult as any).payment_methods_imported ?? 0}</p>
                                 </div>
+                                <div className="p-3 bg-surface-raised border border-border rounded-xl">
+                                    <span className="text-xs text-text-secondary">Zonas de Delivery</span>
+                                    <p className="text-base font-bold text-text-primary">{(importResult as any).delivery_zones_imported ?? 0}</p>
+                                </div>
                             </div>
                         </div>
                     )}
@@ -355,7 +395,7 @@ export default function QuickCatalogImportModal({ isOpen, onClose, onSuccess }: 
                             </button>
                             <button
                                 onClick={() => setStep("options")}
-                                disabled={!preview || ((preview.total_products || 0) === 0 && (preview.total_payment_methods || 0) === 0)}
+                                disabled={!preview || ((preview.total_products || 0) === 0 && (preview.total_payment_methods || 0) === 0 && (preview.total_delivery_zones || 0) === 0)}
                                 className="px-5 py-2.5 bg-primary hover:bg-primary-hover disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-sm transition-all"
                             >
                                 Continuar
@@ -373,7 +413,7 @@ export default function QuickCatalogImportModal({ isOpen, onClose, onSuccess }: 
                             </button>
                             <button
                                 onClick={handleExecuteImport}
-                                disabled={loading || (!importProducts && !importPaymentMethods)}
+                                disabled={loading || (!importProducts && !importPaymentMethods && !importDeliveryZones)}
                                 className="px-6 py-2.5 bg-primary hover:bg-primary-hover disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center gap-2"
                             >
                                 <DownloadCloud className="w-4 h-4" />

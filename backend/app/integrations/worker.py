@@ -66,6 +66,8 @@ async def process_outbox_events(client: httpx.AsyncClient):
             event_type = event.get("event_type", "")
             if event_type.startswith("payment_method."):
                 webhook_url = base_webhook_url.replace("/webhook/product", "/webhook/payment")
+            elif event_type.startswith("delivery_zone."):
+                webhook_url = base_webhook_url.replace("/webhook/product", "/webhook/delivery-zone")
             else:
                 webhook_url = base_webhook_url
             

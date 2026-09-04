@@ -63,8 +63,14 @@ export function CheckoutModal({
     setSessionOpening,
     customerId,
     customerTaxId,
+    deliveryZoneId,
+    deliveryZoneName,
+    deliveryCost,
+    deliveryAddress,
+    deliveryNotes,
     clearCart,
-    clearCustomer
+    clearCustomer,
+    clearDelivery
   } = usePosStore()
 
   const { data: workstations = [] } = useWorkstations()
@@ -169,6 +175,11 @@ export function CheckoutModal({
         payments: payments,
         change: change,
         document_type: 'invoice',
+        delivery_zone_id: mode === 'delivery' ? deliveryZoneId : undefined,
+        delivery_zone_name: mode === 'delivery' ? deliveryZoneName : undefined,
+        delivery_cost: mode === 'delivery' ? (deliveryCost || 0) : 0,
+        delivery_address: mode === 'delivery' ? deliveryAddress : undefined,
+        delivery_notes: mode === 'delivery' ? deliveryNotes : undefined,
         idempotency_key: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `idemp-${Date.now()}-${Math.random()}`
       }
 
@@ -186,6 +197,7 @@ export function CheckoutModal({
   const handleNewOrder = () => {
     clearCart()
     clearCustomer()
+    clearDelivery()
     setStep('decision')
     setRegisteredPayments([])
     setRegisteredChange(null)

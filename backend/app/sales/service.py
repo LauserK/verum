@@ -104,6 +104,82 @@ async def get_payment_methods(org_id: str, db):
     await cache.set(cache_key, result, ttl=32400)
     return result
 
+# ── Delivery Zones ──
+
+async def create_delivery_zone(org_id: str, payload: Any, db):
+    sync_to_quick = getattr(payload, "sync_to_quick", False)
+    data = payload.model_dump(exclude={"sync_to_quick"}, mode="json") if hasattr(payload, "model_dump") else dict(payload)
+    data.pop("sync_to_quick", None)
+    data["org_id"] = org_id
+    res = db.table("delivery_zones").insert(data).execute()
+    created = res.data[0]
+
+    from app.cache import cache
+    await cache.delete(f"sales:delivery_zones:{org_id}")
+
+    if sync_to_quick:
+        try:
+            from app.integrations.outbox import enqueue_event
+            enqueue_event(
+                org_id=org_id,
+                event_type="delivery_zone.created",
+                payload=created,
+                db=db
+            )
+        except Exception as e:
+            print("[OUTBOX DELIVERY ZONE CREATE ERROR]:", e)
+
+    return created
+
+async def update_delivery_zone(org_id: str, zone_id: str, payload: Any, db):
+    sync_to_quick = getattr(payload, "sync_to_quick", False) if hasattr(payload, "sync_to_quick") else (payload.get("sync_to_quick") if isinstance(payload, dict) else False)
+    data = payload.model_dump(exclude_unset=True, exclude={"sync_to_quick"}, mode="json") if hasattr(payload, "model_dump") else {k: v for k, v in payload.items() if k != "sync_to_quick"}
+    if not data:
+        res = db.table("delivery_zones").select("*").eq("id", zone_id).eq("org_id", org_id).execute()
+        return res.data[0] if res.data else None
+    res = db.table("delivery_zones").update(data).eq("id", zone_id).eq("org_id", org_id).execute()
+    if not res.data:
+        raise HTTPException(404, "Delivery zone not found")
+    updated = res.data[0]
+
+    from app.cache import cache
+    await cache.delete(f"sales:delivery_zones:{org_id}")
+
+    if sync_to_quick:
+        try:
+            from app.integrations.outbox import enqueue_event
+            enqueue_event(
+                org_id=org_id,
+                event_type="delivery_zone.updated",
+                payload=updated,
+                db=db
+            )
+        except Exception as e:
+            print("[OUTBOX DELIVERY ZONE UPDATE ERROR]:", e)
+
+    return updated
+
+async def delete_delivery_zone(org_id: str, zone_id: str, db):
+    res = db.table("delivery_zones").delete().eq("id", zone_id).eq("org_id", org_id).execute()
+    from app.cache import cache
+    await cache.delete(f"sales:delivery_zones:{org_id}")
+    return {"status": "deleted"}
+
+async def get_delivery_zones(org_id: str, db, active_only: bool = False):
+    from app.cache import cache
+    cache_key = f"sales:delivery_zones:{org_id}:active_{active_only}"
+    cached = await cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    query = db.table("delivery_zones").select("*").eq("org_id", org_id)
+    if active_only:
+        query = query.eq("is_active", True)
+    res = query.order("position").order("name").execute()
+    result = res.data or []
+    await cache.set(cache_key, result, ttl=3600)
+    return result
+
 async def create_workstation(org_id: str, payload: WorkstationCreate, db):
     data = payload.model_dump(mode="json")
     data["org_id"] = org_id

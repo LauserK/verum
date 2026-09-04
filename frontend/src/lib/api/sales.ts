@@ -69,6 +69,18 @@ export interface TenantBillingConfig {
     updated_at?: string
 }
 
+export interface DeliveryZone {
+    id: string
+    org_id?: string
+    name: string
+    cost: number
+    is_active: boolean
+    position?: number
+    sync_to_quick?: boolean
+    created_at?: string
+    updated_at?: string
+}
+
 export interface PaymentMethod {
     id: string
     org_id?: string
@@ -134,6 +146,20 @@ export const salesApi = {
         body: JSON.stringify(data),
     }),
     deletePaymentMethod: (id: string) => fetchWithAuth<{ status: string }>(`/sales/payment-methods/${id}`, {
+        method: 'DELETE',
+    }),
+
+    // Delivery Zones
+    getDeliveryZones: (activeOnly?: boolean) => fetchWithAuth<DeliveryZone[]>(activeOnly ? '/sales/delivery-zones?active_only=true' : '/sales/delivery-zones'),
+    createDeliveryZone: (data: Partial<DeliveryZone>) => fetchWithAuth<DeliveryZone>('/sales/delivery-zones', {
+        method: 'POST',
+        body: JSON.stringify(data),
+    }),
+    updateDeliveryZone: (id: string, data: Partial<DeliveryZone>) => fetchWithAuth<DeliveryZone>(`/sales/delivery-zones/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    }),
+    deleteDeliveryZone: (id: string) => fetchWithAuth<void>(`/sales/delivery-zones/${id}`, {
         method: 'DELETE',
     }),
 
@@ -630,6 +656,12 @@ export interface CheckoutPayload {
     document_type?: string
     discount_amount?: number
     notes?: string | null
+    // Delivery fields
+    delivery_zone_id?: string | null
+    delivery_zone_name?: string | null
+    delivery_cost?: number
+    delivery_address?: string | null
+    delivery_notes?: string | null
     split_mode?: 'seats' | 'equal' | 'manual' | string | null
     is_partial?: boolean
     seat_label?: string | null

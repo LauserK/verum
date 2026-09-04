@@ -163,6 +163,46 @@ export function useDeletePaymentMethod() {
     })
 }
 
+// -- Delivery Zones --
+export function useDeliveryZones(activeOnly?: boolean) {
+    return useQuery({
+        queryKey: ['sales', 'delivery-zones', { activeOnly }],
+        queryFn: () => salesApi.getDeliveryZones(activeOnly),
+        staleTime: 1000 * 60 * 30,
+        gcTime: 1000 * 60 * 60,
+    })
+}
+
+export function useCreateDeliveryZone() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: salesApi.createDeliveryZone,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['sales', 'delivery-zones'] })
+        },
+    })
+}
+
+export function useUpdateDeliveryZone() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ id, data }: { id: string; data: any }) => salesApi.updateDeliveryZone(id, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['sales', 'delivery-zones'] })
+        },
+    })
+}
+
+export function useDeleteDeliveryZone() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (id: string) => salesApi.deleteDeliveryZone(id),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['sales', 'delivery-zones'] })
+        },
+    })
+}
+
 // -- Currencies & Exchange Rates --
 export const currencyKeys = {
     all: ['currencies'] as const,
