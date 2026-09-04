@@ -72,6 +72,7 @@ export interface TenantBillingConfig {
 export interface DeliveryZone {
     id: string
     org_id?: string
+    venue_id?: string | null
     name: string
     cost: number
     is_active: boolean
@@ -150,7 +151,13 @@ export const salesApi = {
     }),
 
     // Delivery Zones
-    getDeliveryZones: (activeOnly?: boolean) => fetchWithAuth<DeliveryZone[]>(activeOnly ? '/sales/delivery-zones?active_only=true' : '/sales/delivery-zones'),
+    getDeliveryZones: (venueId?: string, activeOnly?: boolean) => {
+        const params = new URLSearchParams()
+        if (venueId) params.set('venue_id', venueId)
+        if (activeOnly) params.set('active_only', 'true')
+        const qs = params.toString()
+        return fetchWithAuth<DeliveryZone[]>(`/sales/delivery-zones${qs ? `?${qs}` : ''}`)
+    },
     createDeliveryZone: (data: Partial<DeliveryZone>) => fetchWithAuth<DeliveryZone>('/sales/delivery-zones', {
         method: 'POST',
         body: JSON.stringify(data),

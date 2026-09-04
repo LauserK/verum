@@ -164,10 +164,10 @@ export function useDeletePaymentMethod() {
 }
 
 // -- Delivery Zones --
-export function useDeliveryZones(activeOnly?: boolean) {
+export function useDeliveryZones(venueId?: string, activeOnly?: boolean) {
     return useQuery({
-        queryKey: ['sales', 'delivery-zones', { activeOnly }],
-        queryFn: () => salesApi.getDeliveryZones(activeOnly),
+        queryKey: ['sales', 'delivery-zones', { venueId, activeOnly }],
+        queryFn: () => salesApi.getDeliveryZones(venueId, activeOnly),
         staleTime: 1000 * 60 * 30,
         gcTime: 1000 * 60 * 60,
     })

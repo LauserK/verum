@@ -165,9 +165,9 @@ async def delete_delivery_zone(org_id: str, zone_id: str, db):
     await cache.delete(f"sales:delivery_zones:{org_id}")
     return {"status": "deleted"}
 
-async def get_delivery_zones(org_id: str, db, active_only: bool = False):
+async def get_delivery_zones(org_id: str, db, venue_id: Optional[str] = None, active_only: bool = False):
     from app.cache import cache
-    cache_key = f"sales:delivery_zones:{org_id}:active_{active_only}"
+    cache_key = f"sales:delivery_zones:{org_id}:venue_{venue_id}:active_{active_only}"
     cached = await cache.get(cache_key)
     if cached is not None:
         return cached
@@ -175,6 +175,11 @@ async def get_delivery_zones(org_id: str, db, active_only: bool = False):
     query = db.table("delivery_zones").select("*").eq("org_id", org_id)
     if active_only:
         query = query.eq("is_active", True)
+    
+    if venue_id:
+        # Match zones belonging to this specific venue OR global zones (venue_id is NULL)
+        query = query.or_(f"venue_id.eq.{venue_id},venue_id.is.null")
+        
     res = query.order("position").order("name").execute()
     result = res.data or []
     await cache.set(cache_key, result, ttl=3600)

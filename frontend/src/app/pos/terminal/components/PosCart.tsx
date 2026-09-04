@@ -27,6 +27,7 @@ import {
 } from 'lucide-react'
 import { usePosStore, CartItem, PosMode, Seat } from '@/store/posStore'
 import { useBillingConfig, useCurrencies, useExchangeRates, useTaxes, useDeliveryZones } from '@/hooks/useSales'
+import { useVenue } from '@/components/VenueContext'
 import { MapPin, Navigation } from 'lucide-react'
 
 const MODE_BADGES: Record<PosMode, { label: string; icon: React.ElementType; color: string }> = {
@@ -75,11 +76,12 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
     clearDelivery
   } = usePosStore()
 
+  const { selectedVenueId } = useVenue()
   const { data: config } = useBillingConfig()
   const { data: currencies = [] } = useCurrencies()
   const { data: rates = [] } = useExchangeRates()
   const { data: taxes = [] } = useTaxes(true)
-  const { data: deliveryZones = [] } = useDeliveryZones(true)
+  const { data: deliveryZones = [] } = useDeliveryZones(selectedVenueId || undefined, true)
   const [showDeliveryModal, setShowDeliveryModal] = useState(false)
 
   // 1. Resolve Base Currency

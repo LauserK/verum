@@ -4,16 +4,21 @@
 CREATE TABLE IF NOT EXISTS public.delivery_zones (
     id          UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
     org_id      UUID REFERENCES organizations(id) ON DELETE CASCADE NOT NULL,
+    venue_id    UUID REFERENCES venues(id) ON DELETE CASCADE NULL,
     name        TEXT NOT NULL,
     cost        NUMERIC(18,2) NOT NULL DEFAULT 0.00,
     is_active   BOOLEAN NOT NULL DEFAULT true,
     position    INTEGER NOT NULL DEFAULT 0,
     created_at  TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at  TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    UNIQUE (org_id, name)
+    updated_at  TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Unique index per (org_id, venue_id, name) handling NULL venue_id with COALESCE or partial index
+CREATE UNIQUE INDEX IF NOT EXISTS idx_delivery_zones_org_venue_name 
+    ON public.delivery_zones(org_id, (COALESCE(venue_id, '00000000-0000-0000-0000-000000000000'::uuid)), name);
+
 CREATE INDEX IF NOT EXISTS idx_delivery_zones_org ON public.delivery_zones(org_id, is_active);
+CREATE INDEX IF NOT EXISTS idx_delivery_zones_venue ON public.delivery_zones(org_id, venue_id, is_active);
 
 -- 2. Enable Row Level Security (RLS)
 ALTER TABLE public.delivery_zones ENABLE ROW LEVEL SECURITY;

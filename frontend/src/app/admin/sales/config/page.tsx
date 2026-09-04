@@ -20,6 +20,7 @@ import {
   useDeleteDeliveryZone
 } from '@/hooks/useSales'
 import { salesApi, PaymentMethod, DeliveryZone } from '@/lib/api/sales'
+import { useVenue } from '@/components/VenueContext'
 import { 
   Settings, 
   CreditCard, 
@@ -35,12 +36,15 @@ import {
   Trash2,
   Power,
   UserCheck,
-  Bike
+  Bike,
+  Building2
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
 export default function SalesConfigPage() {
+  const { venues } = useVenue()
+  const [selectedZoneVenueFilter, setSelectedZoneVenueFilter] = useState<string>('all')
   const { data: config, isLoading: loadingConfig, refetch: refetchConfig } = useBillingConfig()
   const { data: paymentMethods, isLoading: loadingMethods } = usePaymentMethods()
   const { mutateAsync: createPaymentMethod, isPending: creatingPaymentMethod } = useCreatePaymentMethod()
@@ -56,7 +60,9 @@ export default function SalesConfigPage() {
   const { mutateAsync: createModeConfig } = useCreateModeConfig()
   const { mutateAsync: updateModeConfig } = useUpdateModeConfig()
 
-  const { data: deliveryZones, isLoading: loadingZones } = useDeliveryZones()
+  const { data: deliveryZones, isLoading: loadingZones } = useDeliveryZones(
+    selectedZoneVenueFilter === 'all' ? undefined : selectedZoneVenueFilter
+  )
   const { mutateAsync: createDeliveryZone, isPending: creatingZone } = useCreateDeliveryZone()
   const { mutateAsync: updateDeliveryZone, isPending: updatingZone } = useUpdateDeliveryZone()
   const { mutateAsync: deleteDeliveryZone, isPending: deletingZone } = useDeleteDeliveryZone()
@@ -114,6 +120,7 @@ export default function SalesConfigPage() {
   const [editingZone, setEditingZone] = useState<DeliveryZone | null>(null)
   const [zoneError, setZoneError] = useState<string | null>(null)
   const [zoneForm, setZoneForm] = useState({
+    venue_id: '',
     name: '',
     cost: 0,
     is_active: true,
@@ -317,6 +324,7 @@ export default function SalesConfigPage() {
     setEditingZone(null)
     setZoneError(null)
     setZoneForm({
+      venue_id: selectedZoneVenueFilter !== 'all' ? selectedZoneVenueFilter : '',
       name: '',
       cost: 0,
       is_active: true,
@@ -329,6 +337,7 @@ export default function SalesConfigPage() {
     setEditingZone(zone)
     setZoneError(null)
     setZoneForm({
+      venue_id: zone.venue_id || '',
       name: zone.name,
       cost: zone.cost,
       is_active: zone.is_active,
@@ -354,6 +363,7 @@ export default function SalesConfigPage() {
         await updateDeliveryZone({
           id: editingZone.id,
           data: {
+            venue_id: zoneForm.venue_id || null,
             name: zoneForm.name.trim(),
             cost: Number(zoneForm.cost),
             is_active: zoneForm.is_active,
@@ -362,6 +372,7 @@ export default function SalesConfigPage() {
         })
       } else {
         await createDeliveryZone({
+          venue_id: zoneForm.venue_id || null,
           name: zoneForm.name.trim(),
           cost: Number(zoneForm.cost),
           is_active: zoneForm.is_active,
@@ -827,19 +838,36 @@ export default function SalesConfigPage() {
 
       {/* 5. Delivery Zones */}
       <div className="bg-surface border border-border rounded-2xl p-6 shadow-sm space-y-4">
-        <div className="flex justify-between items-center border-b border-border pb-3">
+        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 border-b border-border pb-3">
           <div>
             <h2 className="text-base font-bold text-text-primary flex items-center gap-2">
               <Bike className="w-5 h-5 text-primary" /> Zonas de Delivery y Tarifas
             </h2>
             <p className="text-xs text-text-secondary mt-0.5">Configura las zonas de envío a domicilio y sus tarifas para cobro en POS</p>
           </div>
-          <button 
-            onClick={handleOpenCreateZone}
-            className="flex items-center justify-center gap-2 bg-primary text-text-inverse px-4 h-10 rounded-xl text-xs font-bold hover:bg-primary-hover transition-all shadow-md shadow-primary/20 active:scale-95 shrink-0"
-          >
-            <Plus className="w-3.5 h-3.5" /> Agregar Zona
-          </button>
+          <div className="flex items-center gap-2">
+            {venues && venues.length > 0 && (
+              <div className="flex items-center gap-1.5 bg-surface-raised border border-border rounded-xl px-2.5 py-1">
+                <Building2 className="w-3.5 h-3.5 text-text-secondary" />
+                <select
+                  value={selectedZoneVenueFilter}
+                  onChange={(e) => setSelectedZoneVenueFilter(e.target.value)}
+                  className="bg-transparent text-xs font-semibold text-text-primary outline-none cursor-pointer"
+                >
+                  <option value="all">Todas las Sedes</option>
+                  {venues.map((v) => (
+                    <option key={v.id} value={v.id}>{v.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <button 
+              onClick={handleOpenCreateZone}
+              className="flex items-center justify-center gap-2 bg-primary text-text-inverse px-4 h-10 rounded-xl text-xs font-bold hover:bg-primary-hover transition-all shadow-md shadow-primary/20 active:scale-95 shrink-0"
+            >
+              <Plus className="w-3.5 h-3.5" /> Agregar Zona
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 pt-1">
@@ -848,57 +876,65 @@ export default function SalesConfigPage() {
           ) : !deliveryZones || deliveryZones.length === 0 ? (
             <div className="col-span-full py-6 text-center text-text-secondary">No hay zonas de delivery configuradas.</div>
           ) : (
-            deliveryZones.map(z => (
-              <div key={z.id} className={`border border-border bg-surface-raised rounded-xl p-4 space-y-3 transition-all ${!z.is_active ? 'opacity-60 bg-surface/40' : ''}`}>
-                <div className="flex justify-between items-start">
-                  <div>
-                    <span className="font-bold text-sm text-text-primary block">{z.name}</span>
-                    <span className="text-xs font-bold text-primary">
-                      ${Number(z.cost).toFixed(2)} USD
+            deliveryZones.map(z => {
+              const matchedVenue = venues?.find(v => v.id === z.venue_id)
+              return (
+                <div key={z.id} className={`border border-border bg-surface-raised rounded-xl p-4 space-y-3 transition-all ${!z.is_active ? 'opacity-60 bg-surface/40' : ''}`}>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <span className="font-bold text-sm text-text-primary block">{z.name}</span>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="text-xs font-bold text-primary">
+                          ${Number(z.cost).toFixed(2)} USD
+                        </span>
+                        <span className="text-[10px] text-text-secondary font-medium">
+                          • {matchedVenue ? matchedVenue.name : 'Todas las sedes'}
+                        </span>
+                      </div>
+                    </div>
+                    <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border font-mono ${
+                      z.is_active ? 'bg-success/10 text-success border-success/20' : 'bg-surface text-text-secondary border-border'
+                    }`}>
+                      {z.is_active ? 'Activa' : 'Inactiva'}
                     </span>
                   </div>
-                  <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border font-mono ${
-                    z.is_active ? 'bg-success/10 text-success border-success/20' : 'bg-surface text-text-secondary border-border'
-                  }`}>
-                    {z.is_active ? 'Activa' : 'Inactiva'}
-                  </span>
-                </div>
 
-                <div className="text-xs text-text-secondary flex justify-between items-center pt-2 border-t border-border/50">
-                  <span className="text-[11px] text-text-secondary">
-                    Tarifa de envío
-                  </span>
+                  <div className="text-xs text-text-secondary flex justify-between items-center pt-2 border-t border-border/50">
+                    <span className="text-[11px] text-text-secondary">
+                      Tarifa de envío
+                    </span>
 
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => handleToggleZone(z)}
-                      title={z.is_active ? 'Desactivar' : 'Activar'}
-                      className={`p-1.5 rounded-lg border transition-colors ${
-                        z.is_active 
-                          ? 'hover:bg-error/10 hover:text-error border-border' 
-                          : 'hover:bg-success/10 hover:text-success border-border'
-                      }`}
-                    >
-                      <Power className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => handleOpenEditZone(z)}
-                      title="Editar"
-                      className="p-1.5 rounded-lg border border-border hover:bg-surface text-text-secondary hover:text-primary transition-colors"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteZone(z)}
-                      title="Eliminar"
-                      className="p-1.5 rounded-lg border border-border hover:bg-error/10 text-text-secondary hover:text-error transition-colors"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => handleToggleZone(z)}
+                        title={z.is_active ? 'Desactivar' : 'Activar'}
+                        className={`p-1.5 rounded-lg border transition-colors ${
+                          z.is_active 
+                            ? 'hover:bg-error/10 hover:text-error border-border' 
+                            : 'hover:bg-success/10 hover:text-success border-border'
+                        }`}
+                      >
+                        <Power className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleOpenEditZone(z)}
+                        title="Editar"
+                        className="p-1.5 rounded-lg border border-border hover:bg-surface text-text-secondary hover:text-primary transition-colors"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteZone(z)}
+                        title="Eliminar"
+                        className="p-1.5 rounded-lg border border-border hover:bg-error/10 text-text-secondary hover:text-error transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))
+              )
+            })
           )}
         </div>
       </div>
@@ -1273,6 +1309,25 @@ export default function SalesConfigPage() {
             )}
 
             <form onSubmit={handleSaveZone} className="space-y-4">
+              {venues && venues.length > 0 && (
+                <div>
+                  <label className="text-xs font-bold text-text-secondary uppercase">Sede Asignada</label>
+                  <select
+                    value={zoneForm.venue_id}
+                    onChange={e => setZoneForm({...zoneForm, venue_id: e.target.value})}
+                    className="w-full bg-surface-raised border border-border rounded-xl px-3 py-2 text-sm focus:border-primary outline-none mt-1"
+                  >
+                    <option value="">Todas las sedes (Global)</option>
+                    {venues.map(v => (
+                      <option key={v.id} value={v.id}>{v.name}</option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-text-secondary mt-1">
+                    Puedes restringir esta zona a una sede específica o dejarla disponible para toda la empresa.
+                  </p>
+                </div>
+              )}
+
               <div>
                 <label className="text-xs font-bold text-text-secondary uppercase">Nombre de la Zona *</label>
                 <input 

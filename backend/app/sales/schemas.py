@@ -240,6 +240,7 @@ class PosSessionOut(BaseModel):
 # --- Delivery Zones ---
 
 class DeliveryZoneCreate(BaseModel):
+    venue_id: Optional[UUID] = None
     name: str
     cost: Decimal = Decimal('0.00')
     is_active: bool = True
@@ -247,6 +248,7 @@ class DeliveryZoneCreate(BaseModel):
     sync_to_quick: bool = False
 
 class DeliveryZoneUpdate(BaseModel):
+    venue_id: Optional[UUID] = None
     name: Optional[str] = None
     cost: Optional[Decimal] = None
     is_active: Optional[bool] = None
@@ -256,6 +258,7 @@ class DeliveryZoneUpdate(BaseModel):
 class DeliveryZoneOut(BaseModel):
     id: UUID
     org_id: UUID
+    venue_id: Optional[UUID] = None
     name: str
     cost: Decimal
     is_active: bool

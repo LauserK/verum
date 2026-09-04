@@ -118,12 +118,13 @@ async def create_delivery_zone(
 
 @router.get("/delivery-zones", response_model=List[DeliveryZoneOut])
 async def list_delivery_zones(
+    venue_id: Optional[str] = None,
     active_only: bool = False,
     org_id: str = Depends(get_active_org_id),
     db = Depends(get_db),
     _ = Depends(require_permission("sales.view_config"))
 ):
-    return await sales_svc.get_delivery_zones(org_id, db, active_only=active_only)
+    return await sales_svc.get_delivery_zones(org_id, db, venue_id=venue_id, active_only=active_only)
 
 @router.patch("/delivery-zones/{zone_id}", response_model=DeliveryZoneOut)
 async def update_delivery_zone(
