@@ -1,4 +1,4 @@
-﻿from datetime import datetime
+from datetime import datetime
 from fastapi import HTTPException
 from app.sales.schemas import CheckoutCreate
 from app.sales.service import resolve_pos_config
@@ -185,7 +185,8 @@ async def process_checkout(org_id: str, payload: CheckoutCreate, user_id: str, d
                 "notes": item.notes,
             })
 
-        total_amount = subtotal - payload.discount_amount
+        delivery_cost = float(payload.delivery_cost or 0.0) if payload.mode == "delivery" else 0.0
+        total_amount = subtotal - payload.discount_amount + delivery_cost
 
         # 6. Generate document number (auto-provision sequence if missing)
         doc_number = None
@@ -256,6 +257,11 @@ async def process_checkout(org_id: str, payload: CheckoutCreate, user_id: str, d
             "exchange_rate": 1.0,
             "subtotal": float(subtotal),
             "discount_amount": float(payload.discount_amount),
+            "delivery_zone_id": str(payload.delivery_zone_id) if payload.delivery_zone_id else None,
+            "delivery_zone_name": payload.delivery_zone_name,
+            "delivery_cost": delivery_cost,
+            "delivery_address": payload.delivery_address,
+            "delivery_notes": payload.delivery_notes,
             "total": float(total_amount),
             "amount_paid": float(amount_paid),
             "balance_due": float(balance_due),

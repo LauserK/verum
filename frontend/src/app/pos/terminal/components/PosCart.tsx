@@ -26,7 +26,8 @@ import {
   Lock
 } from 'lucide-react'
 import { usePosStore, CartItem, PosMode, Seat } from '@/store/posStore'
-import { useBillingConfig, useCurrencies, useExchangeRates, useTaxes } from '@/hooks/useSales'
+import { useBillingConfig, useCurrencies, useExchangeRates, useTaxes, useDeliveryZones } from '@/hooks/useSales'
+import { MapPin, Navigation } from 'lucide-react'
 
 const MODE_BADGES: Record<PosMode, { label: string; icon: React.ElementType; color: string }> = {
   tables: { label: 'Mesa', icon: Utensils, color: 'bg-primary/10 text-primary border-primary/20' },
@@ -63,13 +64,23 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
     addSeat,
     removeSeat,
     renameSeat,
-    moveItemToSeat
+    moveItemToSeat,
+    deliveryZoneId,
+    deliveryZoneName,
+    deliveryCost,
+    deliveryAddress,
+    deliveryNotes,
+    setDeliveryZone,
+    setDeliveryInfo,
+    clearDelivery
   } = usePosStore()
 
   const { data: config } = useBillingConfig()
   const { data: currencies = [] } = useCurrencies()
   const { data: rates = [] } = useExchangeRates()
   const { data: taxes = [] } = useTaxes(true)
+  const { data: deliveryZones = [] } = useDeliveryZones(true)
+  const [showDeliveryModal, setShowDeliveryModal] = useState(false)
 
   // 1. Resolve Base Currency
   const baseCurrency = useMemo(() => {
@@ -141,12 +152,18 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
     }, 4000)
   }
 
+  const effectiveTotal = useMemo(() => {
+    const validItemsTotal = typeof total === 'number' && !isNaN(total) ? total : 0
+    const validDelivery = posMode === 'delivery' && typeof deliveryCost === 'number' && !isNaN(deliveryCost) ? deliveryCost : 0
+    return Math.round((validItemsTotal + validDelivery) * 100) / 100
+  }, [total, posMode, deliveryCost])
+
   const totalSecondary = useMemo(() => {
-    const validTotal = typeof total === 'number' && !isNaN(total) ? total : 0
+    const validTotal = typeof effectiveTotal === 'number' && !isNaN(effectiveTotal) ? effectiveTotal : 0
     if (!hasSecondary) return 0
     const v = validTotal * exchangeRate
     return isNaN(v) ? 0 : v
-  }, [total, exchangeRate, hasSecondary])
+  }, [effectiveTotal, exchangeRate, hasSecondary])
 
   // Subtotal & Tax breakdown calculated item by item
   const { subtotal, taxAmount, weightedTaxRate } = useMemo(() => {
@@ -504,6 +521,25 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
               {customerId ? customerName : 'Cliente'}
             </span>
           </button>
+
+          {/* Delivery Zone Button in Delivery Mode */}
+          {posMode === 'delivery' && (
+            <button
+              type="button"
+              onClick={() => setShowDeliveryModal(true)}
+              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer min-h-[28px] ${
+                deliveryZoneId
+                  ? 'border-blue-500/40 text-blue-500 bg-blue-500/10'
+                  : 'border-border text-text-secondary hover:border-blue-500/30 hover:text-blue-500 bg-surface-raised/40'
+              }`}
+              title={deliveryZoneName ? `Zona: ${deliveryZoneName} ($${deliveryCost.toFixed(2)})` : 'Seleccionar Zona Delivery'}
+            >
+              <MapPin className="w-3 h-3" />
+              <span className="truncate max-w-[90px]">
+                {deliveryZoneName ? `${deliveryZoneName}` : 'Zona Delivery'}
+              </span>
+            </button>
+          )}
 
           {/* Add Seat Button when in tables mode and less than 2 seats exist */}
           {posMode === 'tables' && seats.length < 2 && (
@@ -880,6 +916,16 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
               {baseCurrency.symbol} {(Number(taxAmount) || 0).toFixed(2)}
             </span>
           </div>
+          {posMode === 'delivery' && (
+            <div className="flex justify-between items-center text-[10px] text-blue-500 font-semibold">
+              <span className="flex items-center gap-1">
+                <MapPin className="w-2.5 h-2.5" /> Envío ({deliveryZoneName || 'Sin zona asignada'}):
+              </span>
+              <span className="font-mono font-bold">
+                {baseCurrency.symbol} {(Number(deliveryCost) || 0).toFixed(2)}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Dual-Currency TOTAL Display (Balanced Font Size) */}
@@ -889,7 +935,7 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
               Total a Pagar
             </span>
             <div className="text-lg sm:text-xl font-black text-primary font-mono tracking-tight leading-none mt-0.5">
-              {baseCurrency.symbol} {(Number(total) || 0).toFixed(2)}
+              {baseCurrency.symbol} {(Number(effectiveTotal) || 0).toFixed(2)}
             </div>
           </div>
           {hasSecondary && (
@@ -955,6 +1001,123 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
           </button>
         </div>
       </div>
+
+      {/* Modal: Delivery Zone & Address Selection */}
+      {showDeliveryModal && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-surface border border-border/80 rounded-3xl p-5 w-full max-w-md shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-border/60 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-blue-500/10 text-blue-500 border border-blue-500/20 flex items-center justify-center">
+                  <Bike className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-text-primary">Configuración de Delivery</h3>
+                  <p className="text-[11px] text-text-secondary">Selecciona la zona de entrega y dirección</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDeliveryModal(false)}
+                className="p-1.5 rounded-xl hover:bg-surface-raised text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Delivery Zones List */}
+            <div className="space-y-2">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-text-secondary">
+                Zona de Envío
+              </label>
+              
+              <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
+                {/* Free / No zone */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDeliveryZone(null, null, 0)
+                  }}
+                  className={`w-full flex items-center justify-between p-3 rounded-2xl border text-xs font-bold transition-all cursor-pointer ${
+                    !deliveryZoneId
+                      ? 'bg-primary/10 border-primary text-primary shadow-xs ring-1 ring-primary/30'
+                      : 'bg-surface-raised border-border text-text-primary hover:border-primary/40'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Navigation className="w-4 h-4 text-text-secondary" />
+                    <span>Sin recargo / Retiro acordado</span>
+                  </div>
+                  <span className="font-mono font-bold">$0.00</span>
+                </button>
+
+                {deliveryZones.map((zone) => {
+                  const isSelected = deliveryZoneId === zone.id
+                  return (
+                    <button
+                      key={zone.id}
+                      type="button"
+                      onClick={() => {
+                        setDeliveryZone(zone.id, zone.name, Number(zone.cost) || 0)
+                      }}
+                      className={`w-full flex items-center justify-between p-3 rounded-2xl border text-xs font-bold transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-blue-500/10 border-blue-500 text-blue-500 shadow-xs ring-1 ring-blue-500/30'
+                          : 'bg-surface-raised border-border text-text-primary hover:border-blue-500/40'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <MapPin className={`w-4 h-4 ${isSelected ? 'text-blue-500' : 'text-text-secondary'}`} />
+                        <span>{zone.name}</span>
+                      </div>
+                      <span className="font-mono font-bold">{baseCurrency.symbol} {Number(zone.cost).toFixed(2)}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Delivery Address & Notes */}
+            <div className="space-y-2.5 pt-2 border-t border-border/60">
+              <div>
+                <label className="text-[11px] font-bold uppercase tracking-wider text-text-secondary">
+                  Dirección de Entrega
+                </label>
+                <input
+                  type="text"
+                  value={deliveryAddress || ''}
+                  onChange={(e) => setDeliveryInfo({ address: e.target.value })}
+                  placeholder="Ej: Av. Principal, Edif. Los Pinos, Apto 4-B"
+                  className="w-full bg-surface-raised border border-border focus:border-primary px-3.5 py-2 rounded-xl text-xs font-medium text-text-primary outline-none mt-1"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold uppercase tracking-wider text-text-secondary">
+                  Punto de Referencia / Notas
+                </label>
+                <input
+                  type="text"
+                  value={deliveryNotes || ''}
+                  onChange={(e) => setDeliveryInfo({ notes: e.target.value })}
+                  placeholder="Ej: Portón negro al lado de la panadería"
+                  className="w-full bg-surface-raised border border-border focus:border-primary px-3.5 py-2 rounded-xl text-xs font-medium text-text-primary outline-none mt-1"
+                />
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-border/60 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowDeliveryModal(false)}
+                className="px-5 py-2.5 bg-primary hover:bg-primary-hover text-text-inverse font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer active:scale-95"
+              >
+                Aplicar Delivery
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

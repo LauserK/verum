@@ -105,6 +105,47 @@ async def delete_payment_method(
     await invalidate_sales_config(org_id)
     return res
 
+# --- Delivery Zones ---
+
+@router.post("/delivery-zones", response_model=DeliveryZoneOut)
+async def create_delivery_zone(
+    payload: DeliveryZoneCreate,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_config"))
+):
+    return await sales_svc.create_delivery_zone(org_id, payload, db)
+
+@router.get("/delivery-zones", response_model=List[DeliveryZoneOut])
+async def list_delivery_zones(
+    active_only: bool = False,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.view_config"))
+):
+    return await sales_svc.get_delivery_zones(org_id, db, active_only=active_only)
+
+@router.patch("/delivery-zones/{zone_id}", response_model=DeliveryZoneOut)
+async def update_delivery_zone(
+    zone_id: str,
+    payload: dict,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_config"))
+):
+    from app.sales.schemas import DeliveryZoneUpdate
+    update_schema = DeliveryZoneUpdate(**payload)
+    return await sales_svc.update_delivery_zone(org_id, zone_id, update_schema, db)
+
+@router.delete("/delivery-zones/{zone_id}")
+async def delete_delivery_zone(
+    zone_id: str,
+    org_id: str = Depends(get_active_org_id),
+    db = Depends(get_db),
+    _ = Depends(require_permission("sales.manage_config"))
+):
+    return await sales_svc.delete_delivery_zone(org_id, zone_id, db)
+
 @router.post("/workstations", response_model=WorkstationOut)
 async def create_workstation(
     payload: WorkstationCreate,

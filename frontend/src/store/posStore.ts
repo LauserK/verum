@@ -36,6 +36,11 @@ export interface PosCartContext {
   guestsCount?: number | null
   isOpen?: boolean
   openedAt?: string | null
+  deliveryZoneId?: string | null
+  deliveryZoneName?: string | null
+  deliveryCost?: number
+  deliveryAddress?: string | null
+  deliveryNotes?: string | null
 }
 
 export interface PosState {
@@ -59,6 +64,11 @@ export interface PosState {
   assignedTo?: string | null
   assignedToName?: string | null
   guestsCount?: number | null
+  deliveryZoneId: string | null
+  deliveryZoneName: string | null
+  deliveryCost: number
+  deliveryAddress: string | null
+  deliveryNotes: string | null
   showCheckout: boolean
   showCustomerSelector: boolean
   cartsByContext: Record<string, PosCartContext>
@@ -86,6 +96,9 @@ export interface PosState {
   setSelectedCategory: (catId: string) => void
   setCustomer: (id: string | null, name: string | null, taxId?: string | null) => void
   clearCustomer: () => void
+  setDeliveryZone: (zoneId: string | null, zoneName: string | null, cost: number) => void
+  setDeliveryInfo: (info: { address?: string | null; notes?: string | null }) => void
+  clearDelivery: () => void
   setShowCheckout: (show: boolean) => void
   setShowCustomerSelector: (show: boolean) => void
   setActiveSeat: (seatId: string | null) => void
@@ -145,6 +158,11 @@ export const usePosStore = create<PosState>()(
       customerId: null,
       customerName: null,
       customerTaxId: null,
+      deliveryZoneId: null,
+      deliveryZoneName: null,
+      deliveryCost: 0,
+      deliveryAddress: null,
+      deliveryNotes: null,
       showCheckout: false,
       showCustomerSelector: false,
       cartsByContext: {},
@@ -414,6 +432,74 @@ export const usePosStore = create<PosState>()(
             customerId: null,
             customerName: null,
             customerTaxId: null,
+            cartsByContext: updatedCarts,
+          }
+        })
+      },
+
+      setDeliveryZone: (zoneId: string | null, zoneName: string | null, cost: number) => {
+        set((state) => {
+          const currentKey = getContextKey(state.posMode, state.activeTableId)
+          const updatedCarts = { ...state.cartsByContext }
+          if (currentKey !== 'tables:map') {
+            updatedCarts[currentKey] = {
+              ...(updatedCarts[currentKey] || { cart: state.cart, total: state.total }),
+              deliveryZoneId: zoneId,
+              deliveryZoneName: zoneName,
+              deliveryCost: cost,
+            }
+          }
+          return {
+            deliveryZoneId: zoneId,
+            deliveryZoneName: zoneName,
+            deliveryCost: cost,
+            cartsByContext: updatedCarts,
+          }
+        })
+      },
+
+      setDeliveryInfo: (info: { address?: string | null; notes?: string | null }) => {
+        set((state) => {
+          const currentKey = getContextKey(state.posMode, state.activeTableId)
+          const updatedCarts = { ...state.cartsByContext }
+          const newAddress = info.address !== undefined ? info.address : state.deliveryAddress
+          const newNotes = info.notes !== undefined ? info.notes : state.deliveryNotes
+
+          if (currentKey !== 'tables:map') {
+            updatedCarts[currentKey] = {
+              ...(updatedCarts[currentKey] || { cart: state.cart, total: state.total }),
+              deliveryAddress: newAddress,
+              deliveryNotes: newNotes,
+            }
+          }
+          return {
+            deliveryAddress: newAddress,
+            deliveryNotes: newNotes,
+            cartsByContext: updatedCarts,
+          }
+        })
+      },
+
+      clearDelivery: () => {
+        set((state) => {
+          const currentKey = getContextKey(state.posMode, state.activeTableId)
+          const updatedCarts = { ...state.cartsByContext }
+          if (currentKey !== 'tables:map') {
+            updatedCarts[currentKey] = {
+              ...(updatedCarts[currentKey] || { cart: state.cart, total: state.total }),
+              deliveryZoneId: null,
+              deliveryZoneName: null,
+              deliveryCost: 0,
+              deliveryAddress: null,
+              deliveryNotes: null,
+            }
+          }
+          return {
+            deliveryZoneId: null,
+            deliveryZoneName: null,
+            deliveryCost: 0,
+            deliveryAddress: null,
+            deliveryNotes: null,
             cartsByContext: updatedCarts,
           }
         })

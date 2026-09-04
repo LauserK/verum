@@ -237,6 +237,32 @@ class PosSessionOut(BaseModel):
     opened_at: Optional[Union[dt_datetime, str]] = None
     closed_at: Optional[Union[dt_datetime, str]] = None
 
+# --- Delivery Zones ---
+
+class DeliveryZoneCreate(BaseModel):
+    name: str
+    cost: Decimal = Decimal('0.00')
+    is_active: bool = True
+    position: int = 0
+    sync_to_quick: bool = False
+
+class DeliveryZoneUpdate(BaseModel):
+    name: Optional[str] = None
+    cost: Optional[Decimal] = None
+    is_active: Optional[bool] = None
+    position: Optional[int] = None
+    sync_to_quick: Optional[bool] = False
+
+class DeliveryZoneOut(BaseModel):
+    id: UUID
+    org_id: UUID
+    name: str
+    cost: Decimal
+    is_active: bool
+    position: int
+    created_at: Optional[Union[dt_datetime, str]] = None
+    updated_at: Optional[Union[dt_datetime, str]] = None
+
 class PaymentMethodCreate(BaseModel):
     name: str
     method_type: Literal['cash', 'card', 'bank_transfer', 'mobile_payment', 'digital_wallet', 'crypto', 'other']
@@ -458,6 +484,12 @@ class InvoiceCreate(BaseModel):
     internal_notes: Optional[str] = None
     items: List[InvoiceItemCreate]
     warehouse_id: Optional[UUID] = None # For inventory deduction if immediate deduction is wanted
+    # Delivery fields
+    delivery_zone_id: Optional[UUID] = None
+    delivery_zone_name: Optional[str] = None
+    delivery_cost: Decimal = Decimal('0.00')
+    delivery_address: Optional[str] = None
+    delivery_notes: Optional[str] = None
 
 class InvoiceOut(BaseModel):
     id: UUID
@@ -486,6 +518,11 @@ class InvoiceOut(BaseModel):
     total: Decimal
     amount_paid: Decimal
     balance_due: Decimal
+    delivery_zone_id: Optional[UUID] = None
+    delivery_zone_name: Optional[str] = None
+    delivery_cost: Decimal = Decimal('0.00')
+    delivery_address: Optional[str] = None
+    delivery_notes: Optional[str] = None
     related_invoice_id: Optional[UUID] = None
     pos_session_id: Optional[UUID] = None
     notes: Optional[str] = None
@@ -731,6 +768,12 @@ class CheckoutCreate(BaseModel):
     document_type: str = "invoice"
     discount_amount: float = 0
     notes: Optional[str] = None
+    # Delivery fields
+    delivery_zone_id: Optional[UUID] = None
+    delivery_zone_name: Optional[str] = None
+    delivery_cost: float = 0.0
+    delivery_address: Optional[str] = None
+    delivery_notes: Optional[str] = None
     # M4 Additions
     split_mode: Optional[str] = None  # "seats", "equal", "manual"
     is_partial: bool = False
