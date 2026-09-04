@@ -43,7 +43,7 @@ import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
 export default function SalesConfigPage() {
-  const { venues } = useVenue()
+  const { availableVenues: venues, selectedVenueId, setSelectedVenueId } = useVenue()
   const [selectedZoneVenueFilter, setSelectedZoneVenueFilter] = useState<string>('all')
   const { data: config, isLoading: loadingConfig, refetch: refetchConfig } = useBillingConfig()
   const { data: paymentMethods, isLoading: loadingMethods } = usePaymentMethods()
@@ -323,8 +323,13 @@ export default function SalesConfigPage() {
   const handleOpenCreateZone = () => {
     setEditingZone(null)
     setZoneError(null)
+    // Pre-select active venue if selected or filter
+    const initialVenueId = selectedZoneVenueFilter !== 'all' 
+      ? selectedZoneVenueFilter 
+      : (selectedVenueId || '')
+
     setZoneForm({
-      venue_id: selectedZoneVenueFilter !== 'all' ? selectedZoneVenueFilter : '',
+      venue_id: initialVenueId,
       name: '',
       cost: 0,
       is_active: true,
@@ -405,14 +410,60 @@ export default function SalesConfigPage() {
     }
   }
 
+  const activeVenueObj = venues.find(v => v.id === selectedVenueId)
+
   return (
     <div className="space-y-8 animate-in fade-in max-w-4xl pb-12">
-      <div>
-        <h1 className="text-2xl font-bold text-text-primary flex items-center gap-2">
-          <Settings className="w-6 h-6 text-primary" /> Configuración de Facturación y Multimoneda
-        </h1>
-        <p className="text-sm text-text-secondary mt-1">Parámetros generales de facturación, monedas activas y tasas de cambio del día</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-text-primary flex items-center gap-2">
+            <Settings className="w-6 h-6 text-primary" /> Configuración de Facturación y Ventas
+          </h1>
+          <p className="text-sm text-text-secondary mt-1">Parámetros generales de facturación, multimoneda, políticas por sede y zonas de delivery</p>
+        </div>
+
+        {/* Venue Context Selector */}
+        {venues && venues.length > 0 && (
+          <div className="bg-surface border border-border hover:border-border-strong transition-colors rounded-2xl p-3 shadow-sm flex items-center gap-3 shrink-0">
+            <div className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+              <Building2 className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="text-[10px] uppercase font-bold text-text-secondary tracking-wider block">Sede Activa</span>
+              <select
+                value={selectedVenueId || ''}
+                onChange={(e) => {
+                  const newVenueId = e.target.value
+                  setSelectedVenueId(newVenueId)
+                  setSelectedZoneVenueFilter(newVenueId || 'all')
+                }}
+                className="bg-surface text-sm font-bold text-text-primary outline-none cursor-pointer pr-2 hover:text-primary transition-colors focus:ring-1 focus:ring-primary rounded-lg"
+              >
+                {venues.map((v) => (
+                  <option key={v.id} value={v.id} className="bg-surface text-text-primary py-1">
+                    {v.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Sede context banner notice if multi-venue */}
+      {venues && venues.length > 1 && (
+        <div className="p-4 rounded-2xl bg-surface-raised border border-border flex items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2.5">
+            <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+            <span className="text-text-secondary">
+              Estás visualizando la configuración en el contexto de la sede: <strong className="text-text-primary">{activeVenueObj?.name || 'Sede principal'}</strong>.
+            </span>
+          </div>
+          <span className="text-[11px] font-semibold text-text-secondary">
+            {venues.length} sedes registradas
+          </span>
+        </div>
+      )}
 
       {/* 1. General Config */}
       <div className="bg-surface border border-border rounded-2xl p-6 shadow-sm space-y-6">
@@ -852,11 +903,11 @@ export default function SalesConfigPage() {
                 <select
                   value={selectedZoneVenueFilter}
                   onChange={(e) => setSelectedZoneVenueFilter(e.target.value)}
-                  className="bg-transparent text-xs font-semibold text-text-primary outline-none cursor-pointer"
+                  className="bg-surface-raised text-xs font-semibold text-text-primary outline-none cursor-pointer"
                 >
-                  <option value="all">Todas las Sedes</option>
+                  <option value="all" className="bg-surface text-text-primary">Todas las Sedes</option>
                   {venues.map((v) => (
-                    <option key={v.id} value={v.id}>{v.name}</option>
+                    <option key={v.id} value={v.id} className="bg-surface text-text-primary">{v.name}</option>
                   ))}
                 </select>
               </div>
