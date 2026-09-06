@@ -176,12 +176,13 @@ export function CheckoutModal({
         discount_pct: 0
       }))
 
+      const isTableMode = mode === 'tables'
       const payload = {
         workstation_id: wsId,
         pos_session_id: sessId,
         mode: mode,
-        table_id: activeTableId || null,
-        table_order_id: activeTableId || null,
+        table_id: isTableMode ? (activeTableId || null) : null,
+        table_order_id: isTableMode ? (activeTableId || null) : null,
         customer_id: customerId,
         customer_name: customerName,
         customer_tax_id: customerTaxId,

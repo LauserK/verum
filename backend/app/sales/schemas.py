@@ -761,8 +761,8 @@ class CheckoutCreate(BaseModel):
     pos_session_id: UUID
     venue_id: Optional[UUID] = None
     mode: Literal['tables', 'takeout', 'delivery', 'pickup', 'bar']
-    table_id: Optional[UUID] = None
-    table_order_id: Optional[UUID] = None
+    table_id: Optional[str] = None
+    table_order_id: Optional[str] = None
     customer_id: Optional[UUID] = None
     customer_name: Optional[str] = None
     customer_tax_id: Optional[str] = None
