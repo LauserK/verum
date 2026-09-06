@@ -29,6 +29,7 @@ import {
 } from 'lucide-react'
 import { usePosStore, CartItem, PosMode, Seat } from '@/store/posStore'
 import { useBillingConfig, useCurrencies, useExchangeRates, useTaxes, useDeliveryZones } from '@/hooks/useSales'
+import { useProfile } from '@/hooks/useProfile'
 import { useVenue } from '@/components/VenueContext'
 import { MapPin, Navigation } from 'lucide-react'
 
@@ -79,6 +80,7 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
   } = usePosStore()
 
   const { selectedVenueId } = useVenue()
+  const { data: profile } = useProfile()
   const { data: config } = useBillingConfig()
   const { data: currencies = [] } = useCurrencies()
   const { data: rates = [] } = useExchangeRates()
@@ -87,6 +89,11 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
   const [showDeliveryModal, setShowDeliveryModal] = useState(false)
   const [zoneSearchQuery, setZoneSearchQuery] = useState('')
   const [showZoneDropdown, setShowZoneDropdown] = useState(false)
+
+  // Permissions helpers
+  const isAdminOrSuper = profile?.role === 'admin' || profile?.is_superadmin === true
+  const canVoidSentItems = isAdminOrSuper || Boolean(profile?.permissions?.includes('pos.void_item_sent'))
+  const canVoidOrder = isAdminOrSuper || Boolean(profile?.permissions?.includes('pos.void_order'))
 
   // 1. Resolve Base Currency
   const baseCurrency = useMemo(() => {
@@ -252,6 +259,11 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
 
   const handleClearCart = () => {
     if (cart.length === 0) return
+    const hasSentItems = cart.some((i) => i.sentToKitchen)
+    if (hasSentItems && !canVoidOrder && !canVoidSentItems) {
+      showToast('No tienes permiso para cancelar una orden enviada a cocina', 'warning')
+      return
+    }
     setDeletedBackup([...cart])
     clearCart()
     showToast('Comanda vaciada', 'info')
@@ -445,11 +457,11 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
           </span>
 
           <div className="flex items-center gap-0.5 bg-surface border border-border rounded-lg p-0.5 shadow-inner">
-            {/* Decrement or Remove (Disabled if sent to kitchen) */}
+            {/* Decrement or Remove (Disabled if sent to kitchen and user lacks pos.void_item_sent permission) */}
             <button
-              disabled={isSent}
+              disabled={isSent && !canVoidSentItems}
               onClick={() => {
-                if (isSent) return
+                if (isSent && !canVoidSentItems) return
                 if (item.quantity === 1) {
                   removeItem(item.cartItemId)
                 } else {
@@ -457,13 +469,19 @@ export default function PosCart({ onCheckout, onSendToKitchen, onPreBill }: PosC
                 }
               }}
               className={`w-6 h-6 rounded flex items-center justify-center transition-all min-w-[24px] min-h-[24px] ${
-                isSent
+                isSent && !canVoidSentItems
                   ? 'opacity-30 cursor-not-allowed text-text-secondary'
                   : item.quantity === 1
                   ? 'text-error/70 hover:text-error hover:bg-error/10 cursor-pointer active:scale-90'
                   : 'text-text-secondary hover:text-text-primary hover:bg-surface-raised cursor-pointer active:scale-90'
               }`}
-              title={isSent ? 'Item ya enviado a cocina' : item.quantity === 1 ? 'Eliminar de la orden' : 'Reducir cantidad'}
+              title={
+                isSent && !canVoidSentItems
+                  ? 'Item enviado a cocina (Requiere permiso para anular)'
+                  : item.quantity === 1
+                  ? 'Eliminar de la orden'
+                  : 'Reducir cantidad'
+              }
             >
               {item.quantity === 1 ? (
                 <Trash2 className="w-3 h-3" />

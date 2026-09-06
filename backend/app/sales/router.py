@@ -193,7 +193,7 @@ async def open_pos_session(
     user = Depends(get_current_user),
     org_id: str = Depends(get_active_org_id),
     db = Depends(get_db),
-    _ = Depends(require_permission("sales.manage_config"))
+    _ = Depends(require_permission("pos.open_session"))
 ):
     cashier_id = getattr(user, "id", None) or getattr(user, "user_id", None) or (user.get("id") if isinstance(user, dict) else None)
     return await sales_svc.open_pos_session(org_id, cashier_id, payload, db)
@@ -203,7 +203,7 @@ async def get_active_pos_session(
     workstation_id: Optional[str] = None,
     org_id: str = Depends(get_active_org_id),
     db = Depends(get_db),
-    _ = Depends(require_permission("sales.manage_config"))
+    _ = Depends(require_permission("pos.access_terminal"))
 ):
     return await sales_svc.get_active_pos_session(org_id, workstation_id, db)
 
@@ -324,7 +324,7 @@ async def transfer_table_order(
     user = Depends(get_current_user),
     org_id: str = Depends(get_active_org_id),
     db = Depends(get_db),
-    _ = Depends(require_permission("sales.create_invoice"))
+    _ = Depends(require_permission("pos.transfer_table"))
 ):
     user_id = getattr(user, "id", None) or getattr(user, "user_id", None) or (user.get("id") if isinstance(user, dict) else None)
     return await sales_svc.transfer_table_order(org_id, str(user_id) if user_id else None, payload, db)
@@ -335,7 +335,7 @@ async def merge_table_orders(
     user = Depends(get_current_user),
     org_id: str = Depends(get_active_org_id),
     db = Depends(get_db),
-    _ = Depends(require_permission("sales.create_invoice"))
+    _ = Depends(require_permission("pos.transfer_table"))
 ):
     user_id = getattr(user, "id", None) or getattr(user, "user_id", None) or (user.get("id") if isinstance(user, dict) else None)
     return await sales_svc.merge_table_orders(org_id, str(user_id) if user_id else None, payload, db)
@@ -345,7 +345,7 @@ async def delete_table_order(
     table_id: str,
     org_id: str = Depends(get_active_org_id),
     db = Depends(get_db),
-    _ = Depends(require_permission("sales.create_invoice"))
+    _ = Depends(require_permission("pos.void_order"))
 ):
     return await sales_svc.delete_table_order(org_id, table_id, db)
 
