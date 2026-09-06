@@ -4,8 +4,9 @@ from typing import Optional
 
 from database import get_db as _real_get_db
 from auth_deps import get_current_user
-from app.auth.schemas import SyncResponse, ProfileResponse
-from permissions import get_user_permissions
+from app.auth.schemas import SyncResponse, ProfileResponse, AuthorizeActionRequest, AuthorizeActionResponse
+from permissions import get_user_permissions, resolve_permission, get_user_permission_context
+from app.deps import get_active_org_id
 
 
 def _get_db():
@@ -192,6 +193,71 @@ async def get_profile(x_org_id: Optional[str] = Header(None), user=Depends(get_c
         }
         await cache.set(cache_key, response_data, ttl=3600)
         return response_data
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/auth/authorize-action", response_model=AuthorizeActionResponse)
+async def authorize_action(
+    body: AuthorizeActionRequest,
+    user=Depends(get_current_user),
+    org_id: str = Depends(get_active_org_id),
+):
+    """
+    Validates a supervisor's credential (PIN code or Barcode/RFID/NFC token)
+    and checks whether that supervisor possesses the requested permission for the active organization.
+    Does not switch the current active session.
+    """
+    try:
+        db = _get_db()
+        credential = body.credential.strip()
+        if not credential:
+            raise HTTPException(status_code=400, detail="Credencial requerida")
+
+        # Find profile matching pin_code (or in future RFID/badge code)
+        profile_res = db.table("profiles").select("id, full_name, is_superadmin").eq("pin_code", credential).execute()
+        if not profile_res.data:
+            return AuthorizeActionResponse(
+                authorized=False,
+                message="Credencial / PIN inválido o no asignado a ningún usuario."
+            )
+
+        supervisor = profile_res.data[0]
+        supervisor_id = supervisor["id"]
+        supervisor_name = supervisor.get("full_name") or "Supervisor"
+
+        # Verify supervisor belongs to this org (unless superadmin)
+        if not supervisor.get("is_superadmin"):
+            org_check = db.table("profile_organizations").select("organization_id").eq("profile_id", supervisor_id).eq("organization_id", org_id).execute()
+            if not org_check.data:
+                # Also check legacy profile.organization_id
+                prof_org = db.table("profiles").select("organization_id").eq("id", supervisor_id).execute()
+                if not (prof_org.data and prof_org.data[0].get("organization_id") == org_id):
+                    return AuthorizeActionResponse(
+                        authorized=False,
+                        message="El usuario de este PIN no pertenece a esta organización."
+                    )
+
+        # Check permission for the supervisor
+        perm_context = await get_user_permission_context(supervisor_id, db, org_id)
+        has_permission = await resolve_permission(supervisor_id, body.permission_key, db, org_id=org_id, perm_context=perm_context)
+
+        if not has_permission:
+            return AuthorizeActionResponse(
+                authorized=False,
+                supervisor_id=supervisor_id,
+                supervisor_name=supervisor_name,
+                message=f"El usuario {supervisor_name} no cuenta con el permiso requerido ({body.permission_key})."
+            )
+
+        return AuthorizeActionResponse(
+            authorized=True,
+            supervisor_id=supervisor_id,
+            supervisor_name=supervisor_name,
+            message="Acción autorizada con éxito."
+        )
     except HTTPException:
         raise
     except Exception as e:

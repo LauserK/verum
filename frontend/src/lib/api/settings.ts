@@ -49,4 +49,8 @@ export const settingsApi = {
 
     assignRolePermissions: (roleId: string, permissionIds: string[]): Promise<unknown> =>
         fetchWithAuth(`/roles/${roleId}/permissions`, { method: 'POST', body: JSON.stringify(permissionIds) }),
+
+    authorizeAction: (data: { credential: string; permission_key: string }): Promise<{ authorized: boolean; supervisor_id?: string; supervisor_name?: string; message?: string }> =>
+        fetchWithAuth('/auth/authorize-action', { method: 'POST', body: JSON.stringify(data) }),
 }
+

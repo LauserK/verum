@@ -33,3 +33,15 @@ class ProfileResponse(BaseModel):
     shift_name: Optional[str] = None
     pin_code: Optional[str] = None
     permissions: List[str] = []
+
+
+class AuthorizeActionRequest(BaseModel):
+    credential: str  # PIN code (4-6 digits), or Barcode / RFID / NFC badge scan
+    permission_key: str  # e.g. 'pos.create_cxc'
+
+
+class AuthorizeActionResponse(BaseModel):
+    authorized: bool
+    supervisor_id: Optional[str] = None
+    supervisor_name: Optional[str] = None
+    message: Optional[str] = None

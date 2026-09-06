@@ -19,6 +19,8 @@ import { PaymentCalculator } from './PaymentCalculator'
 import { ChangeRegistration } from './ChangeRegistration'
 import { CheckoutConfirmation } from './CheckoutConfirmation'
 import { SplitBillModal } from './SplitBillModal'
+import { SupervisorAuthModal } from '@/components/SupervisorAuthModal'
+import { useProfile } from '@/components/ProfileContext'
 import { useCheckout, useBillingConfig, useCurrencies, useExchangeRates, useWorkstations, useActivePosSession } from '@/hooks/useSales'
 import { usePosStore, CartItem, PosMode } from '@/store/posStore'
 import { CheckoutPayment, CheckoutChange } from '@/lib/api/sales'
@@ -47,6 +49,7 @@ export function CheckoutModal({
   tableName,
   orderNumber
 }: CheckoutModalProps) {
+  const profile = useProfile()
   const [step, setStep] = useState<CheckoutStep>('decision')
   const [paymentFlow, setPaymentFlow] = useState<PaymentFlowType>('complete')
   const [registeredPayments, setRegisteredPayments] = useState<CheckoutPayment[]>([])
@@ -54,6 +57,8 @@ export function CheckoutModal({
   const [lastInvoice, setLastInvoice] = useState<any | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [showSplitBill, setShowSplitBill] = useState(false)
+  const [showCxcConfirm, setShowCxcConfirm] = useState(false)
+  const [showSupervisorModal, setShowSupervisorModal] = useState(false)
 
   const {
     activeWorkstationId,
@@ -120,7 +125,8 @@ export function CheckoutModal({
   const hasSecondary = Boolean(secondaryCurrency && exchangeRate > 0)
   const totalSecondary = useMemo(() => total * exchangeRate, [total, exchangeRate])
 
-  if (!isOpen) return null
+  const isAdminOrSuper = profile?.role === 'admin' || profile?.is_superadmin === true
+  const canCreateCxc = isAdminOrSuper || Boolean(profile?.permissions?.includes('pos.create_cxc'))
 
   const handleSelectFlow = (flow: PaymentFlowType) => {
     setPaymentFlow(flow)
@@ -131,8 +137,14 @@ export function CheckoutModal({
         setErrorMessage('La venta a Crédito (CXC) requiere un cliente registrado con RIF/Cédula.')
         return
       }
-      // Execute CXC directly without payments
-      handleFinalizeCheckout([], null)
+
+      if (canCreateCxc) {
+        // User has direct permission -> ask confirmation
+        setShowCxcConfirm(true)
+      } else {
+        // User lacks permission -> open supervisor authorization modal
+        setShowSupervisorModal(true)
+      }
       return
     }
 
@@ -464,6 +476,75 @@ export function CheckoutModal({
           }}
         />
       )}
+
+      {/* Confirmation Modal for CXC when authorized */}
+      {showCxcConfirm && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div 
+            className="bg-surface border border-border shadow-2xl rounded-3xl w-full max-w-sm sm:max-w-md overflow-hidden flex flex-col scale-100 animate-in zoom-in-95 duration-200 p-6 space-y-4 text-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-14 h-14 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center mx-auto">
+              <FileCheck2 className="w-7 h-7" />
+            </div>
+
+            <div>
+              <h3 className="text-lg font-bold text-text-primary">¿Confirmar Cuenta por Cobrar (CXC)?</h3>
+              <p className="text-xs text-text-secondary mt-1">
+                La orden se registrará como deuda pendiente a nombre del cliente seleccionado.
+              </p>
+            </div>
+
+            <div className="p-3 bg-surface-raised border border-border rounded-2xl text-left text-xs space-y-2">
+              <div className="flex justify-between">
+                <span className="text-text-secondary">Cliente:</span>
+                <span className="font-semibold text-text-primary">{customerName || 'Cliente'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-text-secondary">Monto Total:</span>
+                <span className="font-mono font-bold text-purple-400">{baseCurrency.symbol} {total.toFixed(2)}</span>
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowCxcConfirm(false)}
+                className="flex-1 h-11 rounded-xl border border-border text-text-primary text-xs sm:text-sm font-semibold hover:bg-surface-raised transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCxcConfirm(false)
+                  handleFinalizeCheckout([], null)
+                }}
+                className="flex-1 h-11 rounded-xl bg-purple-600 text-white text-xs sm:text-sm font-semibold hover:bg-purple-700 transition-colors shadow-lg shadow-purple-500/20 flex items-center justify-center gap-1.5"
+              >
+                <span>Sí, Crear CXC</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Supervisor Authorization Modal (PIN / Barcode / RFID / NFC) */}
+      {showSupervisorModal && (
+        <SupervisorAuthModal
+          isOpen={showSupervisorModal}
+          title="Autorización para CXC"
+          description="Tu usuario no tiene permiso directo para crear Cuentas por Cobrar. Un supervisor o administrador debe ingresar su PIN o escanear su credencial."
+          permissionKey="pos.create_cxc"
+          onAuthorized={(supervisor) => {
+            setShowSupervisorModal(false)
+            // Proceed to CXC directly
+            handleFinalizeCheckout([], null)
+          }}
+          onCancel={() => setShowSupervisorModal(false)}
+        />
+      )}
     </>
   )
 }
+
