@@ -84,6 +84,12 @@ export default function PosTerminalPage() {
   // Pre-bill Modal State
   const [showPreBillModal, setShowPreBillModal] = useState(false)
 
+  // Ensure modal is closed on fresh mount / route entry
+  React.useEffect(() => {
+    setShowCheckout(false)
+    setShowCustomerSelector(false)
+  }, [setShowCheckout, setShowCustomerSelector])
+
   // Auto-resolve workstation if not set in store
   React.useEffect(() => {
     if (workstations.length > 0 && !activeWorkstationId) {
