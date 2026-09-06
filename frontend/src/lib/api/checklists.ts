@@ -13,6 +13,7 @@ export interface Profile {
     venue_id?: string
     shift_id?: string
     shift_name?: string
+    pin_code?: string | null
     permissions?: string[]
 }
 

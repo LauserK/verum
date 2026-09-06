@@ -187,6 +187,7 @@ async def get_profile(x_org_id: Optional[str] = Header(None), user=Depends(get_c
             "venue_id": profile.get("venue_id"),
             "shift_id": shift_id,
             "shift_name": shift_name,
+            "pin_code": profile.get("pin_code"),
             "permissions": user_permissions,
         }
         await cache.set(cache_key, response_data, ttl=3600)

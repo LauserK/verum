@@ -152,7 +152,7 @@ async def list_users(user=Depends(require_permission("admin.manage_users")), org
     # Query profile_organizations to find everyone who belongs to this org
     # Join with profiles to get details and custom_roles to get org-specific roles
     res = db.table("profile_organizations") \
-        .select("profile_id, role_id, profiles(id, full_name, role, organization_id, venue_id, shift_id), custom_roles(name)") \
+        .select("profile_id, role_id, profiles(id, full_name, role, organization_id, venue_id, shift_id, pin_code), custom_roles(name)") \
         .eq("organization_id", org_id) \
         .execute()
     
@@ -240,6 +240,8 @@ async def create_user(body: CreateUserRequest, user=Depends(require_permission("
             profile_data["venue_id"] = body.venue_id
         if body.shift_id:
             profile_data["shift_id"] = body.shift_id
+        if body.pin_code is not None:
+            profile_data["pin_code"] = body.pin_code.strip() if body.pin_code else None
             
         db.table("profiles").upsert(profile_data).execute()
 
@@ -274,6 +276,7 @@ async def create_user(body: CreateUserRequest, user=Depends(require_permission("
             "role": body.role, 
             "venue_ids": v_ids, 
             "organization_id": body.organization_id,
+            "pin_code": profile_data.get("pin_code"),
             "is_associated": not is_new_user
         }
 
@@ -295,6 +298,8 @@ async def update_user(user_id: str, body: UpdateUserRequest, user=Depends(requir
         payload["venue_id"] = body.venue_id
     if body.shift_id is not None:
         payload["shift_id"] = body.shift_id
+    if body.pin_code is not None:
+        payload["pin_code"] = body.pin_code.strip() if body.pin_code else None
         
     if not payload and body.venue_ids is None:
         raise HTTPException(400, "No fields to update")

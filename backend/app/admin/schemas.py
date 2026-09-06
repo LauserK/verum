@@ -44,6 +44,7 @@ class CreateUserRequest(BaseModel):
     venue_ids: Optional[List[str]] = None
     venue_id: Optional[str] = None
     shift_id: Optional[str] = None
+    pin_code: Optional[str] = None
 
 class UpdateUserRequest(BaseModel):
     full_name: Optional[str] = None
@@ -51,6 +52,7 @@ class UpdateUserRequest(BaseModel):
     venue_ids: Optional[List[str]] = None
     venue_id: Optional[str] = None
     shift_id: Optional[str] = None
+    pin_code: Optional[str] = None
 
 class UpdateVenueRequest(BaseModel):
     name: Optional[str] = None

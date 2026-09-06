@@ -32,6 +32,7 @@ export default function TeamPage() {
     const [newVenues, setNewVenues] = useState<string[]>([])
     const [newShift, setNewShift] = useState('')
     const [newVenueShifts, setNewVenueShifts] = useState<Shift[]>([])
+    const [newPinCode, setNewPinCode] = useState('')
     const [saving, setSaving] = useState(false)
     const [error, setError] = useState('')
 
@@ -44,6 +45,7 @@ export default function TeamPage() {
     const [editShift, setEditShift] = useState('')
     const [editVenueShifts, setEditVenueShifts] = useState<Shift[]>([])
     const [editEmail, setEditEmail] = useState('')
+    const [editPinCode, setEditPinCode] = useState('')
 
     // Password change
     const [changingPasswordId, setChangingPasswordId] = useState<string | null>(null)
@@ -90,6 +92,7 @@ export default function TeamPage() {
                 organization_id: activeOrgId,
                 venue_ids: newVenues,
                 shift_id: newShift || undefined,
+                pin_code: newPinCode.trim() || undefined,
             })
             setUsers((prev) => [...prev, user])
             setShowCreate(false)
@@ -101,6 +104,7 @@ export default function TeamPage() {
             setNewVenues([])
             setNewShift('')
             setNewVenueShifts([])
+            setNewPinCode('')
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to create user')
         }
@@ -116,6 +120,7 @@ export default function TeamPage() {
         setEditVenues(u.venue_ids || (u.venue_id ? [u.venue_id] : []))
         setEditShift(u.shift_id || '')
         setEditEmail(u.email || '')
+        setEditPinCode(u.pin_code || '')
         
         // Load shifts for first assigned venue (legacy/fallback behavior for UI)
         const firstVenue = u.venue_ids?.[0] || u.venue_id
@@ -156,8 +161,9 @@ export default function TeamPage() {
                 role: editRole,
                 venue_ids: editVenues,
                 shift_id: editShift || undefined,
+                pin_code: editPinCode.trim() || null,
             })
-            setUsers((prev) => prev.map((u) => u.id === editingId ? { ...u, ...updated } : u))
+            setUsers((prev) => prev.map((u) => u.id === editingId ? { ...u, ...updated, pin_code: editPinCode.trim() || null } : u))
             setEditingId(null)
         } catch (err) {
             console.error(err)
@@ -252,6 +258,14 @@ export default function TeamPage() {
                                 <option key={r.id} value={r.name}>{r.name}</option>
                             ))}
                         </select>
+                        <input
+                            placeholder="PIN (4-6 dígitos numéricos)"
+                            type="text"
+                            maxLength={6}
+                            value={newPinCode}
+                            onChange={(e) => setNewPinCode(e.target.value.replace(/\D/g, ''))}
+                            className="bg-surface border border-border rounded-xl px-4 h-10 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
+                        />
                         <div className="col-span-1 sm:col-span-2 space-y-2">
                             <p className="text-xs font-bold text-text-secondary uppercase px-1">Sedes</p>
                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -340,7 +354,7 @@ export default function TeamPage() {
                                             className="bg-surface border border-border rounded-xl px-4 h-10 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
                                         />
                                     </div>
-                                    <div className="flex gap-3">
+                                    <div className="grid grid-cols-2 gap-3">
                                         <select
                                             value={editRole}
                                             onChange={(e) => setEditRole(e.target.value)}
@@ -352,6 +366,14 @@ export default function TeamPage() {
                                                 <option key={r.id} value={r.name}>{r.name}</option>
                                             ))}
                                         </select>
+                                        <input
+                                            placeholder="PIN (4-6 dígitos)"
+                                            type="text"
+                                            maxLength={6}
+                                            value={editPinCode}
+                                            onChange={(e) => setEditPinCode(e.target.value.replace(/\D/g, ''))}
+                                            className="bg-surface border border-border rounded-xl px-4 h-10 text-sm text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
+                                        />
                                     </div>
                                     <div className="space-y-2">
                                         <p className="text-xs font-bold text-text-secondary uppercase px-1">Sedes</p>
@@ -467,6 +489,11 @@ export default function TeamPage() {
                                                 >
                                                     {u.role}
                                                 </span>
+                                                {u.pin_code && (
+                                                    <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded-md font-mono flex items-center gap-1" title="PIN configurado">
+                                                        <KeyRound className="w-2.5 h-2.5" /> PIN
+                                                    </span>
+                                                )}
                                                 {(u.venue_ids || (u.venue_id ? [u.venue_id] : [])).map(vid => (
                                                     <span key={vid} className="text-[10px] text-text-secondary bg-surface-raised px-1.5 py-0.5 rounded-md">
                                                         {availableVenues.find(v => v.id === vid)?.name || 'Venue'}
