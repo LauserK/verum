@@ -125,6 +125,8 @@ export function CheckoutModal({
   const hasSecondary = Boolean(secondaryCurrency && exchangeRate > 0)
   const totalSecondary = useMemo(() => total * exchangeRate, [total, exchangeRate])
 
+  if (!isOpen) return null
+
   const isAdminOrSuper = profile?.role === 'admin' || profile?.is_superadmin === true
   const canCreateCxc = isAdminOrSuper || Boolean(profile?.permissions?.includes('pos.create_cxc'))
 
