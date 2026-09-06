@@ -306,32 +306,38 @@ async def process_checkout(org_id: str, payload: CheckoutCreate, user_id: str, d
 
             db.table("payments").insert({
                 "invoice_id": invoice_id,
-                "pos_session_id": str(payload.pos_session_id),
                 "payment_method_id": str(p.payment_method_id),
-                "payment_method_name": pm["name"],
-                "payment_method_type": pm["method_type"],
+                "method_name": pm["name"],
+                "method_type": pm["method_type"],
                 "amount": float(p.amount),
                 "currency_code": p.currency_code,
                 "exchange_rate": float(p.exchange_rate),
+                "amount_in_invoice_currency": float(p.amount) / (float(p.exchange_rate) if float(p.exchange_rate) > 0 else 1.0),
                 "reference": p.reference,
-                "seat_label": seat_label,
-                "covered_items": covered_items,
+                "cash_tendered": float(p.cash_tendered) if p.cash_tendered else None,
+                "status": "completed",
             }).execute()
 
         # 10.5 Insert change record if given
         if payload.change:
-            pm_c_res = db.table("payment_methods").select("name").eq(
-                "id", str(payload.change.payment_method_id)
-            ).execute()
-            c_name = pm_c_res.data[0]["name"] if pm_c_res.data else "Efectivo"
-            db.table("changes").insert({
-                "invoice_id": invoice_id,
-                "payment_method_id": str(payload.change.payment_method_id),
-                "payment_method_name": c_name,
-                "amount": float(payload.change.amount),
-                "currency_code": payload.change.currency_code,
-                "exchange_rate": float(payload.change.exchange_rate),
-            }).execute()
+            try:
+                change_pm_id = getattr(payload.change, "payment_method_id", None)
+                c_name = "Efectivo"
+                if change_pm_id:
+                    pm_c_res = db.table("payment_methods").select("name").eq("id", str(change_pm_id)).execute()
+                    if pm_c_res.data:
+                        c_name = pm_c_res.data[0]["name"]
+                
+                db.table("changes").insert({
+                    "invoice_id": invoice_id,
+                    "payment_method_id": str(change_pm_id) if change_pm_id else None,
+                    "payment_method_name": c_name,
+                    "amount": float(payload.change.amount),
+                    "currency_code": payload.change.currency_code,
+                    "exchange_rate": float(getattr(payload.change, "exchange_rate", 1.0) or 1.0),
+                }).execute()
+            except Exception as e:
+                print(f"[CHECKOUT] Changes table insert skipped or error: {e}")
 
         # 11. Customer balance update if CXC (status pending or balance due)
         if customer_id and balance_due > 0:

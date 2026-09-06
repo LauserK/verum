@@ -736,6 +736,7 @@ class CheckoutItemCreate(BaseModel):
     quantity: float
     unit_price: float
     discount_pct: float = 0
+    discount_amount: float = 0
     tax_id: Optional[UUID] = None
     modifiers: list = []
     notes: Optional[str] = None
