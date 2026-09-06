@@ -230,7 +230,7 @@ async def process_checkout(org_id: str, payload: CheckoutCreate, user_id: str, d
         elif amount_paid > 0:
             status = "partial"
         else:
-            status = "pending"
+            status = "confirmed"
 
         if not venue_id_to_use:
             ws_res = db.table("workstations").select("venue_id").eq("id", str(payload.workstation_id)).execute()
