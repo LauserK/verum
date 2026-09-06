@@ -15,8 +15,8 @@ interface SupervisorAuthModalProps {
 
 export function SupervisorAuthModal({
   isOpen,
-  title = 'Autorizaci髇 Requerida',
-  description = 'Esta acci髇 requiere autorizaci髇 de un supervisor o administrador.',
+  title = 'Autorizaci贸n Requerida',
+  description = 'Esta acci贸n requiere autorizaci贸n de un supervisor o administrador.',
   permissionKey,
   onAuthorized,
   onCancel
@@ -49,7 +49,7 @@ export function SupervisorAuthModal({
 
   const handleVerify = async (credentialToVerify: string) => {
     if (!credentialToVerify || credentialToVerify.length < 4) {
-      setErrorMessage('Ingresa un PIN v醠ido (m韓imo 4 d韌itos) o escanea tu credencial.')
+      setErrorMessage('Ingresa un PIN v谩lido (m铆nimo 4 d铆gitos) o escanea tu credencial.')
       return
     }
 
@@ -78,7 +78,7 @@ export function SupervisorAuthModal({
       }
     } catch (err: any) {
       console.error('Authorization error:', err)
-      setErrorMessage(err?.message || 'Error al validar credencial de autorizaci髇.')
+      setErrorMessage(err?.message || 'Error al validar credencial de autorizaci贸n.')
       setPin('')
       inputRef.current?.focus()
     } finally {
@@ -162,7 +162,7 @@ export function SupervisorAuthModal({
               }}
               onKeyDown={handleKeyDown}
               disabled={isVerifying}
-              placeholder="晻晻"
+              placeholder="聲聲聲聲"
               className="w-full h-14 bg-surface-raised border border-border rounded-2xl px-12 text-center text-2xl tracking-[0.4em] font-mono font-bold text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all placeholder:tracking-normal placeholder:text-text-tertiary"
             />
             <div className="absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary">
