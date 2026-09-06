@@ -20,7 +20,7 @@ import { ChangeRegistration } from './ChangeRegistration'
 import { CheckoutConfirmation } from './CheckoutConfirmation'
 import { SplitBillModal } from './SplitBillModal'
 import { SupervisorAuthModal } from '@/components/SupervisorAuthModal'
-import { useProfile } from '@/components/ProfileContext'
+import { useProfile } from '@/hooks/useProfile'
 import { useCheckout, useBillingConfig, useCurrencies, useExchangeRates, useWorkstations, useActivePosSession } from '@/hooks/useSales'
 import { usePosStore, CartItem, PosMode } from '@/store/posStore'
 import { CheckoutPayment, CheckoutChange } from '@/lib/api/sales'
@@ -49,7 +49,7 @@ export function CheckoutModal({
   tableName,
   orderNumber
 }: CheckoutModalProps) {
-  const profile = useProfile()
+  const { data: profile } = useProfile()
   const [step, setStep] = useState<CheckoutStep>('decision')
   const [paymentFlow, setPaymentFlow] = useState<PaymentFlowType>('complete')
   const [registeredPayments, setRegisteredPayments] = useState<CheckoutPayment[]>([])
