@@ -265,6 +265,18 @@ async def export_inventory_items_csv(
         "Stock Mínimo"
     ])
     
+    def format_exact_decimal(val):
+        if val is None or val == "":
+            return ""
+        try:
+            d = Decimal(str(val))
+            s = f"{d:f}"
+            if "." in s:
+                s = s.rstrip("0").rstrip(".")
+            return s if s else "0"
+        except Exception:
+            return str(val)
+
     for item in items:
         code = item.get("code") or ""
         name = item.get("name") or ""
@@ -272,14 +284,12 @@ async def export_inventory_items_csv(
         cat_name = cat.get("name") if isinstance(cat, dict) else ""
         item_type = type_labels.get(item.get("type"), item.get("type") or "")
         
-        cost_val = item.get("last_purchase_cost")
-        cost_str = f"{float(cost_val):.2f}" if cost_val is not None else ""
+        cost_str = format_exact_decimal(item.get("last_purchase_cost"))
         
         uom = item.get("uom_base")
         uom_str = (uom.get("code") or uom.get("name")) if isinstance(uom, dict) else ""
         
-        min_stock_val = item.get("min_stock")
-        min_stock_str = f"{float(min_stock_val):.2f}" if min_stock_val is not None else "0.00"
+        min_stock_str = format_exact_decimal(item.get("min_stock")) or "0"
         
         writer.writerow([
             code,
