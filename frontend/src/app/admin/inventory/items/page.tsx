@@ -15,6 +15,7 @@ import {
     Trash2, 
     DollarSign, 
     FileUp,
+    Download,
     ChevronUp,
     ChevronDown,
     LayoutGrid,
@@ -131,6 +132,7 @@ export default function ItemsPage() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
   // New Filter & Sort State
@@ -309,6 +311,37 @@ export default function ItemsPage() {
       }
   }
 
+  async function handleExportCsv() {
+      setExporting(true);
+      try {
+          const blob = await adminApi.exportInventoryItemsCsv({
+              search: searchTerm.trim() || undefined,
+              category_id: filterCategory || undefined,
+              type: filterType || undefined,
+              base_uom_id: filterUom || undefined,
+              sort_by: sortConfig.key || undefined,
+              sort_order: sortConfig.direction,
+          });
+
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          const today = new Date().toISOString().slice(0, 10);
+          a.download = `articulos_${today}.csv`;
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+      } catch (error: any) {
+          setErrorModal({
+              isOpen: true,
+              message: error.message || 'Error al exportar artículos a Excel (CSV)',
+          });
+      } finally {
+          setExporting(false);
+      }
+  }
+
   const SortIndicator = ({ column }: { column: string }) => {
     if (sortConfig.key !== column) return <div className="w-4 h-4 opacity-10"><ChevronUp className="w-3 h-3" /></div>;
     return sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3 text-primary" /> : <ChevronDown className="w-3 h-3 text-primary" />;
@@ -323,24 +356,37 @@ export default function ItemsPage() {
           <h1 className="text-2xl font-bold text-text-primary">{t('title')}</h1>
           <p className="text-sm text-text-secondary mt-1">{t('subtitle')}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+            <button 
+                onClick={handleExportCsv}
+                disabled={exporting}
+                className="flex items-center gap-2 border border-border text-text-primary px-4 h-10 rounded-xl text-sm font-medium hover:bg-surface-raised transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                title="Exportar artículos filtrados a Excel (CSV)"
+            >
+                {exporting ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                ) : (
+                    <Download className="w-4 h-4" />
+                )}
+                Exportar Excel
+            </button>
             <Link 
                 href="/admin/inventory/import-utility"
-                className="flex items-center gap-2 border border-border text-text-primary px-4 h-10 rounded-xl text-sm font-medium hover:bg-surface-raised transition-colors"
+                className="flex items-center gap-2 border border-border text-text-primary px-4 h-10 rounded-xl text-sm font-medium hover:bg-surface-raised transition-colors shadow-sm"
             >
                 <FileUp className="w-4 h-4" />
                 Importar Excel
             </Link>
             <Link 
                 href="/admin/inventory/items/categories"
-                className="flex items-center gap-2 border border-border text-text-primary px-4 h-10 rounded-xl text-sm font-medium hover:bg-surface-raised transition-colors"
+                className="flex items-center gap-2 border border-border text-text-primary px-4 h-10 rounded-xl text-sm font-medium hover:bg-surface-raised transition-colors shadow-sm"
             >
                 <Tag className="w-4 h-4" />
                 Gestionar Categorías
             </Link>
             <button 
                 onClick={openCreate}
-                className="flex items-center gap-2 bg-primary text-text-inverse px-4 h-10 rounded-xl text-sm font-medium hover:bg-primary-hover transition-colors"
+                className="flex items-center gap-2 bg-primary text-text-inverse px-4 h-10 rounded-xl text-sm font-medium hover:bg-primary-hover transition-colors shadow-sm"
             >
                 <Plus className="w-4 h-4" />
                 {t('newItem')}

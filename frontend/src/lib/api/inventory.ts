@@ -1,4 +1,4 @@
-import { fetchWithAuth } from './core'
+import { fetchWithAuth, fetchBlobWithAuth } from './core'
 
 export interface Asset {
     id: string
@@ -379,6 +379,25 @@ export const inventoryApi = {
     // M16: Production & Inventory
     getInventoryItems: (): Promise<InventoryItem[]> =>
         fetchWithAuth('/inventory/items'),
+
+    exportInventoryItemsCsv: (filters?: {
+        search?: string;
+        category_id?: string;
+        type?: string;
+        base_uom_id?: string;
+        sort_by?: string;
+        sort_order?: 'asc' | 'desc';
+    }): Promise<Blob> => {
+        const params = new URLSearchParams()
+        if (filters?.search) params.set('search', filters.search)
+        if (filters?.category_id) params.set('category_id', filters.category_id)
+        if (filters?.type) params.set('type', filters.type)
+        if (filters?.base_uom_id) params.set('base_uom_id', filters.base_uom_id)
+        if (filters?.sort_by) params.set('sort_by', filters.sort_by)
+        if (filters?.sort_order) params.set('sort_order', filters.sort_order)
+        const qs = params.toString()
+        return fetchBlobWithAuth(`/inventory/items/export-csv${qs ? `?${qs}` : ''}`)
+    },
 
     createInventoryItem: (data: Partial<InventoryItem>): Promise<InventoryItem> =>
         fetchWithAuth('/inventory/items', { method: 'POST', body: JSON.stringify(data) }),

@@ -80,3 +80,41 @@ export async function fetchWithAuth<T = unknown>(path: string, options: RequestI
 
     return res.json() as Promise<T>
 }
+
+export async function fetchBlobWithAuth(path: string, options: RequestInit = {}): Promise<Blob> {
+    const supabase = createClient()
+    const { data: { session } } = await supabase.auth.getSession()
+
+    if (!session) {
+        throw new Error('Not authenticated')
+    }
+
+    const activeOrgId = typeof window !== 'undefined' ? localStorage.getItem('activeOrgId') : null
+    let res: Response
+    try {
+        res = await fetch(`${API_URL}${path}`, {
+            ...options,
+            headers: {
+                'Authorization': `Bearer ${session.access_token}`,
+                ...(activeOrgId ? { 'X-Org-ID': activeOrgId } : {}),
+                ...options.headers,
+            },
+        })
+    } catch (err: any) {
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('connection-error'));
+        }
+        throw err;
+    }
+
+    if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        let errorDetail = errorData.detail?.detail || errorData.detail
+        if (typeof errorDetail === 'object' && errorDetail !== null) {
+            errorDetail = JSON.stringify(errorDetail)
+        }
+        throw new Error(errorDetail || `API Error: ${res.status}`)
+    }
+
+    return res.blob()
+}

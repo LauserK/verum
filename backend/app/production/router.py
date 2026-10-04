@@ -1,4 +1,7 @@
 from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi.responses import StreamingResponse
+import csv
+import io
 from typing import Optional, List, Dict, Any
 from uuid import UUID
 from decimal import Decimal
@@ -181,6 +184,124 @@ async def list_items(org_id: str = Depends(get_active_org_id), db=Depends(get_db
     items = [flatten_item_response(item) for item in (res.data or [])]
     await cache.set(cache_key, items, ttl=900)
     return items
+
+@router.get("/inventory/items/export-csv", tags=["Inventory"])
+async def export_inventory_items_csv(
+    search: Optional[str] = None,
+    category_id: Optional[str] = None,
+    type: Optional[str] = None,
+    base_uom_id: Optional[str] = None,
+    sort_by: Optional[str] = "name",
+    sort_order: Optional[str] = "asc",
+    org_id: str = Depends(get_active_org_id),
+    db=Depends(get_db),
+    _=Depends(require_permission("inventory.view"))
+):
+    query = db.table("items") \
+        .select("*, uom_base(name, code), item_categories(name)") \
+        .eq("org_id", org_id) \
+        .eq("is_active", True)
+    
+    if category_id:
+        query = query.eq("category_id", category_id)
+    if type:
+        query = query.eq("type", type)
+    if base_uom_id:
+        query = query.eq("base_uom_id", base_uom_id)
+        
+    res = query.execute()
+    items = res.data or []
+    
+    # In-memory search filtering (matches name or code case-insensitively)
+    if search:
+        search_lower = search.lower().strip()
+        items = [
+            item for item in items
+            if search_lower in (item.get("name") or "").lower()
+            or search_lower in (item.get("code") or "").lower()
+        ]
+        
+    type_labels = {
+        "raw_material": "Materia Prima",
+        "semi_finished": "Semielaborado",
+        "finished": "Producto Terminado",
+        "supply": "Insumo",
+        "packaging": "Empaque"
+    }
+
+    reverse = (sort_order.lower() == "desc") if sort_order else False
+    
+    def get_sort_val(it):
+        if sort_by == "code":
+            return (it.get("code") or "").lower()
+        elif sort_by == "category_name":
+            cat = it.get("item_categories")
+            return (cat.get("name") or "").lower() if isinstance(cat, dict) else ""
+        elif sort_by == "type":
+            return type_labels.get(it.get("type"), it.get("type") or "").lower()
+        elif sort_by == "last_purchase_cost":
+            try:
+                return float(it.get("last_purchase_cost") or 0)
+            except (ValueError, TypeError):
+                return 0.0
+        elif sort_by == "uom_name":
+            uom = it.get("uom_base")
+            return (uom.get("code") or uom.get("name") or "").lower() if isinstance(uom, dict) else ""
+        else: # default "name"
+            return (it.get("name") or "").lower()
+
+    items.sort(key=get_sort_val, reverse=reverse)
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    writer.writerow([
+        "Código",
+        "Nombre",
+        "Categoría",
+        "Tipo",
+        "Último Costo",
+        "Unidad Base",
+        "Stock Mínimo"
+    ])
+    
+    for item in items:
+        code = item.get("code") or ""
+        name = item.get("name") or ""
+        cat = item.get("item_categories")
+        cat_name = cat.get("name") if isinstance(cat, dict) else ""
+        item_type = type_labels.get(item.get("type"), item.get("type") or "")
+        
+        cost_val = item.get("last_purchase_cost")
+        cost_str = f"{float(cost_val):.2f}" if cost_val is not None else ""
+        
+        uom = item.get("uom_base")
+        uom_str = (uom.get("code") or uom.get("name")) if isinstance(uom, dict) else ""
+        
+        min_stock_val = item.get("min_stock")
+        min_stock_str = f"{float(min_stock_val):.2f}" if min_stock_val is not None else "0.00"
+        
+        writer.writerow([
+            code,
+            name,
+            cat_name,
+            item_type,
+            cost_str,
+            uom_str,
+            min_stock_str
+        ])
+        
+    csv_bytes = ("\ufeff" + output.getvalue()).encode("utf-8")
+    output.close()
+    
+    current_date = datetime.now(CARACAS_TZ).strftime("%Y-%m-%d")
+    filename = f"articulos_{current_date}.csv"
+    
+    return StreamingResponse(
+        io.BytesIO(csv_bytes),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
 
 @router.get("/inventory/lots/resolve/{lot_number}", tags=["Inventory"])
 async def resolve_lot_number(lot_number: str, org_id: str = Depends(get_active_org_id), db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
