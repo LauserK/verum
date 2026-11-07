@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { adminApi, UOMPresentation } from '@/lib/api';
 import { 
   Plus, ClipboardList, Search, Loader2, ArrowUpRight, ArrowDownRight, 
@@ -34,6 +34,8 @@ export default function InventoryDocumentsPage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [processingAction, setProcessingAction] = useState<'save' | 'process' | 'cancel' | 'receive' | null>(null);
+  const savingRef = useRef(false);
   const [filterQuery, setFilterQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'receipt' | 'issue' | 'transfer'>('all');
   const [activeStatus, setActiveStatus] = useState<'all' | 'draft' | 'in_transit' | 'confirmed' | 'cancelled'>('all');
@@ -144,6 +146,7 @@ export default function InventoryDocumentsPage() {
   }
 
   async function handleSaveDocument() {
+    if (savingRef.current) return;
     if (!newDoc.warehouse_id) {
       setErrorModal({ isOpen: true, message: 'Debe seleccionar un almacén de origen' });
       return;
@@ -173,6 +176,8 @@ export default function InventoryDocumentsPage() {
           presentation_id: line.presentation_id || null
         }))
       };
+      savingRef.current = true;
+      setProcessingAction('save');
       await adminApi.createInventoryDocument(payload);
       setShowCreateModal(false);
       resetNewDoc();
@@ -180,11 +185,16 @@ export default function InventoryDocumentsPage() {
     } catch (error: any) {
       setErrorModal({ isOpen: true, message: error?.message || 'Error al guardar el documento' });
     } finally {
+      savingRef.current = false;
+      setProcessingAction(null);
       setSaving(false);
     }
   }
 
   async function handleProcessDocument(id: string) {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setProcessingAction('process');
     setSaving(true);
     try {
       await adminApi.processInventoryDocument(id);
@@ -193,11 +203,16 @@ export default function InventoryDocumentsPage() {
     } catch (error: any) {
       setErrorModal({ isOpen: true, message: error?.message || 'Error al procesar el documento' });
     } finally {
+      savingRef.current = false;
+      setProcessingAction(null);
       setSaving(false);
     }
   }
 
   async function handleCancelDocument(id: string) {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setProcessingAction('cancel');
     setSaving(true);
     try {
       await adminApi.cancelInventoryDocument(id);
@@ -206,6 +221,8 @@ export default function InventoryDocumentsPage() {
     } catch (error: any) {
       setErrorModal({ isOpen: true, message: error?.message || 'Error al anular el documento' });
     } finally {
+      savingRef.current = false;
+      setProcessingAction(null);
       setSaving(false);
     }
   }
@@ -224,6 +241,9 @@ export default function InventoryDocumentsPage() {
   }
 
   async function handleReceiveTransfer() {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setProcessingAction('receive');
     setSaving(true);
     try {
       await adminApi.receiveTransferDocument(selectedDoc.id, {
@@ -239,6 +259,8 @@ export default function InventoryDocumentsPage() {
     } catch (error: any) {
       setErrorModal({ isOpen: true, message: error?.message || 'Error al recibir el traslado' });
     } finally {
+      savingRef.current = false;
+      setProcessingAction(null);
       setSaving(false);
     }
   }
@@ -805,7 +827,7 @@ export default function InventoryDocumentsPage() {
                 disabled={saving}
               >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                Guardar Borrador
+                {saving && processingAction === 'save' ? 'Guardando...' : 'Guardar Borrador'}
               </button>
             </div>
           </div>
@@ -835,7 +857,8 @@ export default function InventoryDocumentsPage() {
               </div>
               <div className="flex items-center gap-2">
                 <button 
-                  onClick={() => setShowDetailModal(false)}
+                  onClick={() => !saving && setShowDetailModal(false)}
+                  disabled={saving}
                   className="p-2 hover:bg-surface-raised rounded-full border border-border transition-colors"
                 >
                   <X className="w-5 h-5 text-text-secondary" />
@@ -961,16 +984,25 @@ export default function InventoryDocumentsPage() {
                 {selectedDoc.status === 'draft' && (
                   <button
                     onClick={() => setCancelConfirmModal({ isOpen: true, docId: selectedDoc.id })}
-                    className="flex items-center gap-1.5 text-xs font-bold text-error border border-error/20 bg-error/5 hover:bg-error/15 px-4 h-9 rounded-xl transition-all"
+                    className="flex items-center gap-1.5 text-xs font-bold text-error border border-error/20 bg-error/5 hover:bg-error/15 active:scale-95 px-4 h-9 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     disabled={saving}
                   >
-                    <Ban className="w-3.5 h-3.5" /> Anular Documento
+                    {saving && processingAction === 'cancel' ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" /> Anulando...
+                      </>
+                    ) : (
+                      <>
+                        <Ban className="w-3.5 h-3.5" /> Anular Documento
+                      </>
+                    )}
                   </button>
                 )}
               </div>
               <div className="flex gap-2">
                 <button
-                  onClick={() => setShowDetailModal(false)}
+                  onClick={() => !saving && setShowDetailModal(false)}
+                  disabled={saving}
                   className="px-4 h-9 border border-border hover:bg-surface-raised rounded-xl text-xs font-semibold transition-colors"
                 >
                   Cerrar
@@ -979,10 +1011,18 @@ export default function InventoryDocumentsPage() {
                 {selectedDoc.status === 'draft' && (
                   <button
                     onClick={() => handleProcessDocument(selectedDoc.id)}
-                    className="flex items-center gap-1.5 bg-success text-text-inverse px-5 h-9 rounded-xl text-xs font-semibold hover:bg-success-hover transition-colors"
+                    className="flex items-center gap-1.5 bg-success text-text-inverse px-5 h-9 rounded-xl text-xs font-semibold hover:bg-success-hover active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100"
                     disabled={saving}
                   >
-                    <CheckCircle className="w-3.5 h-3.5" /> Procesar Documento
+                    {saving && processingAction === 'process' ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" /> Procesando...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="w-3.5 h-3.5" /> Procesar Documento
+                      </>
+                    )}
                   </button>
                 )}
 
@@ -1080,7 +1120,7 @@ export default function InventoryDocumentsPage() {
                 disabled={saving}
               >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                Confirmar Recepción
+                {saving && processingAction === 'receive' ? 'Procesando...' : 'Confirmar Recepción'}
               </button>
             </div>
           </div>

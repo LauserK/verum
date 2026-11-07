@@ -416,3 +416,64 @@ def test_cancel_receipt_document(client, mock_supabase, mock_user):
     lot_updates = mock_lots.update.call_args_list
     assert len(lot_updates) == 1
     assert lot_updates[0][0][0]["qty_base"] == 0.0
+
+
+def test_process_document_rejects_duplicate_movements(client, mock_supabase, mock_user):
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    org_id = str(uuid4())
+    app.dependency_overrides[get_active_org_id] = lambda: org_id
+
+    doc_id = str(uuid4())
+    warehouse_id = str(uuid4())
+    item_id = str(uuid4())
+
+    mock_documents = MagicMock()
+    draft_doc = make_mock_doc(doc_id, org_id, "receipt", "ING-0002", "draft", warehouse_id, mock_user.id)
+    mock_documents.select.return_value.eq.return_value.execute.return_value.data = [draft_doc]
+
+    mock_lines = MagicMock()
+    mock_lines.select.return_value.eq.return_value.execute.return_value.data = [{
+        "id": str(uuid4()),
+        "document_id": doc_id,
+        "item_id": item_id,
+        "qty_base": 10.0,
+        "unit_cost_base": 5.0,
+        "lot_number": "L-DUP",
+        "expiry_date": None
+    }]
+
+    mock_movements = MagicMock()
+    # Simulate movements already registered for this document (e.g. concurrent request)
+    mock_movements.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = [
+        {"id": str(uuid4())}
+    ]
+
+    mock_stock = MagicMock()
+    mock_lots = MagicMock()
+
+    def side_effect(name):
+        if name == "inventory_documents":
+            return mock_documents
+        elif name == "inventory_document_lines":
+            return mock_lines
+        elif name == "stock_movements":
+            return mock_movements
+        elif name == "stock":
+            return mock_stock
+        elif name == "stock_lots":
+            return mock_lots
+        return MagicMock()
+
+    mock_supabase.table.side_effect = side_effect
+
+    with patch("permissions.resolve_permission", return_value=True):
+        response = client.post(f"/inventory/documents/{doc_id}/process")
+
+    app.dependency_overrides.clear()
+
+    assert response.status_code == 400
+    assert "already been registered" in response.json()["detail"]
+    assert not mock_movements.insert.called
+    assert not mock_stock.update.called
+    assert not mock_lots.insert.called
+

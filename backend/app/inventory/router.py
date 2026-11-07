@@ -3,6 +3,7 @@ from typing import Optional, List, Dict, Any
 from uuid import UUID
 from decimal import Decimal
 from datetime import datetime, timezone, timedelta
+import asyncio
 import pytz
 import uuid
 
@@ -26,6 +27,17 @@ from app.inventory.schemas import (
 CARACAS_TZ = pytz.timezone("America/Caracas")
 
 router = APIRouter(prefix="", tags=["Inventory"])
+
+# In-process lock per inventory document ID to prevent concurrent processing/cancellation
+_doc_locks: Dict[str, asyncio.Lock] = {}
+
+
+def _get_doc_lock(doc_id: str) -> asyncio.Lock:
+    lock = _doc_locks.get(doc_id)
+    if lock is None:
+        lock = asyncio.Lock()
+        _doc_locks[doc_id] = lock
+    return lock
 
 # ── Inventory: Assets Endpoints (M8) ─────────────────────
 
@@ -1141,6 +1153,17 @@ async def process_inventory_document(
     db = Depends(get_db),
     bypass_auth: bool = False
 ):
+    async with _get_doc_lock(str(id)):
+        return await _process_inventory_document_locked(id, org_id, user, db, bypass_auth)
+
+
+async def _process_inventory_document_locked(
+    id: UUID,
+    org_id: str = Depends(get_active_org_id),
+    user = Depends(get_current_user),
+    db = Depends(get_db),
+    bypass_auth: bool = False
+):
     res_header = db.table("inventory_documents").select("*").eq("id", str(id)).execute()
     if not res_header.data:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -1154,6 +1177,35 @@ async def process_inventory_document(
     
     if not lines:
         raise HTTPException(status_code=400, detail="Cannot process an empty document")
+
+    # Verify permissions upfront before modifying status or stock
+    if not bypass_auth:
+        if header["document_type"] == "receipt":
+            if not await resolve_permission(user.id, "inventory.receive", db, org_id):
+                raise HTTPException(status_code=403, detail="Not authorized to process receipts")
+        elif header["document_type"] == "issue":
+            if not await resolve_permission(user.id, "inventory.issue", db, org_id):
+                raise HTTPException(status_code=403, detail="Not authorized to process issue documents")
+        elif header["document_type"] == "transfer":
+            if not await resolve_permission(user.id, "inventory.transfer", db, org_id):
+                raise HTTPException(status_code=403, detail="Not authorized to process transfers")
+
+    # Idempotency guard: prevent duplicate stock movements if already registered for this document
+    existing_movs = db.table("stock_movements") \
+        .select("id") \
+        .eq("reference_id", str(id)) \
+        .eq("reference_type", "inventory_document") \
+        .execute()
+    if isinstance(getattr(existing_movs, "data", None), list) and len(existing_movs.data) > 0:
+        raise HTTPException(status_code=400, detail="Document movements have already been registered")
+
+    # Claim/update document status immediately before processing lines to prevent concurrent duplicate execution
+    target_status = "in_transit" if header["document_type"] == "transfer" else "confirmed"
+    db.table("inventory_documents").update({
+        "status": target_status,
+        "processed_by": user.id,
+        "processed_at": datetime.now(CARACAS_TZ).isoformat()
+    }).eq("id", str(id)).execute()
 
     # 1. Process Stock Actions based on document type
     if header["document_type"] == "receipt":
@@ -1437,6 +1489,18 @@ async def receive_transfer_document(
     db = Depends(get_db),
     bypass_auth: bool = False
 ):
+    async with _get_doc_lock(str(id)):
+        return await _receive_transfer_document_locked(id, req, org_id, user, db, bypass_auth)
+
+
+async def _receive_transfer_document_locked(
+    id: UUID,
+    req: TransferReceiveRequest,
+    org_id: str = Depends(get_active_org_id),
+    user = Depends(get_current_user),
+    db = Depends(get_db),
+    bypass_auth: bool = False
+):
     if not bypass_auth and not await resolve_permission(user.id, "inventory.transfer_confirm", db, org_id):
         raise HTTPException(status_code=403, detail="Not authorized to confirm transfers")
 
@@ -1450,6 +1514,24 @@ async def receive_transfer_document(
         
     has_discrepancy = False
     
+    # Idempotency guard: prevent duplicate transfer_in movements if already registered
+    existing_in_movs = db.table("stock_movements") \
+        .select("id") \
+        .eq("reference_id", str(id)) \
+        .eq("reference_type", "inventory_document") \
+        .eq("movement_type", "transfer_in") \
+        .execute()
+    if isinstance(getattr(existing_in_movs, "data", None), list) and len(existing_in_movs.data) > 0:
+        raise HTTPException(status_code=400, detail="Transfer reception movements have already been registered")
+
+    # Claim/update document status immediately before processing lines to prevent concurrent duplicate execution
+    db.table("inventory_documents").update({
+        "status": "confirmed",
+        "processed_by": user.id,
+        "processed_at": datetime.now(CARACAS_TZ).isoformat(),
+        "notes": req.notes if req.notes else header["notes"]
+    }).eq("id", str(id)).execute()
+
     # Process receipt lines
     for line in req.lines:
         orig_line_res = db.table("inventory_document_lines").select("*").eq("id", str(line.id)).execute()
@@ -1528,6 +1610,17 @@ async def receive_transfer_document(
 
 @router.post("/inventory/documents/{id}/cancel", response_model=InventoryDocumentResponse)
 async def cancel_inventory_document(
+    id: UUID,
+    org_id: str = Depends(get_active_org_id),
+    user = Depends(get_current_user),
+    db = Depends(get_db),
+    bypass_auth: bool = False
+):
+    async with _get_doc_lock(str(id)):
+        return await _cancel_inventory_document_locked(id, org_id, user, db, bypass_auth)
+
+
+async def _cancel_inventory_document_locked(
     id: UUID,
     org_id: str = Depends(get_active_org_id),
     user = Depends(get_current_user),

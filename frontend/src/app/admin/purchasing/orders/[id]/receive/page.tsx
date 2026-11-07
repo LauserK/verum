@@ -1,7 +1,7 @@
 // frontend/src/app/admin/purchasing/orders/[id]/receive/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { adminApi, PurchaseOrderResponse } from '@/lib/api';
 import { 
@@ -34,6 +34,7 @@ export default function ReceivePurchaseOrderPage() {
   const [lines, setLines] = useState<ReceiveLineState[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
@@ -95,7 +96,7 @@ export default function ReceivePurchaseOrderPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!po) return;
+    if (!po || submittingRef.current) return;
 
     // Filter lines that have qty_to_receive > 0
     const linesToSubmit = lines.filter(l => l.qty_to_receive > 0);
@@ -104,6 +105,7 @@ export default function ReceivePurchaseOrderPage() {
       return;
     }
 
+    submittingRef.current = true;
     setSubmitting(true);
     setError(null);
 
@@ -149,6 +151,7 @@ export default function ReceivePurchaseOrderPage() {
       console.error('Error recording receipt:', err);
       setError(err?.detail || err?.message || 'Error al guardar la recepción de inventario.');
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };
