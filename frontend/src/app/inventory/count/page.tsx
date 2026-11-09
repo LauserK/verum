@@ -47,6 +47,17 @@ export default function MobileInventoryCount() {
     onConfirm: () => {}
   })
 
+  // Duplicate item merge/replace prompt state
+  const [duplicatePrompt, setDuplicatePrompt] = useState<{
+    isOpen: boolean
+    existingIndex: number
+    item: any
+    newQty: number
+    newQtyBase: number
+    presentationId: string | null
+    presentationName: string
+  } | null>(null)
+
   const showAlert = (title: string, message: string, onConfirm = () => {}) => {
     setModalState({
       isOpen: true,
@@ -245,10 +256,12 @@ export default function MobileInventoryCount() {
         setLines(detail.lines.map((l: any) => ({
           item_id: l.item_id,
           item_name: l.item_name,
-          qty_counted_base: parseFloat(l.qty_counted_base),
+          qty_counted_base: parseFloat(l.qty_counted_base) || 0,
           presentation_id: l.presentation_id,
           presentation_name: l.presentation_name || l.uom_name || 'Unidades',
-          qty_presentation: l.qty_presentation ? parseFloat(l.qty_presentation) : null
+          qty_presentation: l.qty_presentation !== null && l.qty_presentation !== undefined
+            ? parseFloat(l.qty_presentation)
+            : (parseFloat(l.qty_counted_base) || 0)
         })))
         setSaveStatus('saved')
       } else {
@@ -350,6 +363,13 @@ export default function MobileInventoryCount() {
     }
   }
 
+  const clearSelectionInput = () => {
+    setSelectedItem(null)
+    setQtyInput('')
+    setPresentations([])
+    setSelectedPresId('')
+  }
+
   const addLine = () => {
     if (!selectedItem || qtyInput === '') return
     const qty = parseFloat(qtyInput)
@@ -357,32 +377,70 @@ export default function MobileInventoryCount() {
 
     const selectedPres = presentations.find(p => p.id === selectedPresId)
     const factor = selectedPres ? parseFloat(selectedPres.conversion_factor) : 1.0
-    const qty_counted_base = qty * factor
+    const qty_counted_base = Number((qty * factor).toFixed(4))
+    const presId = selectedPresId || null
+    const presName = selectedPres ? selectedPres.name : selectedItem.uom_name || 'Unidades'
 
-    let updatedLines = []
     const existingIdx = lines.findIndex(l => l.item_id === selectedItem.id)
     if (existingIdx > -1) {
-      updatedLines = [...lines]
-      updatedLines[existingIdx].qty_counted_base += qty_counted_base
-      updatedLines[existingIdx].qty_presentation = (updatedLines[existingIdx].qty_presentation || 0) + qty
+      setDuplicatePrompt({
+        isOpen: true,
+        existingIndex: existingIdx,
+        item: selectedItem,
+        newQty: qty,
+        newQtyBase: qty_counted_base,
+        presentationId: presId,
+        presentationName: presName
+      })
+      return
+    }
+
+    const updatedLines = [...lines, {
+      item_id: selectedItem.id,
+      item_name: selectedItem.name,
+      qty_counted_base,
+      presentation_id: presId,
+      presentation_name: presName,
+      qty_presentation: qty
+    }]
+
+    setLines(updatedLines)
+    saveChanges(updatedLines)
+    clearSelectionInput()
+  }
+
+  const handleDuplicateDecision = (mode: 'merge' | 'replace') => {
+    if (!duplicatePrompt) return
+    const { existingIndex, item, newQty, newQtyBase, presentationId, presentationName } = duplicatePrompt
+    const updatedLines = [...lines]
+    const current = { ...updatedLines[existingIndex] }
+
+    if (mode === 'merge') {
+      const mergedBase = Number(((Number(current.qty_counted_base) || 0) + newQtyBase).toFixed(4))
+      const samePresentation = Boolean(presentationId && current.presentation_id === presentationId)
+      updatedLines[existingIndex] = {
+        ...current,
+        qty_counted_base: mergedBase,
+        presentation_id: samePresentation ? presentationId : null,
+        presentation_name: samePresentation ? presentationName : (item.uom_name || 'Unidades'),
+        qty_presentation: samePresentation
+          ? Number(((Number(current.qty_presentation) || 0) + newQty).toFixed(4))
+          : mergedBase
+      }
     } else {
-      updatedLines = [...lines, {
-        item_id: selectedItem.id,
-        item_name: selectedItem.name,
-        qty_counted_base,
-        presentation_id: selectedPresId || null,
-        presentation_name: selectedPres ? selectedPres.name : selectedItem.uom_name || 'Unidades',
-        qty_presentation: qty
-      }]
+      updatedLines[existingIndex] = {
+        ...current,
+        qty_counted_base: newQtyBase,
+        presentation_id: presentationId,
+        presentation_name: presentationName,
+        qty_presentation: newQty
+      }
     }
 
     setLines(updatedLines)
     saveChanges(updatedLines)
-
-    setSelectedItem(null)
-    setQtyInput('')
-    setPresentations([])
-    setSelectedPresId('')
+    setDuplicatePrompt(null)
+    clearSelectionInput()
   }
 
   const handleSaveAndExit = async () => {
@@ -441,6 +499,74 @@ export default function MobileInventoryCount() {
         onConfirm={modalState.onConfirm}
         onCancel={() => setModalState(prev => ({ ...prev, isOpen: false }))}
       />
+
+      {/* Duplicate Item Decision Modal (Sumar vs Reemplazar) */}
+      {duplicatePrompt && duplicatePrompt.isOpen && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-surface w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden border border-border animate-in zoom-in-95 duration-200 p-6">
+            <div className="flex items-center gap-3 mb-3 text-primary">
+              <div className="p-2 bg-primary/10 rounded-xl">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <h3 className="text-lg font-bold text-text-primary">Artículo ya en la lista</h3>
+            </div>
+
+            <p className="text-text-secondary text-sm leading-relaxed mb-4">
+              <span className="font-bold text-text-primary">{duplicatePrompt.item.name}</span> ya tiene un conteo registrado. ¿Qué deseas hacer con la nueva cantidad?
+            </p>
+
+            {(() => {
+              const currentLine = lines[duplicatePrompt.existingIndex]
+              const prevBase = Number(currentLine?.qty_counted_base) || 0
+              const newBase = duplicatePrompt.newQtyBase
+              const sumBase = Number((prevBase + newBase).toFixed(4))
+              const baseUom = duplicatePrompt.item.uom_name || 'base'
+              return (
+                <>
+                  <div className="bg-bg border border-border rounded-2xl p-3 mb-5 space-y-1.5 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-text-secondary">Conteo anterior:</span>
+                      <span className="font-bold text-text-primary">{prevBase} {baseUom}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-text-secondary">Nuevo ingreso:</span>
+                      <span className="font-bold text-primary">+{newBase} {baseUom}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => handleDuplicateDecision('merge')}
+                      className="w-full h-12 bg-primary text-text-inverse rounded-2xl font-bold text-sm hover:bg-primary-hover transition-colors shadow-lg shadow-primary/20 px-4 flex items-center justify-between cursor-pointer"
+                    >
+                      <span>Unir y sumar</span>
+                      <span className="bg-black/20 px-2.5 py-0.5 rounded-lg text-xs">Total: {sumBase} {baseUom}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleDuplicateDecision('replace')}
+                      className="w-full h-12 bg-surface-raised border border-border text-text-primary rounded-2xl font-bold text-sm hover:border-primary transition-colors px-4 flex items-center justify-between cursor-pointer"
+                    >
+                      <span>Reemplazar original</span>
+                      <span className="text-xs text-text-secondary">Queda: {newBase} {baseUom}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setDuplicatePrompt(null)}
+                      className="w-full h-10 text-text-secondary rounded-xl font-semibold text-xs hover:bg-surface-raised transition-colors cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </>
+              )
+            })()}
+          </div>
+        </div>
+      )}
 
       {/* QR/Barcode Scanner Modal */}
       {openScanner && (

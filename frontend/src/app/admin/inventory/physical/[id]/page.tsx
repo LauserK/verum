@@ -30,6 +30,14 @@ export default function AdminPhysicalInventoryDetail() {
     onConfirm: () => {}
   })
 
+  // Duplicate item prompt state (when selecting an already-listed item in Admin)
+  const [duplicatePrompt, setDuplicatePrompt] = useState<{
+    isOpen: boolean
+    existingIndex: number
+    item: any
+    inputQty: string
+  } | null>(null)
+
   const showAlert = (title: string, message: string, onConfirm = () => {}) => {
     setModalState({
       isOpen: true,
@@ -86,13 +94,21 @@ export default function AdminPhysicalInventoryDetail() {
   }
 
   const handleAddItemLine = async (item: any) => {
-    if (editedLines.some(l => l.item_id === item.id)) {
-      showAlert('Artículo duplicado', 'Este artículo ya se encuentra agregado al conteo físico.')
-      setSearchQuery('')
-      setShowSuggestions(false)
+    setSearchQuery('')
+    setShowSuggestions(false)
+
+    const existingIdx = editedLines.findIndex(l => l.item_id === item.id)
+    if (existingIdx > -1) {
+      setDuplicatePrompt({
+        isOpen: true,
+        existingIndex: existingIdx,
+        item,
+        inputQty: ''
+      })
       return
     }
 
+    if (processing) return
     setProcessing(true)
     try {
       const stockRes = await adminApi.getItemStock(item.id) as any[]
@@ -111,9 +127,7 @@ export default function AdminPhysicalInventoryDetail() {
         notes: ''
       }
 
-      setEditedLines(prev => [...prev, newLine])
-      setSearchQuery('')
-      setShowSuggestions(false)
+      setEditedLines(prev => prev.some(l => l.item_id === item.id) ? prev : [...prev, newLine])
     } catch (err) {
       console.error('Error adding item line:', err)
       showAlert('Error', 'No se pudo obtener el stock teórico del artículo.')
@@ -122,19 +136,46 @@ export default function AdminPhysicalInventoryDetail() {
     }
   }
 
+  const handleDuplicateAdminDecision = (mode: 'merge' | 'replace') => {
+    if (!duplicatePrompt) return
+    const qtyVal = parseFloat(duplicatePrompt.inputQty)
+    if (isNaN(qtyVal) || qtyVal < 0) return
+
+    const { existingIndex } = duplicatePrompt
+    const newLines = [...editedLines]
+    const current = { ...newLines[existingIndex] }
+    const hasPresentation = current.presentation_id && current.presentation_name
+
+    if (hasPresentation) {
+      const prevPres = Number(current.qty_presentation) || 0
+      const prevBase = Number(current.qty_counted_base) || 0
+      const factor = current.conversion_factor || (prevPres > 0 ? prevBase / prevPres : 1.0)
+      current.conversion_factor = factor
+      const updatedPres = Number((mode === 'merge' ? prevPres + qtyVal : qtyVal).toFixed(4))
+      current.qty_presentation = updatedPres
+      current.qty_counted_base = Number((updatedPres * (factor || 1.0)).toFixed(4))
+    } else {
+      const prevBase = Number(current.qty_counted_base) || 0
+      current.qty_counted_base = Number((mode === 'merge' ? prevBase + qtyVal : qtyVal).toFixed(4))
+    }
+
+    newLines[existingIndex] = current
+    setEditedLines(newLines)
+    setDuplicatePrompt(null)
+  }
+
   const handleLineChange = (index: number, field: string, value: any) => {
     const newLines = [...editedLines];
     const line = { ...newLines[index] };
     
     if (field === 'qty_presentation') {
+      const prevPres = Number(line.qty_presentation) || 0;
+      const prevBase = Number(line.qty_counted_base) || 0;
+      const factor = line.conversion_factor || (prevPres > 0 ? prevBase / prevPres : 1.0);
+      line.conversion_factor = factor;
       const qtyPres = parseFloat(value) || 0;
       line.qty_presentation = qtyPres;
-      if (line.qty_counted_base && line.qty_presentation) {
-        const factor = Number(line.qty_counted_base) / Number(line.qty_presentation);
-        line.qty_counted_base = qtyPres * (factor || 1.0);
-      } else {
-        line.qty_counted_base = qtyPres;
-      }
+      line.qty_counted_base = Number((qtyPres * (factor || 1.0)).toFixed(4));
     } else if (field === 'qty_counted_base') {
       line.qty_counted_base = parseFloat(value) || 0;
     } else if (field === 'notes') {
@@ -511,6 +552,98 @@ export default function AdminPhysicalInventoryDetail() {
         onConfirm={modalState.onConfirm}
         onCancel={() => setModalState(prev => ({ ...prev, isOpen: false }))}
       />
+
+      {/* Duplicate Item Decision Modal (Sumar vs Reemplazar in Admin) */}
+      {duplicatePrompt && duplicatePrompt.isOpen && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-surface w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden border border-border animate-in zoom-in-95 duration-200 p-6">
+            <div className="flex items-center gap-3 mb-3 text-primary">
+              <div className="p-2 bg-primary/10 rounded-xl">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <h3 className="text-lg font-bold text-text-primary">Artículo ya en la lista</h3>
+            </div>
+
+            <p className="text-text-secondary text-sm leading-relaxed mb-4">
+              <span className="font-bold text-text-primary">{duplicatePrompt.item.name}</span> ya se encuentra en el conteo. Ingresa la nueva cantidad y elige si deseas unirla o reemplazar la anterior.
+            </p>
+
+            {(() => {
+              const currentLine = editedLines[duplicatePrompt.existingIndex]
+              const hasPres = currentLine?.presentation_id && currentLine?.presentation_name
+              const unitLabel = hasPres ? currentLine.presentation_name : (duplicatePrompt.item.uom_name || 'base')
+              const prevVal = hasPres ? (Number(currentLine?.qty_presentation) || 0) : (Number(currentLine?.qty_counted_base) || 0)
+              const typedVal = parseFloat(duplicatePrompt.inputQty) || 0
+              const mergedVal = Number((prevVal + typedVal).toFixed(4))
+              const isValid = duplicatePrompt.inputQty.trim() !== '' && !isNaN(parseFloat(duplicatePrompt.inputQty)) && parseFloat(duplicatePrompt.inputQty) >= 0
+
+              return (
+                <>
+                  <div className="mb-4">
+                    <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-1.5">
+                      Nueva cantidad ({unitLabel})
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      autoFocus
+                      placeholder="Ej: 2000"
+                      value={duplicatePrompt.inputQty}
+                      onChange={(e) => setDuplicatePrompt(prev => prev ? { ...prev, inputQty: e.target.value } : null)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') setDuplicatePrompt(null)
+                        else if (e.key === 'Enter' && isValid) handleDuplicateAdminDecision('merge')
+                      }}
+                      className="w-full bg-bg border border-border focus:border-primary rounded-xl px-3.5 h-11 text-sm font-bold text-text-primary outline-none"
+                    />
+                  </div>
+
+                  <div className="bg-bg border border-border rounded-2xl p-3 mb-5 space-y-1.5 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-text-secondary">Cantidad actual:</span>
+                      <span className="font-bold text-text-primary">{prevVal} {unitLabel}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-text-secondary">Nueva cantidad:</span>
+                      <span className="font-bold text-primary">+{typedVal} {unitLabel}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-2.5">
+                    <button
+                      type="button"
+                      disabled={!isValid}
+                      onClick={() => handleDuplicateAdminDecision('merge')}
+                      className="w-full h-12 bg-primary text-text-inverse rounded-2xl font-bold text-sm hover:bg-primary-hover transition-colors shadow-lg shadow-primary/20 px-4 flex items-center justify-between disabled:opacity-50 cursor-pointer"
+                    >
+                      <span>Unir y sumar</span>
+                      <span className="bg-black/20 px-2.5 py-0.5 rounded-lg text-xs">Total: {mergedVal} {unitLabel}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={!isValid}
+                      onClick={() => handleDuplicateAdminDecision('replace')}
+                      className="w-full h-12 bg-surface-raised border border-border text-text-primary rounded-2xl font-bold text-sm hover:border-primary transition-colors px-4 flex items-center justify-between disabled:opacity-50 cursor-pointer"
+                    >
+                      <span>Reemplazar original</span>
+                      <span className="text-xs text-text-secondary">Queda: {typedVal} {unitLabel}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setDuplicatePrompt(null)}
+                      className="w-full h-10 text-text-secondary rounded-xl font-semibold text-xs hover:bg-surface-raised transition-colors cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </>
+              )
+            })()}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

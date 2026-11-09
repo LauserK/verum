@@ -1050,6 +1050,58 @@ async def get_movements_by_reference(reference_id: UUID, db=Depends(get_db), _=D
 
 # ── Inventory: Physical Counts (M39) ───────────────────
 
+def _build_consolidated_inventory_lines(db, doc_id: str, warehouse_id: str, lines) -> tuple[list[dict], list[str]]:
+    """Consolidate duplicate item_ids in payload and attach expected stock quantities."""
+    consolidated_lines = {}
+    for line in lines:
+        iid = str(line.item_id)
+        pres_id = str(line.presentation_id) if line.presentation_id else None
+        qty_pres = float(line.qty_presentation) if line.qty_presentation is not None else None
+        if iid not in consolidated_lines:
+            consolidated_lines[iid] = {
+                "item_id": iid,
+                "qty_counted_base": round(float(line.qty_counted_base), 6),
+                "presentation_id": pres_id,
+                "qty_presentation": round(qty_pres, 6) if qty_pres is not None else None,
+                "notes": line.notes
+            }
+        else:
+            existing = consolidated_lines[iid]
+            existing["qty_counted_base"] = round(existing["qty_counted_base"] + float(line.qty_counted_base), 6)
+            if existing["presentation_id"] == pres_id and pres_id is not None and qty_pres is not None:
+                prev_pres = existing["qty_presentation"] or 0.0
+                existing["qty_presentation"] = round(prev_pres + qty_pres, 6)
+            else:
+                # Incompatible presentations: fall back to base UOM
+                existing["presentation_id"] = None
+                existing["qty_presentation"] = None
+            if line.notes:
+                prev_notes = existing["notes"]
+                existing["notes"] = f"{prev_notes}; {line.notes}" if prev_notes else line.notes
+
+    item_ids = list(consolidated_lines.keys())
+    stock_res = db.table("stock") \
+        .select("item_id, qty_base") \
+        .eq("warehouse_id", warehouse_id) \
+        .in_("item_id", item_ids) \
+        .execute()
+    stock_map = {s["item_id"]: float(s["qty_base"] or 0.0) for s in (stock_res.data or [])}
+
+    lines_data = []
+    for iid, line_dict in consolidated_lines.items():
+        expected = stock_map.get(iid, 0.0)
+        lines_data.append({
+            "physical_inventory_id": doc_id,
+            "item_id": iid,
+            "qty_expected_base": expected,
+            "qty_counted_base": line_dict["qty_counted_base"],
+            "presentation_id": line_dict["presentation_id"],
+            "qty_presentation": line_dict["qty_presentation"],
+            "notes": line_dict["notes"]
+        })
+    return lines_data, item_ids
+
+
 @router.post("/inventory/physical-inventories", response_model=PhysicalInventoryResponse, tags=["Inventory"])
 async def create_physical_inventory(
     doc: PhysicalInventoryCreate, 
@@ -1081,27 +1133,7 @@ async def create_physical_inventory(
 
     # 3. Process lines and record expected quantities at draft creation time (Bulk)
     if doc.lines:
-        item_ids = [str(line.item_id) for line in doc.lines]
-        stock_res = db.table("stock") \
-            .select("item_id, qty_base") \
-            .eq("warehouse_id", str(doc.warehouse_id)) \
-            .in_("item_id", item_ids) \
-            .execute()
-        stock_map = {s["item_id"]: float(s["qty_base"] or 0.0) for s in (stock_res.data or [])}
-
-        lines_data = []
-        for line in doc.lines:
-            expected = stock_map.get(str(line.item_id), 0.0)
-            lines_data.append({
-                "physical_inventory_id": doc_id,
-                "item_id": str(line.item_id),
-                "qty_expected_base": expected,
-                "qty_counted_base": float(line.qty_counted_base),
-                "presentation_id": str(line.presentation_id) if line.presentation_id else None,
-                "qty_presentation": float(line.qty_presentation) if line.qty_presentation is not None else None,
-                "notes": line.notes
-            })
-        
+        lines_data, _ = _build_consolidated_inventory_lines(db, str(doc_id), str(doc.warehouse_id), doc.lines)
         if lines_data:
             db.table("physical_inventory_lines").insert(lines_data).execute()
 
@@ -1209,33 +1241,27 @@ async def update_physical_inventory(
         update_data["execution_date"] = doc.execution_date.isoformat()
     db.table("physical_inventories").update(update_data).eq("id", str(id)).execute()
 
-    # Clear and insert new lines in bulk
-    db.table("physical_inventory_lines").delete().eq("physical_inventory_id", str(id)).execute()
-
+    # Consolidate duplicate item_ids in payload to prevent 23505 unique constraint errors
     if doc.lines:
-        item_ids = [str(line.item_id) for line in doc.lines]
-        stock_res = db.table("stock") \
-            .select("item_id, qty_base") \
-            .eq("warehouse_id", str(doc.warehouse_id)) \
-            .in_("item_id", item_ids) \
-            .execute()
-        stock_map = {s["item_id"]: float(s["qty_base"] or 0.0) for s in (stock_res.data or [])}
+        lines_data, item_ids = _build_consolidated_inventory_lines(db, str(id), str(doc.warehouse_id), doc.lines)
 
-        lines_data = []
-        for line in doc.lines:
-            expected = stock_map.get(str(line.item_id), 0.0)
-            lines_data.append({
-                "physical_inventory_id": str(id),
-                "item_id": str(line.item_id),
-                "qty_expected_base": expected,
-                "qty_counted_base": float(line.qty_counted_base),
-                "presentation_id": str(line.presentation_id) if line.presentation_id else None,
-                "qty_presentation": float(line.qty_presentation) if line.qty_presentation is not None else None,
-                "notes": line.notes
-            })
-
+        # 1. Upsert lines FIRST so data is never lost if an error occurs and concurrent saves don't trigger 23505
         if lines_data:
-            db.table("physical_inventory_lines").insert(lines_data).execute()
+            db.table("physical_inventory_lines").upsert(
+                lines_data, on_conflict="physical_inventory_id,item_id"
+            ).execute()
+
+        # 2. Only remove lines that were explicitly removed from the draft
+        existing_res = db.table("physical_inventory_lines") \
+            .select("id, item_id") \
+            .eq("physical_inventory_id", str(id)) \
+            .execute()
+        kept_set = set(item_ids)
+        removed_ids = [r["id"] for r in (existing_res.data or []) if r["item_id"] not in kept_set]
+        if removed_ids:
+            db.table("physical_inventory_lines").delete().in_("id", removed_ids).execute()
+    else:
+        db.table("physical_inventory_lines").delete().eq("physical_inventory_id", str(id)).execute()
 
     return await get_physical_inventory_detail(id, db)
 
