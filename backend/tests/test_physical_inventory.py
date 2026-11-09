@@ -226,3 +226,100 @@ def test_resolve_lot_number(client, mock_supabase, authenticated_user_mock):
     assert res_data["lot_number"] == lot_number
     assert res_data["item"]["name"] == "Test Lot Item"
     assert res_data["item"]["uom_name"] == "Kg"
+
+
+def test_physical_inventory_self_heals_zero_stock_from_movements(client, mock_supabase, authenticated_user_mock):
+    user_id = str(uuid.uuid4())
+    authenticated_user_mock.id = user_id
+    inv_id = str(uuid.uuid4())
+    warehouse_id = str(uuid.uuid4())
+    item_id = str(uuid.uuid4())
+    org_id = str(uuid.uuid4())
+
+    update_data = {
+        "warehouse_id": warehouse_id,
+        "notes": "Production warehouse count",
+        "lines": [
+            {
+                "item_id": item_id,
+                "qty_counted_base": 4800.0,
+                "presentation_id": None,
+                "qty_presentation": None,
+                "notes": None
+            }
+        ]
+    }
+
+    app.dependency_overrides[get_current_user] = lambda: authenticated_user_mock
+    app.dependency_overrides[main.get_active_org_id] = lambda: org_id
+
+    with patch("main.resolve_permission", return_value=True):
+        mock_header_res = MagicMock()
+        mock_header_res.data = [{
+            "id": inv_id,
+            "org_id": org_id,
+            "warehouse_id": warehouse_id,
+            "document_number": "INV-2026-0007",
+            "status": "draft",
+            "notes": "Production warehouse count",
+            "created_by": user_id,
+            "created_at": "2026-06-17T12:00:00Z"
+        }]
+
+        mock_inv_table = MagicMock()
+        mock_inv_table.select.return_value.eq.return_value.execute.return_value = mock_header_res
+
+        mock_lines_table = MagicMock()
+        mock_lines_table.upsert.return_value.execute.return_value = MagicMock(data=[])
+        mock_lines_table.select.return_value.eq.return_value.execute.return_value = MagicMock(data=[{
+            "id": str(uuid.uuid4()),
+            "item_id": item_id,
+            "qty_expected_base": 5000.0,
+            "qty_counted_base": 4800.0,
+            "presentation_id": None,
+            "qty_presentation": None,
+            "notes": None,
+            "items": {"name": "Harina"},
+            "uom_presentations": None
+        }])
+
+        # public.stock returns 0.0 (out of sync)
+        mock_stock_table = MagicMock()
+        mock_stock_table.select.return_value.eq.return_value.in_.return_value.execute.return_value = MagicMock(
+            data=[{"id": str(uuid.uuid4()), "item_id": item_id, "qty_base": 0.0}]
+        )
+        mock_stock_table.upsert.return_value.execute.return_value = MagicMock(data=[])
+
+        # stock_movements has +7000 and -2000 = 5000.0 real stock
+        mock_movs_table = MagicMock()
+        mock_movs_table.select.return_value.eq.return_value.in_.return_value.execute.return_value = MagicMock(
+            data=[
+                {"item_id": item_id, "qty_base": 7000.0},
+                {"item_id": item_id, "qty_base": -2000.0}
+            ]
+        )
+
+        def get_mock_table(name):
+            if name == "physical_inventories":
+                return mock_inv_table
+            elif name == "physical_inventory_lines":
+                return mock_lines_table
+            elif name == "stock":
+                return mock_stock_table
+            elif name == "stock_movements":
+                return mock_movs_table
+            return MagicMock()
+
+        mock_supabase.table.side_effect = get_mock_table
+
+        response = client.put(f"/inventory/physical-inventories/{inv_id}", json=update_data)
+
+    app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    upserted_lines = mock_lines_table.upsert.call_args[0][0]
+    assert len(upserted_lines) == 1
+    assert upserted_lines[0]["qty_expected_base"] == 5000.0
+    # Verify public.stock was also self-healed to 5000.0
+    healed_stock = mock_stock_table.upsert.call_args[0][0]
+    assert healed_stock[0]["qty_base"] == 5000.0

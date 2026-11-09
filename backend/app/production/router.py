@@ -461,19 +461,78 @@ async def get_item(item_id: UUID, db=Depends(get_db), _=Depends(require_permissi
 
 @router.get("/inventory/items/{item_id}/stock", tags=["Inventory"])
 async def get_item_stock(item_id: UUID, db=Depends(get_db), _=Depends(require_permission("inventory.view"))):
-    res = db.table("stock").select("*, warehouses(name)").eq("item_id", str(item_id)).execute()
-    return res.data or []
+    item_str = str(item_id)
+    res = db.table("stock").select("*, warehouses(name)").eq("item_id", item_str).execute()
+    stock_rows = list(res.data or [])
+
+    # Fast self-healing check: if stock_movements has non-zero balances for warehouses missing or 0 in stock
+    try:
+        mv_res = db.table("stock_movements") \
+            .select("warehouse_id, qty_base, warehouses(name)") \
+            .eq("item_id", item_str) \
+            .execute()
+        if isinstance(getattr(mv_res, "data", None), list) and mv_res.data:
+            mv_sums: Dict[str, float] = {}
+            wh_names: Dict[str, Any] = {}
+            for mv in mv_res.data:
+                wid = mv.get("warehouse_id")
+                if wid:
+                    mv_sums[wid] = round(mv_sums.get(wid, 0.0) + float(mv.get("qty_base") or 0.0), 6)
+                    if mv.get("warehouses"):
+                        wh_names[wid] = mv["warehouses"]
+
+            existing_by_wh = {r["warehouse_id"]: r for r in stock_rows if r.get("warehouse_id")}
+            for wid, real_qty in mv_sums.items():
+                row = existing_by_wh.get(wid)
+                if row is None and real_qty != 0:
+                    up_res = db.table("stock").upsert({
+                        "item_id": item_str,
+                        "warehouse_id": wid,
+                        "qty_base": real_qty
+                    }, on_conflict="warehouse_id,item_id").execute()
+                    new_row = (up_res.data[0] if getattr(up_res, "data", None) else {
+                        "item_id": item_str,
+                        "warehouse_id": wid,
+                        "qty_base": real_qty,
+                        "qty_reserved": 0
+                    })
+                    new_row["warehouses"] = wh_names.get(wid)
+                    stock_rows.append(new_row)
+                elif row is not None and float(row.get("qty_base") or 0.0) == 0.0 and real_qty != 0:
+                    row["qty_base"] = real_qty
+                    db.table("stock").update({"qty_base": real_qty}).eq("id", row["id"]).execute()
+    except Exception:
+        pass
+
+    return stock_rows
 
 @router.post("/inventory/items/{item_id}/stock", tags=["Inventory"])
 async def associate_warehouse(item_id: UUID, body: dict, db=Depends(get_db), _=Depends(require_permission("inventory.manage_items"))):
     warehouse_id = body.get("warehouse_id")
     if not warehouse_id:
         raise HTTPException(400, "warehouse_id is required")
+    item_str = str(item_id)
+    existing = db.table("stock").select("id, qty_base").eq("item_id", item_str).eq("warehouse_id", warehouse_id).execute()
+    if existing.data:
+        return {"ok": True}
+
+    initial_qty = 0.0
+    try:
+        mv_res = db.table("stock_movements") \
+            .select("qty_base") \
+            .eq("warehouse_id", warehouse_id) \
+            .eq("item_id", item_str) \
+            .execute()
+        if isinstance(getattr(mv_res, "data", None), list) and mv_res.data:
+            initial_qty = round(sum(float(m.get("qty_base") or 0.0) for m in mv_res.data), 6)
+    except Exception:
+        pass
+
     db.table("stock").upsert({
-        "item_id": str(item_id),
+        "item_id": item_str,
         "warehouse_id": warehouse_id,
-        "qty_base": 0
-    }, on_conflict="item_id,warehouse_id").execute()
+        "qty_base": initial_qty
+    }, on_conflict="warehouse_id,item_id").execute()
     return {"ok": True}
 
 @router.get("/inventory/item-categories", response_model=List[ItemCategoryResponse], tags=["Inventory"])
@@ -1050,6 +1109,62 @@ async def get_movements_by_reference(reference_id: UUID, db=Depends(get_db), _=D
 
 # ── Inventory: Physical Counts (M39) ───────────────────
 
+def _resolve_warehouse_stock_map(db, warehouse_id: str, item_ids: list[str]) -> tuple[dict[str, float], dict[str, dict]]:
+    """
+    Fast O(1) read from public.stock for item_ids in warehouse_id, with automatic
+    self-healing fallback to stock_movements only for items missing or 0 in public.stock.
+    """
+    if not item_ids:
+        return {}, {}
+
+    stock_res = db.table("stock") \
+        .select("id, item_id, qty_base") \
+        .eq("warehouse_id", warehouse_id) \
+        .in_("item_id", item_ids) \
+        .execute()
+
+    stock_rows = stock_res.data if isinstance(getattr(stock_res, "data", None), list) else []
+    stock_by_item = {s["item_id"]: s for s in stock_rows if isinstance(s, dict) and s.get("item_id")}
+    stock_map = {iid: float(s.get("qty_base") or 0.0) for iid, s in stock_by_item.items()}
+
+    zero_item_ids = [iid for iid in item_ids if stock_map.get(iid, 0.0) == 0.0]
+    if zero_item_ids:
+        try:
+            mv_res = db.table("stock_movements") \
+                .select("item_id, qty_base") \
+                .eq("warehouse_id", warehouse_id) \
+                .in_("item_id", zero_item_ids) \
+                .execute()
+            if isinstance(getattr(mv_res, "data", None), list) and mv_res.data:
+                mv_sums: Dict[str, float] = {}
+                for mv in mv_res.data:
+                    if isinstance(mv, dict) and mv.get("item_id"):
+                        iid = mv["item_id"]
+                        mv_sums[iid] = round(mv_sums.get(iid, 0.0) + float(mv.get("qty_base") or 0.0), 6)
+
+                to_upsert = []
+                for iid, real_qty in mv_sums.items():
+                    if real_qty != 0.0:
+                        stock_map[iid] = real_qty
+                        if iid in stock_by_item:
+                            stock_by_item[iid]["qty_base"] = real_qty
+                        to_upsert.append({
+                            "warehouse_id": warehouse_id,
+                            "item_id": iid,
+                            "qty_base": real_qty
+                        })
+                if to_upsert:
+                    up_res = db.table("stock").upsert(to_upsert, on_conflict="warehouse_id,item_id").execute()
+                    if isinstance(getattr(up_res, "data", None), list):
+                        for r in up_res.data:
+                            if isinstance(r, dict) and r.get("item_id"):
+                                stock_by_item[r["item_id"]] = r
+        except Exception:
+            pass
+
+    return stock_map, stock_by_item
+
+
 def _build_consolidated_inventory_lines(db, doc_id: str, warehouse_id: str, lines) -> tuple[list[dict], list[str]]:
     """Consolidate duplicate item_ids in payload and attach expected stock quantities."""
     consolidated_lines = {}
@@ -1080,12 +1195,7 @@ def _build_consolidated_inventory_lines(db, doc_id: str, warehouse_id: str, line
                 existing["notes"] = f"{prev_notes}; {line.notes}" if prev_notes else line.notes
 
     item_ids = list(consolidated_lines.keys())
-    stock_res = db.table("stock") \
-        .select("item_id, qty_base") \
-        .eq("warehouse_id", warehouse_id) \
-        .in_("item_id", item_ids) \
-        .execute()
-    stock_map = {s["item_id"]: float(s["qty_base"] or 0.0) for s in (stock_res.data or [])}
+    stock_map, _ = _resolve_warehouse_stock_map(db, warehouse_id, item_ids)
 
     lines_data = []
     for iid, line_dict in consolidated_lines.items():
@@ -1188,14 +1298,29 @@ async def get_physical_inventory_detail(
         .select("*, items(name), uom_presentations(name)") \
         .eq("physical_inventory_id", str(id)) \
         .execute()
-    
+
+    raw_lines = lines_res.data or []
+    # For draft counts, self-heal any lines where qty_expected_base is 0 if real stock exists
+    healed_expected: Dict[str, float] = {}
+    if h.get("status") == "draft" and raw_lines:
+        zero_line_item_ids = [
+            l["item_id"] for l in raw_lines
+            if float(l.get("qty_expected_base") or 0.0) == 0.0 and l.get("item_id")
+        ]
+        if zero_line_item_ids:
+            healed_expected, _ = _resolve_warehouse_stock_map(db, str(h["warehouse_id"]), zero_line_item_ids)
+
     lines = []
-    for l in (lines_res.data or []):
+    for l in raw_lines:
+        iid = l["item_id"]
+        expected_val = l["qty_expected_base"]
+        if h.get("status") == "draft" and float(expected_val or 0.0) == 0.0 and healed_expected.get(iid, 0.0) != 0.0:
+            expected_val = healed_expected[iid]
         lines.append({
             "id": l["id"],
-            "item_id": l["item_id"],
+            "item_id": iid,
             "item_name": l["items"]["name"] if l.get("items") else "Desconocido",
-            "qty_expected_base": l["qty_expected_base"],
+            "qty_expected_base": expected_val,
             "qty_counted_base": l["qty_counted_base"],
             "presentation_id": l["presentation_id"],
             "presentation_name": l["uom_presentations"]["name"] if l.get("uom_presentations") else None,
@@ -1316,13 +1441,8 @@ async def process_physical_inventory(
 
     item_ids = list({line["item_id"] for line in lines})
 
-    # Bulk Query 1: Fetch current stock for all items in 1 request
-    stock_res = db.table("stock") \
-        .select("id, item_id, qty_base") \
-        .eq("warehouse_id", warehouse_id) \
-        .in_("item_id", item_ids) \
-        .execute()
-    stock_by_item = {s["item_id"]: s for s in (stock_res.data or [])}
+    # Bulk Query 1: Fetch current stock for all items in 1 request (with self-healing fallback)
+    stock_map, stock_by_item = _resolve_warehouse_stock_map(db, str(warehouse_id), item_ids)
 
     # Bulk Query 2: Fetch last purchase costs for all items in 1 request
     items_res = db.table("items") \
@@ -1335,8 +1455,7 @@ async def process_physical_inventory(
     neg_item_ids = []
     for line in lines:
         qty_counted = float(line["qty_counted_base"])
-        stock_entry = stock_by_item.get(line["item_id"])
-        qty_expected = float(stock_entry["qty_base"]) if stock_entry else 0.0
+        qty_expected = stock_map.get(line["item_id"], 0.0)
         if qty_counted < qty_expected:
             neg_item_ids.append(line["item_id"])
 
@@ -1360,7 +1479,7 @@ async def process_physical_inventory(
         item_id = line["item_id"]
         qty_counted = float(line["qty_counted_base"])
         stock_entry = stock_by_item.get(item_id)
-        qty_expected = float(stock_entry["qty_base"]) if stock_entry else 0.0
+        qty_expected = stock_map.get(item_id, 0.0)
 
         # Snapshot expected qty in document line
         db.table("physical_inventory_lines") \
@@ -1402,16 +1521,15 @@ async def process_physical_inventory(
             })
 
             # Update stock
-            if stock_entry:
-                new_qty = qty_expected + difference
-                db.table("stock").update({"qty_base": new_qty}).eq("id", stock_entry["id"]).execute()
+            if stock_entry and stock_entry.get("id"):
+                db.table("stock").update({"qty_base": qty_counted}).eq("id", stock_entry["id"]).execute()
             else:
-                db.table("stock").insert({
+                db.table("stock").upsert({
                     "warehouse_id": warehouse_id,
                     "item_id": item_id,
-                    "qty_base": difference,
+                    "qty_base": qty_counted,
                     "qty_reserved": 0.0
-                }).execute()
+                }, on_conflict="warehouse_id,item_id").execute()
 
         elif difference < 0:
             # Negative Adjustment: Consume FIFO lots
@@ -1467,9 +1585,15 @@ async def process_physical_inventory(
                     "created_at": effective_date
                 })
 
-            if stock_entry:
-                new_qty = max(0, float(stock_entry["qty_base"]) - to_consume)
-                db.table("stock").update({"qty_base": new_qty}).eq("id", stock_entry["id"]).execute()
+            if stock_entry and stock_entry.get("id"):
+                db.table("stock").update({"qty_base": qty_counted}).eq("id", stock_entry["id"]).execute()
+            else:
+                db.table("stock").upsert({
+                    "warehouse_id": warehouse_id,
+                    "item_id": item_id,
+                    "qty_base": qty_counted,
+                    "qty_reserved": 0.0
+                }, on_conflict="warehouse_id,item_id").execute()
 
     # Bulk insert all stock movements in 1 single network call
     if movements_to_insert:

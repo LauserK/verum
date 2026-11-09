@@ -432,18 +432,21 @@ async def complete_production_order(
         if not actual_consumptions:
             actual_consumptions = [{"item_id": p["item_id"], "qty_actual_base": p["qty_planned_base"]} for p in (planned_cons.data or [])]
         
+        actual_by_item: Dict[str, float] = {}
         for cons in actual_consumptions:
             item_id = str(cons["item_id"] if isinstance(cons, dict) else cons.item_id)
             qty_actual = float(cons["qty_actual_base"] if isinstance(cons, dict) else cons.qty_actual_base)
+            actual_by_item[item_id] = qty_actual
             
             db.table("production_order_consumptions").update({
                 "qty_actual_base": qty_actual
             }).eq("order_id", str(order_id)).eq("item_id", item_id).execute()
             
-        # Release reservations for ingredients
+        # Release reservations and consume stock for each ingredient using its own qty_actual
         for p in (planned_cons.data or []):
             item_id = str(p["item_id"])
             qty_planned = float(p["qty_planned_base"])
+            qty_actual = actual_by_item.get(item_id, qty_planned)
             if qty_planned > 0:
                 stock_res = db.table("stock").select("id, qty_reserved").eq("warehouse_id", origin_wh_id).eq("item_id", item_id).execute()
                 if stock_res.data:
@@ -596,7 +599,33 @@ async def complete_production_order(
                 "assigned_to": None
             }).eq("id", str(order_id)).execute()
             
-            # 2. Delete any generated stock_movements for this order
+            # 2. Reverse stock and lot adjustments from any generated stock_movements before deleting them
+            gen_movs = db.table("stock_movements") \
+                .select("warehouse_id, item_id, lot_id, qty_base, movement_type") \
+                .eq("reference_id", str(order_id)) \
+                .eq("reference_type", "production_order") \
+                .execute()
+            for mv in (gen_movs.data or []):
+                mv_qty = float(mv.get("qty_base") or 0.0)
+                if mv.get("movement_type") == "production_out" and mv.get("lot_id"):
+                    lot_r = db.table("stock_lots").select("qty_base").eq("id", mv["lot_id"]).execute()
+                    if lot_r.data:
+                        restored_lot_qty = float(lot_r.data[0]["qty_base"]) + abs(mv_qty)
+                        db.table("stock_lots").update({
+                            "qty_base": restored_lot_qty,
+                            "is_exhausted": restored_lot_qty <= 0
+                        }).eq("id", mv["lot_id"]).execute()
+                if mv.get("warehouse_id") and mv.get("item_id") and mv_qty != 0.0:
+                    st_r = db.table("stock") \
+                        .select("id, qty_base") \
+                        .eq("warehouse_id", mv["warehouse_id"]) \
+                        .eq("item_id", mv["item_id"]) \
+                        .execute()
+                    if st_r.data:
+                        db.table("stock").update({
+                            "qty_base": float(st_r.data[0]["qty_base"]) - mv_qty
+                        }).eq("id", st_r.data[0]["id"]).execute()
+
             db.table("stock_movements").delete().eq("reference_id", str(order_id)).eq("reference_type", "production_order").execute()
             
             # 3. Delete generated lots
