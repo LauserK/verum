@@ -178,6 +178,16 @@ async def get_profile(x_org_id: Optional[str] = Header(None), user=Depends(get_c
         except Exception:
             user_permissions = []
 
+        effective_venue_id = profile.get("venue_id")
+        if not effective_venue_id:
+            if x_org_id and org_venues_map.get(x_org_id):
+                effective_venue_id = org_venues_map[x_org_id][0]["id"]
+            else:
+                for v_list in org_venues_map.values():
+                    if v_list:
+                        effective_venue_id = v_list[0]["id"]
+                        break
+
         response_data = {
             "id": profile["id"],
             "full_name": profile.get("full_name"),
@@ -185,7 +195,7 @@ async def get_profile(x_org_id: Optional[str] = Header(None), user=Depends(get_c
             "is_superadmin": is_superadmin,
             "organizations": organizations_response,
             "organization_id": profile.get("organization_id"),
-            "venue_id": profile.get("venue_id"),
+            "venue_id": effective_venue_id,
             "shift_id": shift_id,
             "shift_name": shift_name,
             "pin_code": profile.get("pin_code"),

@@ -187,6 +187,7 @@ async def super_get_user_detail(user_id: str, user=Depends(get_super_admin)):
 
 @router.post("/users/{user_id}/organizations")
 async def super_add_user_org(user_id: str, body: SuperAdminUserOrgAdd, user=Depends(get_super_admin)):
+    from app.cache import invalidate_user_rbac
     db = get_db()
     
     # 1. Update/Insert organization association
@@ -218,25 +219,29 @@ async def super_add_user_org(user_id: str, body: SuperAdminUserOrgAdd, user=Depe
             valid_ids = [vid for vid in body.venue_ids if vid in org_venue_ids]
             if valid_ids:
                 db.table("profile_venues").insert([{"profile_id": user_id, "venue_id": vid} for vid in valid_ids]).execute()
+                db.table("profiles").update({"venue_id": valid_ids[0]}).eq("id", user_id).execute()
 
+    await invalidate_user_rbac(body.organization_id, user_id)
     return {"ok": True}
 
 @router.put("/users/{user_id}/organizations/{org_id}")
 async def super_update_user_org(user_id: str, org_id: str, body: SuperAdminUserOrgUpdate, user=Depends(get_super_admin)):
+    from app.cache import invalidate_user_rbac
     db = get_db()
     
-    # 1. Update role
-    role_id = body.role_id
-    if not role_id and body.role_name and body.role_name not in ["admin", "staff"]:
-        r_res = db.table("custom_roles").select("id").eq("org_id", org_id).eq("name", body.role_name).execute()
-        if r_res.data:
-            role_id = r_res.data[0]["id"]
+    # 1. Update role only when role_id or role_name is provided
+    if body.role_id is not None or body.role_name is not None:
+        role_id = body.role_id
+        if not role_id and body.role_name and body.role_name not in ["admin", "staff"]:
+            r_res = db.table("custom_roles").select("id").eq("org_id", org_id).eq("name", body.role_name).execute()
+            if r_res.data:
+                role_id = r_res.data[0]["id"]
 
-    db.table("profile_organizations").upsert({
-        "profile_id": user_id,
-        "organization_id": org_id,
-        "role_id": role_id
-    }).execute()
+        db.table("profile_organizations").upsert({
+            "profile_id": user_id,
+            "organization_id": org_id,
+            "role_id": role_id
+        }).execute()
 
     # 2. Update venues
     if body.venue_ids is not None:
@@ -248,11 +253,14 @@ async def super_update_user_org(user_id: str, org_id: str, body: SuperAdminUserO
             valid_ids = [vid for vid in body.venue_ids if vid in org_venue_ids]
             if valid_ids:
                 db.table("profile_venues").insert([{"profile_id": user_id, "venue_id": vid} for vid in valid_ids]).execute()
+            db.table("profiles").update({"venue_id": valid_ids[0] if valid_ids else None}).eq("id", user_id).execute()
 
+    await invalidate_user_rbac(org_id, user_id)
     return {"ok": True}
 
 @router.delete("/users/{user_id}/organizations/{org_id}")
 async def super_remove_user_org(user_id: str, org_id: str, user=Depends(get_super_admin)):
+    from app.cache import invalidate_user_rbac
     db = get_db()
     # 1. Delete org association
     db.table("profile_organizations").delete().eq("profile_id", user_id).eq("organization_id", org_id).execute()
@@ -263,6 +271,7 @@ async def super_remove_user_org(user_id: str, org_id: str, user=Depends(get_supe
     if org_venue_ids:
         db.table("profile_venues").delete().eq("profile_id", user_id).in_("venue_id", org_venue_ids).execute()
         
+    await invalidate_user_rbac(org_id, user_id)
     return {"ok": True}
 
 @router.get("/metrics")

@@ -177,6 +177,36 @@ async def list_users(user=Depends(require_permission("admin.manage_users")), org
             
         profiles.append(p)
 
+    # Fetch assigned venues (profile_venues) scoped to this organization's venues
+    if profiles:
+        profile_ids = [p["id"] for p in profiles if p.get("id")]
+        ov_res = db.table("venues").select("id").eq("org_id", org_id).execute()
+        org_venue_ids = {v["id"] for v in (ov_res.data or []) if v.get("id")}
+
+        pv_map: dict[str, list[str]] = {pid: [] for pid in profile_ids}
+        if profile_ids and org_venue_ids:
+            pv_res = db.table("profile_venues") \
+                .select("profile_id, venue_id") \
+                .in_("profile_id", profile_ids) \
+                .in_("venue_id", list(org_venue_ids)) \
+                .execute()
+            for row in (pv_res.data or []):
+                pid = row.get("profile_id")
+                vid = row.get("venue_id")
+                if pid in pv_map and vid and vid not in pv_map[pid]:
+                    pv_map[pid].append(vid)
+
+        for p in profiles:
+            pid = p["id"]
+            assigned_vids = pv_map.get(pid, [])
+            # Fallback to legacy profiles.venue_id if it belongs to this org and profile_venues is empty
+            legacy_vid = p.get("venue_id")
+            if not assigned_vids and legacy_vid and legacy_vid in org_venue_ids:
+                assigned_vids = [legacy_vid]
+            p["venue_ids"] = assigned_vids
+            if assigned_vids and (not legacy_vid or legacy_vid not in org_venue_ids):
+                p["venue_id"] = assigned_vids[0]
+
     # Get emails from auth users
     for p in profiles:
         try:
@@ -223,6 +253,9 @@ async def create_user(body: CreateUserRequest, user=Depends(require_permission("
         if not target_user_id:
             raise HTTPException(500, "Failed to identify user ID")
 
+        v_ids = body.venue_ids if body.venue_ids is not None else ([body.venue_id] if body.venue_id else [])
+        primary_venue_id = body.venue_id if body.venue_id else (v_ids[0] if v_ids else None)
+
         # 3. Insert/Update profile
         profile_data = {
             "id": target_user_id,
@@ -236,8 +269,8 @@ async def create_user(body: CreateUserRequest, user=Depends(require_permission("
         if is_new_user:
             profile_data["organization_id"] = body.organization_id
             
-        if body.venue_id:
-            profile_data["venue_id"] = body.venue_id
+        if primary_venue_id is not None:
+            profile_data["venue_id"] = primary_venue_id
         if body.shift_id:
             profile_data["shift_id"] = body.shift_id
         if body.pin_code is not None:
@@ -246,10 +279,11 @@ async def create_user(body: CreateUserRequest, user=Depends(require_permission("
         db.table("profiles").upsert(profile_data).execute()
 
         # 4. Handle profile_venues (Clean existing for THIS org then insert)
-        v_ids = body.venue_ids if body.venue_ids is not None else ([body.venue_id] if body.venue_id else [])
+        ov_res = db.table("venues").select("id").eq("org_id", body.organization_id).execute()
+        org_venue_ids = [v["id"] for v in (ov_res.data or []) if v.get("id")]
+        if org_venue_ids:
+            db.table("profile_venues").delete().eq("profile_id", target_user_id).in_("venue_id", org_venue_ids).execute()
         if v_ids:
-            # Remove existing venues for this user that belong to THIS organization to avoid duplicates/mess
-            # Note: This is simplified, in a full multi-tenant we'd filter by org venues
             pv_data = [{"profile_id": target_user_id, "venue_id": vid} for vid in v_ids]
             db.table("profile_venues").upsert(pv_data).execute()
 
@@ -269,12 +303,16 @@ async def create_user(body: CreateUserRequest, user=Depends(require_permission("
             "is_default": is_new_user # Make it default only if it's their first org
         }).execute()
 
+        await invalidate_user_rbac(body.organization_id, target_user_id)
+
         return {
             "id": target_user_id, 
             "email": body.email, 
             "full_name": body.full_name, 
             "role": body.role, 
+            "venue_id": primary_venue_id,
             "venue_ids": v_ids, 
+            "shift_id": body.shift_id,
             "organization_id": body.organization_id,
             "pin_code": profile_data.get("pin_code"),
             "is_associated": not is_new_user
@@ -293,9 +331,11 @@ async def update_user(user_id: str, body: UpdateUserRequest, user=Depends(requir
     if body.full_name is not None:
         payload["full_name"] = body.full_name
     if body.role is not None:
-        payload["role"] = body.role
+        payload["role"] = body.role if body.role == "admin" else "staff"
     if body.venue_id is not None:
         payload["venue_id"] = body.venue_id
+    elif body.venue_ids is not None:
+        payload["venue_id"] = body.venue_ids[0] if body.venue_ids else None
     if body.shift_id is not None:
         payload["shift_id"] = body.shift_id
     if body.pin_code is not None:
@@ -307,15 +347,25 @@ async def update_user(user_id: str, body: UpdateUserRequest, user=Depends(requir
     if payload:
         db.table("profiles").update(payload).eq("id", user_id).execute()
             
+    ov_res = db.table("venues").select("id").eq("org_id", org_id).execute()
+    org_venue_ids = [v["id"] for v in (ov_res.data or []) if v.get("id")]
+
     if body.venue_ids is not None:
-        # Delete old mappings and insert new ones
-        db.table("profile_venues").delete().eq("profile_id", user_id).execute()
+        # Delete old mappings for this org (or all if no org venues found) and insert new ones
+        if org_venue_ids:
+            db.table("profile_venues").delete().eq("profile_id", user_id).in_("venue_id", org_venue_ids).execute()
+        else:
+            db.table("profile_venues").delete().eq("profile_id", user_id).execute()
         if body.venue_ids:
             pv_data = [{"profile_id": user_id, "venue_id": vid} for vid in body.venue_ids]
             db.table("profile_venues").insert(pv_data).execute()
     elif body.venue_id is not None:
-         db.table("profile_venues").delete().eq("profile_id", user_id).execute()
-         db.table("profile_venues").insert({"profile_id": user_id, "venue_id": body.venue_id}).execute()
+        if org_venue_ids:
+            db.table("profile_venues").delete().eq("profile_id", user_id).in_("venue_id", org_venue_ids).execute()
+        else:
+            db.table("profile_venues").delete().eq("profile_id", user_id).execute()
+        if body.venue_id:
+            db.table("profile_venues").insert({"profile_id": user_id, "venue_id": body.venue_id}).execute()
 
     # Multi-tenant: Update role in profile_organizations for the active org
     if body.role is not None:
@@ -340,9 +390,17 @@ async def update_user(user_id: str, body: UpdateUserRequest, user=Depends(requir
 
     await invalidate_user_rbac(org_id, user_id)
          
-    # Fetch and return the updated profile to ensure consistency
+    # Fetch and return the updated profile with org-scoped role and venue_ids
     updated_profile = db.table("profiles").select("*").eq("id", user_id).single().execute()
-    return updated_profile.data if updated_profile.data else {"ok": True}
+    result_data = updated_profile.data if updated_profile.data else {"id": user_id, "ok": True}
+    if isinstance(result_data, dict):
+        if body.role is not None:
+            result_data["role"] = body.role
+        if body.venue_ids is not None:
+            result_data["venue_ids"] = body.venue_ids
+        elif body.venue_id is not None:
+            result_data["venue_ids"] = [body.venue_id] if body.venue_id else []
+    return result_data
 
 
 @router.delete("/admin/users/{user_id}")

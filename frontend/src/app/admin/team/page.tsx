@@ -117,7 +117,7 @@ export default function TeamPage() {
         setEditFirstName(parts[0] || '')
         setEditLastName(parts.slice(1).join(' ') || '')
         setEditRole(u.role)
-        setEditVenues(u.venue_ids || (u.venue_id ? [u.venue_id] : []))
+        setEditVenues(u.venue_ids?.length ? u.venue_ids : (u.venue_id ? [u.venue_id] : []))
         setEditShift(u.shift_id || '')
         setEditEmail(u.email || '')
         setEditPinCode(u.pin_code || '')
@@ -163,7 +163,13 @@ export default function TeamPage() {
                 shift_id: editShift || undefined,
                 pin_code: editPinCode.trim() || null,
             })
-            setUsers((prev) => prev.map((u) => u.id === editingId ? { ...u, ...updated, pin_code: editPinCode.trim() || null } : u))
+            setUsers((prev) => prev.map((u) => u.id === editingId ? {
+                ...u,
+                ...updated,
+                venue_ids: updated.venue_ids ?? editVenues,
+                venue_id: updated.venue_id !== undefined ? updated.venue_id : (editVenues[0] || null),
+                pin_code: editPinCode.trim() || null,
+            } : u))
             setEditingId(null)
         } catch (err) {
             console.error(err)
@@ -494,7 +500,7 @@ export default function TeamPage() {
                                                         <KeyRound className="w-2.5 h-2.5" /> PIN
                                                     </span>
                                                 )}
-                                                {(u.venue_ids || (u.venue_id ? [u.venue_id] : [])).map(vid => (
+                                                {(u.venue_ids?.length ? u.venue_ids : (u.venue_id ? [u.venue_id] : [])).map(vid => (
                                                     <span key={vid} className="text-[10px] text-text-secondary bg-surface-raised px-1.5 py-0.5 rounded-md">
                                                         {availableVenues.find(v => v.id === vid)?.name || 'Venue'}
                                                     </span>
